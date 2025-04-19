@@ -1213,10 +1213,16 @@
 #define ARCH_RESET()
 
 #if STEP < 2
+#if !defined(WINLATOR_GLIBC)
 #define GETIP(A) MOV64x(xRIP, A)
 #define GETIP_(A) MOV64x(xRIP, A)
 #else
+#define GETIP(A) TABLE64(0, 0)
+#define GETIP_(A) TABLE64(0, 0)	
+#endif	
+#else
 // put value in the Table64 even if not using it for now to avoid difference between Step2 and Step3. Needs to be optimized later...
+#if !defined(WINLATOR_GLIBC)
 #define GETIP(A)                                        \
     if(dyn->last_ip && ((A)-dyn->last_ip)<0x1000) {     \
         uint64_t _delta_ip = (A)-dyn->last_ip;          \
@@ -1236,6 +1242,36 @@
         MOV64x(xRIP, (A));                              \
     }
 #endif
+
+#if defined(WINLATOR_GLIBC)
+#define GETIP(A)                                        \
+    if(dyn->last_ip && ((A)-dyn->last_ip)<0x1000) {     \
+        uint64_t _delta_ip = (A)-dyn->last_ip;          \
+        dyn->last_ip += _delta_ip;                      \
+        if(_delta_ip) {                                 \
+            ADDx_U12(xRIP, xRIP, _delta_ip);            \
+        }                                               \
+    } else {                                            \
+        dyn->last_ip = (A);                             \
+        if(dyn->last_ip<0xffffffff) {                   \
+            MOV64x(xRIP, dyn->last_ip);                 \
+        } else                                          \
+            TABLE64(xRIP, dyn->last_ip);                \
+    }
+#define GETIP_(A)                                       \
+    if(dyn->last_ip && ((A)-dyn->last_ip)<0x1000) {     \
+        uint64_t _delta_ip = (A)-dyn->last_ip;          \
+        if(_delta_ip) {ADDx_U12(xRIP, xRIP, _delta_ip);}\
+    } else {                                            \
+        if((A)<0xffffffff) {                            \
+            MOV64x(xRIP, (A));                          \
+        } else                                          \
+            TABLE64(xRIP, (A));                         \
+    }
+#endif
+
+#endif
+
 #define CLEARIP()   dyn->last_ip=0
 
 #define SKIP_SEVL(val) if (dyn->insts[dyn->insts[ninst].x64.jmp_insts].wfe) val += 4;

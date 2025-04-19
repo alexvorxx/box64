@@ -2577,12 +2577,21 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     } else {
                         GETIP(ip+1); // read the 0xCC
                         STORE_XEMU_CALL(xRIP);
+					#ifndef WINLATOR_GLIBC	
                         ADDx_U12(x3, xRIP, 8+8);    // expected return address
+					#endif	
                         ADDx_U12(x1, xEmu, (uint32_t)offsetof(x64emu_t, ip)); // setup addr as &emu->ip
+					#ifndef WINLATOR_GLIBC	
                         CALL_(EmuInt3, -1, x3);
+					#else
+						CALL_S(EmuInt3, -1);
+					#endif	
                         SMWRITE2();
                         LOAD_XEMU_CALL(xRIP);
                         addr+=8+8;
+					#ifdef WINLATOR_GLIBC	
+					    TABLE64(x3, addr); // expected return address
+					#endif
                         CMPSx_REG(xRIP, x3);
                         B_MARK(cNE);
                         LDRw_U12(w1, xEmu, offsetof(x64emu_t, quit));
@@ -3350,7 +3359,11 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         CALL_S(EmuInt3, -1);
                         SMWRITE2();
                         LOAD_XEMU_CALL(xRIP);
+					#ifndef WINLATOR_GLIBC	
                         MOV64x(x3, dyn->insts[ninst].natcall);
+					#else
+						TABLE64(x3, dyn->insts[ninst].natcall);
+					#endif
                         ADDx_U12(x3, x3, 2+8+8);
                         CMPSx_REG(xRIP, x3);
                         B_MARK(cNE);    // Not the expected address, exit dynarec block
@@ -3358,6 +3371,11 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         if(dyn->insts[ninst].retn) {
                             ADDx_U12(xRSP, xRSP, dyn->insts[ninst].retn);
                         }
+					#ifdef WINLATOR_GLIBC	
+						TABLE64(x3, addr);
+                        CMPSx_REG(xRIP, x3);
+                        B_MARK(cNE);    // Not the expected address again
+					#endif	
                         LDRw_U12(w1, xEmu, offsetof(x64emu_t, quit));
                         CBZw_NEXT(w1);  // not quitting, so lets continue
                         MARK;
@@ -3368,7 +3386,15 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     break;
                 case 1:
                     // this is call to next step, so just push the return address to the stack
+				#ifndef WINLATOR_GLIBC	
                     MOV64x(x2, addr);
+				#else	
+					if(rex.is32bits) {
+                        MOV32w(x2, addr);
+                    } else {
+                        TABLE64(x2, addr);
+                    }
+				#endif	
                     PUSH1z(x2);
                     break;
                 default:
@@ -3378,7 +3404,15 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         SETFLAGS(X_ALL, SF_SET_NODF);    // Hack to set flags to "dont'care" state
                     }
                     // regular call
+				#ifndef WINLATOR_GLIBC		
                     MOV64x(x2, addr);
+				#else
+					if(rex.is32bits) {
+                        MOV32w(x2, addr);
+                    } else {
+                        TABLE64(x2, addr);
+                    }
+				#endif	
                     fpu_purgecache(dyn, ninst, 1, x1, x3, x4);
                     PUSH1z(x2);
                     if (BOX64DRENV(dynarec_callret)) {
@@ -3415,7 +3449,11 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         // jumps out of current dynablock...
                         MARK;
                         j64 = getJumpTableAddress64(addr);
+					#ifndef WINLATOR_GLIBC	
                         MOV64x(x4, j64);
+					#else
+						TABLE64(x4, j64);
+					#endif	
                         LDRx_U12(x4, x4, 0);
                         BR(x4);
                     }
