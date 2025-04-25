@@ -430,8 +430,8 @@ uintptr_t dynarec64_D9(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 FSQRTS(v1, v1);
             } else {
                 FSQRTD(v1, v1);
-                X87_CHECK_PRECISION(v1);
             }
+            X87_CHECK_PRECISION(v1);
             if(!BOX64ENV(dynarec_fastround))
                 x87_restoreround(dyn, ninst, u8);
             break;
@@ -557,6 +557,7 @@ uintptr_t dynarec64_D9(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 }
                 MOV32w(x2, 0);
                 CALL(fpu_loadenv, -1);
+                NATIVE_RESTORE_X87PC();
                 break;
             case 5:
                 INST_NAME("FLDCW Ew");

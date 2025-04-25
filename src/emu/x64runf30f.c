@@ -96,9 +96,11 @@ uintptr_t RunF30F(x64emu_t *emu, rex_t rex, uintptr_t addr)
         break;
     case 0x2B:  /* MOVNTSS Ex Gx */
         nextop = F8;
-        GETEX4(0);
-        GETGX;
-        EX->ud[0] = GX->ud[0];
+        if(!MODREG) {
+            GETEX4(0);
+            GETGX;
+            EX->ud[0] = GX->ud[0];
+        }
         break;
     case 0x2C:  /* CVTTSS2SI Gd, Ex */
         nextop = F8;
@@ -281,21 +283,23 @@ uintptr_t RunF30F(x64emu_t *emu, rex_t rex, uintptr_t addr)
         nextop = F8;
         GETEX(0);
         GETGX;
-        if(isnan(GX->f[0]) || isnan(EX->f[0]) || isless(EX->f[0], GX->f[0]))
+        if(isnan(GX->f[0]) || isnan(EX->f[0]) || islessequal(EX->f[0], GX->f[0]))
             GX->f[0] = EX->f[0];
         break;
     case 0x5E:  /* DIVSS Gx, Ex */
         nextop = F8;
         GETEX(0);
         GETGX;
+        MARK_NAN_F_2(GX, EX);
         NAN_PROPAGATION(GX->f[0], EX->f[0], break);
         GX->f[0] /= EX->f[0];
+        CHECK_NAN_F(GX);
         break;
     case 0x5F:  /* MAXSS Gx, Ex */
         nextop = F8;
         GETEX(0);
         GETGX;
-        if (isnan(GX->f[0]) || isnan(EX->f[0]) || isgreater(EX->f[0], GX->f[0]))
+        if (isnan(GX->f[0]) || isnan(EX->f[0]) || isgreaterequal(EX->f[0], GX->f[0]))
             GX->f[0] = EX->f[0];
         break;
 

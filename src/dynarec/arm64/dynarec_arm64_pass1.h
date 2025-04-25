@@ -21,9 +21,14 @@
         dyn->insts[ninst].n = dyn->n;           \
         dyn->insts[ninst].f_exit = dyn->f
 
-#define INST_NAME(name)  
+#define INST_NAME(name)
 
-#define ARM64_CHECK_PRECISION()
-#define X87_CHECK_PRECISION(A)          \
-        if(dyn->need_x87check)          \
-                dyn->need_x87check=2
+#define NATIVE_RESTORE_X87PC()
+#define X87_CHECK_PRECISION(A)                  \
+    do {                                        \
+        if (dyn->need_x87check) {               \
+            dyn->insts[ninst].x87precision = 1; \
+            if (!ST_IS_F(0))                    \
+                dyn->need_x87check = 2;         \
+        }                                       \
+    } while (0)
