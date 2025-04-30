@@ -640,11 +640,11 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     GETEM(q1, 0);
                     v0 = fpu_get_scratch(dyn, ninst);
                     v1 = fpu_get_scratch(dyn, ninst);
-                    CMGT_0_8(v0, q1);
-                    VAND(v0, v0, q0);
-                    CMLT_0_8(v1, q1);
-                    VMUL_8(q0, q0, v1);
-                    VORR(q0, q0, v0);
+                    NEG_8(v0, q0);     // get NEG
+                    CMLT_0_8(v1, q1);  // calculate mask
+                    VBIF(v0, q0, v1);  // put back positive values
+                    CMEQ_0_8(v1, q1);  // handle case where Ex is 0
+                    VBIC(q0, v0, v1);
                     break;
                 case 0x09:
                     INST_NAME("PSIGNW Gm,Em");
@@ -653,11 +653,11 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     GETEM(q1, 0);
                     v0 = fpu_get_scratch(dyn, ninst);
                     v1 = fpu_get_scratch(dyn, ninst);
-                    CMGT_0_16(v0, q1);
-                    VAND(v0, v0, q0);
-                    CMLT_0_16(v1, q1);
-                    VMUL_16(q0, q0, v1);
-                    VORR(q0, q0, v0);
+                    NEG_16(v0, q0);     // get NEG
+                    CMLT_0_16(v1, q1);  // calculate mask
+                    VBIF(v0, q0, v1);   // put back positive values
+                    CMEQ_0_16(v1, q1);  // handle case where Ex is 0
+                    VBIC(q0, v0, v1);
                     break;
                 case 0x0A:
                     INST_NAME("PSIGND Gm,Em");
@@ -666,18 +666,21 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     GETEM(q1, 0);
                     v0 = fpu_get_scratch(dyn, ninst);
                     v1 = fpu_get_scratch(dyn, ninst);
-                    CMGT_0_32(v0, q1);
-                    VAND(v0, v0, q0);
-                    CMLT_0_32(v1, q1);
-                    VMUL_32(q0, q0, v1);
-                    VORR(q0, q0, v0);
+                    NEG_32(v0, q0);     // get NEG
+                    CMLT_0_32(v1, q1);  // calculate mask
+                    VBIF(v0, q0, v1);   // put back positive values
+                    CMEQ_0_32(v1, q1);  // handle case where Ex is 0
+                    VBIC(q0, v0, v1);
                     break;
                 case 0x0B:
                     INST_NAME("PMULHRSW Gm,Em");
                     nextop = F8;
                     GETGM(q0);
                     GETEM(q1, 0);
-                    SQRDMULH_16(q0, q0, q1);
+                    v0 = fpu_get_scratch(dyn, ninst);
+                    VSMULL_16(v0, q0, q1);
+                    SRSHRQ_32(v0, v0, 15);
+                    XTN_16(q0, v0);
                     break;
                 case 0x1C:
                     INST_NAME("PABSB Gm,Em");
@@ -1078,9 +1081,10 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
         case 0x52:
             INST_NAME("RSQRTPS Gx, Ex");
             nextop = F8;
-            SKIPTEST(x1);
             GETEX(q0, 0, 0);
             GETGX_empty(q1);
+            #if 0
+            SKIPTEST(x1);
             v0 = fpu_get_scratch(dyn, ninst);
             // more precise
             if(q1==q0)
@@ -1091,13 +1095,20 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             VFMULQS(v1, v0, q0);
             VFRSQRTSQS(v1, v1, v0);
             VFMULQS(q1, v1, v0);
+            #else
+            v0 = fpu_get_scratch(dyn, ninst);
+            VFMOVSQ_8(v0, 0b01110000);    //1.0f
+            VFSQRTQS(q1, q0);
+            VFDIVQS(q1, v0, q1);
+            #endif
             break;
         case 0x53:
             INST_NAME("RCPPS Gx, Ex");
             nextop = F8;
-            SKIPTEST(x1);
             GETEX(q0, 0, 0);
             GETGX_empty(q1);
+            #if 0
+            SKIPTEST(x1);
             if(q0 == q1)
                 v1 = fpu_get_scratch(dyn, ninst);
             else
@@ -1106,6 +1117,11 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             VFRECPEQS(v0, q0);
             VFRECPSQS(v1, v0, q0);
             VFMULQS(q1, v0, v1);
+            #else
+            v0 = fpu_get_scratch(dyn, ninst);
+            VFMOVSQ_8(v0, 0b01110000);    //1.0f
+            VFDIVQS(q1, v0, q0);
+            #endif
             break;
         case 0x54:
             INST_NAME("ANDPS Gx, Ex");
@@ -2318,11 +2334,17 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             break;
         case 0xBC:
             INST_NAME("BSF Gd, Ed");
-            SETFLAGS(X_ZF, SF_SET);
+            if(!BOX64ENV(dynarec_safeflags) || BOX64ENV(cputype)) {
+                SETFLAGS(X_ZF, SF_SUBSET);
+            } else {
+                SETFLAGS(X_ALL, SF_SET);
+            }
             SET_DFNONE();
             nextop = F8;
             GETED(0);
             GETGD;
+            if(ed!=gd)
+                MOVxw_REG(gd, ed);  // to handle ed=0, setting UD gd to 0
             IFX(X_ZF) {
                 TSTxw_REG(ed, ed);
                 B_MARK(cEQ);
@@ -2334,18 +2356,31 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             MARK;
             IFX(X_ZF) {
                 IFNATIVE(NF_EQ) {} else {
-                    CSETw(x1, cEQ);    //other flags are undefined
-                    BFIw(xFlags, x1, F_ZF, 1);
+                    CSETw(x2, cEQ);    //other flags are undefined
+                    BFIw(xFlags, x2, F_ZF, 1);
                 }
+            }
+            if(BOX64ENV(dynarec_safeflags) && !BOX64ENV(cputype)) {
+                IFX(X_CF) BFCw(xFlags, F_CF, 1);
+                IFX(X_AF) BFCw(xFlags, F_AF, 1);
+                IFX(X_SF) BFCw(xFlags, F_SF, 1);
+                IFX(X_OF) BFCw(xFlags, F_OF, 1);
+                IFX(X_PF) emit_pf(dyn, ninst, gd, x2);
             }
             break;
         case 0xBD:
             INST_NAME("BSR Gd, Ed");
-            SETFLAGS(X_ZF, SF_SET);
+            if(!BOX64ENV(dynarec_safeflags) || BOX64ENV(cputype)) {
+                SETFLAGS(X_ZF, SF_SUBSET);
+            } else {
+                SETFLAGS(X_ALL, SF_SET);
+            }
             SET_DFNONE();
             nextop = F8;
             GETED(0);
             GETGD;
+            if(ed!=gd)
+                MOVxw_REG(gd, ed);  // to handle ed=0, setting UD gd to 0
             IFX(X_ZF) {
                 TSTxw_REG(ed, ed);
                 B_MARK(cEQ);
@@ -2358,9 +2393,16 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             MARK;
             IFX(X_ZF) {
                 IFNATIVE(NF_EQ) {} else {
-                    CSETw(x1, cEQ);    //other flags are undefined
-                    BFIw(xFlags, x1, F_ZF, 1);
+                    CSETw(x2, cEQ);    //other flags are undefined
+                    BFIw(xFlags, x2, F_ZF, 1);
                 }
+            }
+            if(BOX64ENV(dynarec_safeflags) && !BOX64ENV(cputype)) {
+                IFX(X_CF) BFCw(xFlags, F_CF, 1);
+                IFX(X_AF) BFCw(xFlags, F_AF, 1);
+                IFX(X_SF) BFCw(xFlags, F_SF, 1);
+                IFX(X_OF) BFCw(xFlags, F_OF, 1);
+                IFX(X_PF) emit_pf(dyn, ninst, gd, x2);
             }
             break;
         case 0xBE:
@@ -2810,11 +2852,8 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             GETGM(v0);
             GETEM(v1, 0);
             q0 = fpu_get_scratch(dyn, ninst);
-            q1 = fpu_get_scratch(dyn, ninst);
             VUMULL_16(q0, v0, v1);
-            VUMULL2_16(q1, v0, v1);
-            UQSHRN_16(v0, q0, 16);
-            UQSHRN2_16(v0, q1, 16);
+            UQSHRN_16(v0, q0, 16);  // saturation will never happens as only 16bits remain and fits in 16bits
             break;
         case 0xE5:
             INST_NAME("PMULHW Gm,Em");

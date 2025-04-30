@@ -1175,6 +1175,7 @@
 #() iFpLii
 #() iFpLiL
 #() iFpLip
+#() iFpLCp
 #() iFpLui
 #() iFpLuu
 #() iFpLup
@@ -1307,6 +1308,7 @@
 #() lFippL
 #() lFpili
 #() lFpilp
+#() lFpipL
 #() lFpuip
 #() lFplip
 #() lFplup
@@ -1601,6 +1603,8 @@
 #() vFpuiip
 #() vFpuill
 #() vFpuipp
+#() vFpuipV
+#() vFpuipA
 #() vFpuuuu
 #() vFpuuup
 #() vFpuupp
@@ -2335,6 +2339,8 @@
 #() iFppulll
 #() iFppuLpp
 #() iFppupip
+#() iFppupui
+#() iFppupul
 #() iFppuppu
 #() iFppuppp
 #() iFppdidd
@@ -2356,6 +2362,8 @@
 #() iFpppuup
 #() iFpppupu
 #() iFpppupp
+#() iFpppLip
+#() iFpppLpi
 #() iFpppLpp
 #() iFppppiu
 #() iFppppip
@@ -2481,14 +2489,17 @@
 #() pFppiiii
 #() pFppiiup
 #() pFppiipp
+#() pFppiIll
 #() pFppiCCC
 #() pFppiupp
 #() pFppilpp
+#() pFppiLll
 #() pFppipip
 #() pFppippi
 #() pFppippp
 #() pFppuuuu
 #() pFppuupp
+#() pFppuLli
 #() pFppupLi
 #() pFppuppp
 #() pFpplplp
@@ -2644,6 +2655,7 @@
 #() iFEpLiLpp
 #() iFEpLiLpV
 #() iFEpLpiiL
+#() iFEppupup
 #() iFEppuppp
 #() iFEppLpIu
 #() iFEpppLpp
@@ -2706,6 +2718,7 @@
 #() iFppipiii
 #() iFppipiip
 #() iFppipipp
+#() iFppipLip
 #() iFppippip
 #() iFppipppi
 #() iFppipppp
@@ -2735,6 +2748,7 @@
 #() iFppppIip
 #() iFppppupu
 #() iFppppdpu
+#() iFppppLip
 #() iFpppppip
 #() iFpppppLp
 #() iFppppppi
@@ -2810,12 +2824,14 @@
 #() pFppipLpp
 #() pFppuipii
 #() pFppuippp
+#() pFppuuupu
 #() pFppuuupp
 #() pFppuLLip
 #() pFppupuuu
 #() pFppliuip
 #() pFpplipup
 #() pFppLLiLi
+#() pFppLLlip
 #() pFppLLppp
 #() pFpppccci
 #() pFpppiiii
@@ -2974,6 +2990,7 @@
 #() iFppuuuuuu
 #() iFppuppppp
 #() iFppLpLpLi
+#() iFppLpLpLp
 #() iFpppiiipi
 #() iFpppiiipp
 #() iFpppipipi
@@ -2982,6 +2999,7 @@
 #() iFppppippp
 #() iFppppuplu
 #() iFpppppupp
+#() iFpppppLpu
 #() iFppppppii
 #() iFppppppuu
 #() iFpppppppi
@@ -3145,6 +3163,7 @@
 #() iFppipiiipi
 #() iFppippippp
 #() iFppuLLpupp
+#() iFppupuiiii
 #() iFppuppuuuu
 #() iFppupppupp
 #() iFppLiipiiL
@@ -3154,6 +3173,7 @@
 #() iFpppLLLupp
 #() iFpppLppupp
 #() iFppppiiupp
+#() iFppppLpLip
 #() iFpppppLupp
 #() iFppppppupp
 #() iFppppppppu
@@ -3243,6 +3263,7 @@
 #() iFpLLpiiuuii
 #() iFpLpLUUUUpL
 #() iFppuuiiuuuu
+#() iFppuppppupu
 #() iFppLLiiLWpi
 #() iFppLpLLpLpp
 #() iFppLpLpLLpp
@@ -3820,9 +3841,11 @@ wrappedgio2:
 - vFpippp:
   - g_async_initable_init_async
 - vFpuipV:
+  - g_dbus_method_invocation_return_error
   - g_simple_async_result_set_error
   - g_task_return_new_error
 - vFpuipA:
+  - g_dbus_method_invocation_return_error_valist
   - g_simple_async_result_set_error_va
 - pFLpppV:
   - g_initable_new
@@ -5280,6 +5303,12 @@ wrappedlibsqlite3:
 - iFppppp:
   - sqlite3_exec
 wrappedlibssh2:
+- iFppup:
+  - libssh2_userauth_keyboard_interactive_ex
+- pFpppp:
+  - libssh2_session_init_ex
+- iFppupup:
+  - libssh2_userauth_password_ex
 wrappedlibssl:
 - pFp:
   - SSL_get_verify_callback

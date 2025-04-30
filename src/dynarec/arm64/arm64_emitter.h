@@ -340,7 +340,7 @@ int convert_bitmask(uint64_t bitmask);
 #define LDRSW_REGz(Rt, Rn, Rm)          EMIT(LDRS_REG_gen(0b10, Rm, rex.is32bits?0b110:0b011, 0, Rn, Rt))
 
 #define LDR_PC_gen(opc, imm19, Rt)      ((opc)<<30 | 0b011<<27 | (imm19)<<5 | (Rt))
-#define LDRx_literal(Rt, imm19)         EMIT(LDR_PC_gen(0b01, ((imm19)>>2)&0x7FFFF, Rt))
+#define LDRx_literal(Rt, imm21)         EMIT(LDR_PC_gen(0b01, (((int64_t)(imm21))>>2)&0x7FFFF, Rt))
 
 #define LDU_gen(size, opc, imm9, Rn, Rt)  ((size)<<30 | 0b111<<27 | (opc)<<22 | ((imm9)&0x1ff)<<12 | (Rn)<<5 | (Rt))
 #define LDURx_I9(Rt, Rn, imm9)            EMIT(LDU_gen(0b11, 0b01, imm9, Rn, Rt))
@@ -2165,6 +2165,10 @@ int convert_bitmask(uint64_t bitmask);
 #define URHADDQ_8(Vd, Vn, Vm)       EMIT(RHADD_vector(1, 1, 0b00, Vm, Vn, Vd))
 #define URHADDQ_16(Vd, Vn, Vm)      EMIT(RHADD_vector(1, 1, 0b01, Vm, Vn, Vd))
 #define URHADDQ_32(Vd, Vn, Vm)      EMIT(RHADD_vector(1, 1, 0b10, Vm, Vn, Vd))
+
+//SRSHR/URSHR
+#define RSHR(Q, U, immh, immb, Rn, Rd)      ((Q)<<30 | (U)<<29 | 0b011110<<23 | (immh)<<19 | (immb)<<16 | 1<<13 | 0<<12 | 1<<10 | (Rn)<<5 | (Rd))
+#define SRSHRQ_32(Vd, Vn, shift)    EMIT(RSHR(1, 0, 0b0100 | (((32-(shift))>>3)&0b11), (32-(shift))&0b111, Vn, Vd))
 
 // QRDMULH Signed saturating (Rounding) Doubling Multiply returning High half
 #define QDMULH_vector(Q, U, size, Rm, Rn, Rd)   ((Q)<<30 | (U)<<29 | 0b01110<<24 | (size)<<22 | 1<<21 | (Rm)<<16 | 0b10110<<11 | 1<<10 | (Rn)<<5 | (Rd))
