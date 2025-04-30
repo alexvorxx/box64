@@ -1224,48 +1224,38 @@ uintptr_t dynarec64_AVX_66_0F38(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip
             break;
 
         case 0x78:
-            INST_NAME("VBROADCASTB Gx, Ex");
+            INST_NAME("VPBROADCASTB Gx, Ex");
             nextop = F8;
             if(MODREG) {
                 v1 = sse_get_reg(dyn, ninst, x1, (nextop&7)+(rex.b<<3), 0);
                 GETGX_empty(v0);
                 VDUPQ_8(v0, v1, 0);
-                if(vex.l) {
-                    GETGY_empty(v0, -1, -1, -1);
-                    VDUPQ_8(v0, v1, 0);
-                }
             } else {
                 GETGX_empty(v0);
                 addr = geted(dyn, addr, ninst, nextop, &ed, x3, &fixedaddress, NULL, 0, 0, rex, NULL, 0, 0);
                 VLDQ1R_8(v0, ed);
-                if(vex.l) {
-                    GETGY_empty(v0, -1, -1, -1);
-                    VLDQ1R_8(v0, ed);
-                }
             }
-            if(!vex.l) YMM0(gd);
+            if(vex.l) {
+                GETGY_empty(v1, -1, -1, -1);
+                VMOVQ(v0, v1);
+            } else YMM0(gd);
             break;
         case 0x79:
-            INST_NAME("VBROADCASTW Gx, Ex");
+            INST_NAME("VPBROADCASTW Gx, Ex");
             nextop = F8;
             if(MODREG) {
                 v1 = sse_get_reg(dyn, ninst, x1, (nextop&7)+(rex.b<<3), 0);
                 GETGX_empty(v0);
                 VDUPQ_16(v0, v1, 0);
-                if(vex.l) {
-                    GETGY_empty(v0, -1, -1, -1);
-                    VDUPQ_16(v0, v1, 0);
-                }
             } else {
                 GETGX_empty(v0);
                 addr = geted(dyn, addr, ninst, nextop, &ed, x3, &fixedaddress, NULL, 0, 0, rex, NULL, 0, 0);
                 VLDQ1R_16(v0, ed);
-                if(vex.l) {
-                    GETGY_empty(v0, -1, -1, -1);
-                    VLDQ1R_16(v0, ed);
-                }
             }
-            if(!vex.l) YMM0(gd);
+            if(vex.l) {
+                GETGY_empty(v1, -1, -1, -1);
+                VMOVQ(v0, v1);
+            } else  YMM0(gd);
             break;
 
         case 0x8C:
@@ -1557,12 +1547,13 @@ uintptr_t dynarec64_AVX_66_0F38(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip
             nextop = F8;
             GETGX(v0, 1);
             GETVX(v2, 0);
-            if(rex.w) {GETEXSD(v1, 0, 0);} else {GETEXSS(v1, 0, 0);}
             q0 = fpu_get_scratch(dyn, ninst);
             if(rex.w) {
+                GETEXSD(v1, 0, 0);
                 FMADD_64(q0, v2, v1, v0);
                 VMOVeD(v0, 0, q0, 0);
             } else {
+                GETEXSS(v1, 0, 0);
                 FMADD_32(q0, v2, v1, v0);
                 VMOVeS(v0, 0, q0, 0);
             }
@@ -1680,12 +1671,13 @@ uintptr_t dynarec64_AVX_66_0F38(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip
             nextop = F8;
             GETGX(v0, 1);
             GETVX(v2, 0);
-            if(rex.w) {GETEXSD(v1, 0, 0);} else {GETEXSS(v1, 0, 0);}
             q0 = fpu_get_scratch(dyn, ninst);
             if(rex.w) {
+                GETEXSD(v1, 0, 0);
                 FMADD_64(q0, v1, v0, v2);
                 VMOVeD(v0, 0, q0, 0);
             } else {
+                GETEXSS(v1, 0, 0);
                 FMADD_32(q0, v1, v0, v2);
                 VMOVeS(v0, 0, q0, 0);
             }
@@ -1852,12 +1844,13 @@ uintptr_t dynarec64_AVX_66_0F38(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip
             nextop = F8;
             GETGX(v0, 1);
             GETVX(v2, 0);
-            if(rex.w) {GETEXSD(v1, 0, 0);} else {GETEXSS(v1, 0, 0);}
             q0 = fpu_get_scratch(dyn, ninst);
             if(rex.w) {
+                GETEXSD(v1, 0, 0);
                 FMADD_64(q0, v0, v1, v2);
                 VMOVeD(v0, 0, q0, 0);
             } else {
+                GETEXSS(v1, 0, 0);
                 FMADD_32(q0, v0, v1, v2);
                 VMOVeS(v0, 0, q0, 0);
             }
