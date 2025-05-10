@@ -13,6 +13,8 @@
 #include "fileutils.h"
 #include "box64context.h"
 #include "rbtree.h"
+#include "wine_tools.h"
+#include "pe_tools.h"
 
 box64env_t box64env = { 0 };
 
@@ -136,7 +138,7 @@ static void applyCustomRules()
 
     if (box64env.is_dynarec_gdbjit_str_overridden) {
         if (strlen(box64env.dynarec_gdbjit_str) == 1) {
-            if (box64env.dynarec_gdbjit_str[0] >= '0' && box64env.dynarec_gdbjit_str[0] <= '2')
+            if (box64env.dynarec_gdbjit_str[0] >= '0' && box64env.dynarec_gdbjit_str[0] <= '3')
                 box64env.dynarec_gdbjit = box64env.dynarec_gdbjit_str[0] - '0';
 
             box64env.dynarec_gdbjit_start = 0x0;
@@ -614,6 +616,10 @@ void RecordEnvMappings(uintptr_t addr, size_t length, int fd)
     mapping_t* mapping = NULL;
     khint_t k = kh_get(mapping_entry, mapping_entries, lowercase_filename);
     if(k == kh_end(mapping_entries)) {
+        // First time we see this file
+        if (box64_wine && BOX64ENV(unityplayer)) DetectUnityPlayer(lowercase_filename+1);
+        if (box64_wine && BOX64ENV(dynarec_volatile_metadata)) ParseVolatileMetadata(fullname, (void*)addr);
+
         mapping = box_calloc(1, sizeof(mapping_t));
         mapping->filename = box_strdup(lowercase_filename);
         mapping->fullname = box_strdup(fullname);

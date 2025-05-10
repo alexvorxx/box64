@@ -403,6 +403,7 @@ The GDBJIT debugging support, only available on build with `-DGDBJIT=ON`, enable
  * 0: Dynarec will not generate GDBJIT debuginfo. [Default]
  * 1: Dynarec will generate GDBJIT debuginfo. 
  * 2: Dynarec will generate detailed GDBJIT debuginfo with internal state. 
+ * 3: Dynarec will register detailed GDBJIT debuginfo only for dynablocks that the guest program trap into, greatly improving performance. 
  * 0xXXXXXXX-0xYYYYYYY: Define the range where Dynarec will generate detailed GDBJIT debuginfo with internal state. 
 
 ### BOX64_DYNAREC_LOG
@@ -660,6 +661,13 @@ Enable the emulation of x86 strong memory model.
  * 1: Enable some memory barriers when writing to memory to emulate the x86 strong memory model in a limited way. 
  * 2: All in 1, plus memory barriers on SIMD instructions. 
  * 3: All in 2, plus more memory barriers on a regular basis. 
+
+### BOX64_DYNAREC_VOLATILE_METADATA
+
+Use volatile metadata parsed from PE files, only valid for 64bit Windows games.
+
+ * 0: Do not use volatile metadata. [Default]
+ * 1: Use volatile metadata, which will guide Box64 for better strong memory emulation. 
 
 ### BOX64_DYNAREC_WAIT
 
