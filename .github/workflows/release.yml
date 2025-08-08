@@ -37,8 +37,6 @@ jobs:
             type: StaticBuild
           - platform: X64
             type: StaticBuild
-          - platform: ANDROID
-            type: Box32
           - platform: TERMUX
             type: Box32
           - platform: X64
