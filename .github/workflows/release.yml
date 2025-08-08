@@ -277,7 +277,7 @@ jobs:
           7z -tzip -mx=5 a box64-latest.rat files pkg-header
 
       - name: "Upload WCP file"
-        if: matrix.platform == 'ANDROID_GLIBC' && matrix.type == 'Release'
+        if: matrix.platform == 'ANDROID_GLIBC'
         uses: actions/upload-artifact@v4
         with:
           name: box64-latest-${{ matrix.type }}-wcp
