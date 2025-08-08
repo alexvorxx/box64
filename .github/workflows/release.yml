@@ -53,8 +53,6 @@ jobs:
             os: ubuntu-22.04-arm
           - platform: LARCH64
             os: ubuntu-22.04-arm
-          - platform: ANDROID_GLIBC
-            os: ubuntu-latest
           - platform: WOW64
             os: ubuntu-latest
           - platform: WOW64
