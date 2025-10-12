@@ -770,10 +770,17 @@ static register_mapping_t register_mappings[] = {
 void printf_x64_instruction(dynarec_native_t* dyn, zydis_dec_t* dec, instruction_x64_t* inst, const char* name);
 void inst_name_pass3(dynarec_native_t* dyn, int ninst, const char* name, rex_t rex)
 {
-    if (!dyn->need_dump && !BOX64ENV(dynarec_gdbjit) && !BOX64ENV(dynarec_perf_map)) return;
+    if (!dyn->need_dump && !BOX64ENV(dynarec_gdbjit) && !BOX64ENV(dynarec_perf_map)) {
+        /*zydis_dec_t* dec = rex.is32bits ? my_context->dec32 : my_context->dec;
+        if(dec && !OpcodeOK(dec, dyn->insts[ninst].x64.addr) && !strstr(name, "Illegal")) {
+            uint8_t* p = (uint8_t*)dyn->insts[ninst].x64.addr;
+            printf_log(LOG_INFO, "Warning: %p invalid opcode %02x %02x %02x %02x %02x %02x treated as valid\n", p, p[0], p[1], p[2], p[3], p[4], p[5]);
+        }*/
+        return;
+    }
 
     static char buf[4096];
-    int length = sprintf(buf, "barrier=%d state=%d/%d/%d(%d:%d->%d:%d), %s=%X/%X, use=%X, need=%X/%X, sm=%d(%d/%d)",
+    int length = sprintf(buf, "barrier=%d state=%d/%d/%d(%d:%d->%d:%d), %s=%X/%X, use=%X, need=%X/%X, sm=%d(%d/%d/%d)",
         dyn->insts[ninst].x64.barrier,
         dyn->insts[ninst].x64.state_flags,
         dyn->f.pending,
@@ -788,7 +795,7 @@ void inst_name_pass3(dynarec_native_t* dyn, int ninst, const char* name, rex_t r
         dyn->insts[ninst].x64.use_flags,
         dyn->insts[ninst].x64.need_before,
         dyn->insts[ninst].x64.need_after,
-        dyn->smwrite, dyn->insts[ninst].will_write, dyn->insts[ninst].last_write);
+        dyn->smwrite, dyn->insts[ninst].will_write, dyn->insts[ninst].last_write, dyn->insts[ninst].lock);
     if (dyn->insts[ninst].nat_flags_op) {
         if (dyn->insts[ninst].nat_flags_op == NAT_FLAG_OP_TOUCH && dyn->insts[ninst].before_nat_flags)
             length += sprintf(buf + length, " NF:%d/read:%x", dyn->insts[ninst].nat_flags_op, dyn->insts[ninst].before_nat_flags);
@@ -1148,6 +1155,7 @@ void updateNativeFlags(dynarec_native_t* dyn)
 void rasNativeState(dynarec_arm_t* dyn, int ninst)
 {
     dyn->insts[ninst].nat_flags_op = dyn->insts[ninst].set_nat_flags = dyn->insts[ninst].use_nat_flags = dyn->insts[ninst].need_nat_flags = 0;
+    dyn->insts[ninst].ymm0_in = dyn->insts[ninst].ymm0_sub = dyn->insts[ninst].ymm0_add = dyn->insts[ninst].ymm0_out = dyn->insts[ninst].purge_ymm = 0;
 }
 
 int nativeFlagsNeedsTransform(dynarec_arm_t* dyn, int ninst)
@@ -1276,4 +1284,113 @@ void propagateFpuBarrier(dynarec_arm_t* dyn)
             last_fpu_used = -1;  // reset the last_fpu_used...
         }
     }
+}
+
+
+void updateYmm0s(dynarec_arm_t* dyn, int ninst, int max_ninst_reached)
+{
+    int can_incr = ninst == max_ninst_reached; // Are we the top-level call?
+    int ok = 1;
+    while ((can_incr || ok) && ninst < dyn->size) {
+        // if(dyn->need_dump) dynarec_log(LOG_NONE, "update ninst=%d (%d): can_incr=%d\n", ninst, max_ninst_reached, can_incr);
+        uint16_t new_purge_ymm, new_ymm0_in, new_ymm0_out;
+
+        if (dyn->insts[ninst].pred_sz && dyn->insts[ninst].x64.alive) {
+            // The union of the empty set is empty (0), the intersection is the universe (-1)
+            // The first instruction is the entry point, which has a virtual pred with ymm0_out = 0
+            // Similarly, float barriers reset ymm0s
+            uint16_t ymm0_union = 0;
+            uint16_t ymm0_inter = (ninst && !(dyn->insts[ninst].x64.barrier & BARRIER_FLOAT)) ? ((uint16_t)-1) : (uint16_t)0;
+            for (int i = 0; i < dyn->insts[ninst].pred_sz; ++i) {
+                int pred = dyn->insts[ninst].pred[i];
+                // if(dyn->need_dump) dynarec_log(LOG_NONE, "\twith pred[%d] = %d", i, pred);
+                if (pred >= max_ninst_reached) {
+                    // if(dyn->need_dump) dynarec_log(LOG_NONE, " (skipped)\n");
+                    continue;
+                }
+
+                int pred_out = dyn->insts[pred].x64.has_callret ? 0 : dyn->insts[pred].ymm0_out;
+                // if(dyn->need_dump) dynarec_log(LOG_NONE, " ~> %04X\n", pred_out);
+                ymm0_union |= pred_out;
+                ymm0_inter &= pred_out;
+            }
+            // if(dyn->need_dump) dynarec_log(LOG_NONE, "\t=> %04X,%04X\n", ymm0_union, ymm0_inter);
+            //  Notice the default values yield something coherent here (if all pred are after ninst)
+            new_purge_ymm = ymm0_union & ~ymm0_inter;
+            new_ymm0_in = ymm0_inter;
+            new_ymm0_out = (ymm0_inter | dyn->insts[ninst].ymm0_add) & ~dyn->insts[ninst].ymm0_sub;
+
+            if ((dyn->insts[ninst].purge_ymm != new_purge_ymm) || (dyn->insts[ninst].ymm0_in != new_ymm0_in) || (dyn->insts[ninst].ymm0_out != new_ymm0_out)) {
+                // Need to update self and next(s)
+                dyn->insts[ninst].purge_ymm = new_purge_ymm;
+                dyn->insts[ninst].ymm0_in = new_ymm0_in;
+                dyn->insts[ninst].ymm0_out = new_ymm0_out;
+
+                if (can_incr) {
+                    // We always have ninst == max_ninst_reached when can_incr == 1
+                    ++max_ninst_reached;
+                } else {
+                    // We need to stop here if the opcode has no "real" next or if we reached the ninst of the toplevel
+                    ok = (max_ninst_reached - 1 != ninst) && dyn->insts[ninst].x64.has_next && !dyn->insts[ninst].x64.has_callret;
+                }
+
+                int jmp = (dyn->insts[ninst].x64.jmp) ? dyn->insts[ninst].x64.jmp_insts : -1;
+                if ((jmp != -1) && (jmp < max_ninst_reached)) {
+                    // if(dyn->need_dump) dynarec_log(LOG_NONE, "\t! jump to %d\n", jmp);
+                    //  The jump goes before the last instruction reached, update the destination
+                    //  If this is the top level call, this means the jump goes backward (jmp != ninst)
+                    //  Otherwise, since we don't update all instructions, we may miss the update (don't use jmp < ninst)
+                    updateYmm0s(dyn, jmp, max_ninst_reached);
+                }
+            } else {
+                if (can_incr) {
+                    // We always have ninst == max_ninst_reached when can_incr == 1
+                    ++max_ninst_reached;
+
+                    // Also update jumps to before (they are skipped otherwise)
+                    int jmp = (dyn->insts[ninst].x64.jmp) ? dyn->insts[ninst].x64.jmp_insts : -1;
+                    if ((jmp != -1) && (jmp < max_ninst_reached)) {
+                        // if(dyn->need_dump) dynarec_log(LOG_NONE, "\t! jump to %d\n", jmp);
+                        updateYmm0s(dyn, jmp, max_ninst_reached);
+                    }
+                } else {
+                    // We didn't update anything, we can leave
+                    ok = 0;
+                }
+            }
+        } else if (can_incr) {
+            // We always have ninst == max_ninst_reached when can_incr == 1
+            ++max_ninst_reached;
+        } else {
+            // We didn't update anything, we can leave
+            ok = 0;
+        }
+        ++ninst;
+    }
+}
+
+
+// AVX helpers
+void avx_mark_zero(dynarec_arm_t* dyn, int ninst, int reg)
+{
+    dyn->ymm_zero |= (1<<reg);
+}
+
+int is_avx_zero(dynarec_arm_t* dyn, int ninst, int reg)
+{
+    return (dyn->ymm_zero>>reg)&1;
+}
+
+int is_avx_zero_unset(dynarec_arm_t* dyn, int ninst, int reg)
+{
+    if((dyn->ymm_zero>>reg)&1) {
+        dyn->ymm_zero &= ~(1<<reg);
+        return 1;
+    }
+    return 0;
+}
+
+void avx_mark_zero_reset(dynarec_arm_t* dyn, int ninst)
+{
+    dyn->ymm_zero = 0;
 }

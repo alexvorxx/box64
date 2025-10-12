@@ -47,6 +47,7 @@ extern char* ftrace_name;
     INTEGER(BOX64_DYNAREC_CALLRET, dynarec_callret, 0, 0, 2, 1)               \
     BOOLEAN(BOX64_DYNAREC_DF, dynarec_df, 1, 1)                               \
     INTEGER(BOX64_DYNAREC_DIRTY, dynarec_dirty, 0, 0, 2, 0)                   \
+    BOOLEAN(BOX64_DYNAREC_NOHOTPAGE, dynarec_nohotpage, 0, 0)                 \
     BOOLEAN(BOX64_DYNAREC_DIV0, dynarec_div0, 0, 1)                           \
     INTEGER(BOX64_DYNAREC_DUMP, dynarec_dump, 0, 0, 2, 1)                     \
     STRING(BOX64_DYNAREC_DUMP_RANGE, dynarec_dump_range, 1)                   \
@@ -128,9 +129,9 @@ extern char* ftrace_name;
     BOOLEAN(BOX64_X87_NO80BITS, x87_no80bits, 0, 1)                           \
     INTEGER(BOX64_DYNACACHE, dynacache, 2, 0, 2, 0)                           \
     STRING(BOX64_DYNACACHE_FOLDER, dynacache_folder, 0)                       \
-    INTEGER(BOX64_DYNACACHE_MIN, dynacache_min, 350, 0, 10240, 0)             \
+    INTEGER(BOX64_DYNACACHE_MIN, dynacache_min, 350, 0, 10240, 0)
 
-#ifdef ARM64
+#if defined(ARM64)
 #define ENVSUPER2() \
     INTEGER(BOX64_AVX, avx, 2, 0, 2, 1)
 #else

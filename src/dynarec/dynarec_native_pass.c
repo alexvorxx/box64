@@ -134,8 +134,8 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             WILLWRITE();
         }
 
-        int is_opcode_volatile = box64_wine && VolatileRangesContains(ip) && VolatileOpcodesHas(ip);
-        if (is_opcode_volatile && !dyn->insts[ninst].lock_prefixed && dyn->insts[ninst].will_write)
+        int is_opcode_volatile = /*box64_wine &&*/ VolatileRangesContains(ip) && VolatileOpcodesHas(ip);
+        if (is_opcode_volatile && !dyn->insts[ninst].lock)
             DMB_ISHST();
         #endif
         if((dyn->insts[ninst].x64.need_before&~X_PEND) && !ninst) {
@@ -168,11 +168,16 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
         #endif
 
         rep = 0;
+        rex.is32bits = is32bits;
         uint8_t pk = PK(0);
-        while((pk==0xF2) || (pk==0xF3) || (pk==0x3E) || (pk==0x26)) {
+        while((pk==0xF2) || (pk==0xF3) || (pk==0x3E) || (pk==0x26)
+            || (is32bits && ((pk==0x2E) || (pk==0x36)))
+        ) {
             switch(pk) {
                 case 0xF2: rep = 1; break;
                 case 0xF3: rep = 2; break;
+                case 0x2E:
+                case 0x36:
                 case 0x3E:
                 case 0x26: /* ignored */ break;
             }
@@ -180,7 +185,6 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             pk = PK(0);
         }
         rex.rex = 0;
-        rex.is32bits = is32bits;
         if(!rex.is32bits)
             while(pk>=0x40 && pk<=0x4f) {
                 rex.rex = pk;
@@ -194,8 +198,8 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
         INST_EPILOG;
 
         #if STEP > 1
-        if (is_opcode_volatile && !dyn->insts[ninst].lock_prefixed && dyn->insts[ninst].will_read)
-            DMB_ISHLD();
+        if (is_opcode_volatile || dyn->insts[ninst].lock)
+            DMB_ISH();
         #endif
 
         fpu_reset_scratch(dyn);
@@ -346,8 +350,7 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
         }
         if((ok>0) && dyn->insts[ninst].x64.has_callret)
             reset_n = -2;
-        if((ok>0) && reset_n==-1 && dyn->insts[ninst+1].purge_ymm)
-            PURGE_YMM();
+        PURGE_YMM();
         ++ninst;
         #if STEP == 0
         memset(&dyn->insts[ninst], 0, sizeof(instruction_native_t));

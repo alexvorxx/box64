@@ -112,6 +112,8 @@ GO(glGetTexGeniv, vFuup)
 GO(glGetTexImage, vFuiuup)
 GO(glGetTexLevelParameterfv, vFuiup)
 GO(glGetTexLevelParameteriv, vFuiup)
+GO(glGetLevelParameterfv, vFuiup)   //some old programs have typo...
+GO(glGetLevelParameteriv, vFuiup)   //some old programs have typo...
 GO(glGetTexParameterfv, vFuup)
 GO(glGetTexParameteriv, vFuup)
 GO(glHint, vFuu)
@@ -2133,7 +2135,7 @@ GO(glImageTransformParameteriHP, vFuui)
 GO(glImageTransformParameterivHP, vFuup)
 //IBM_multimode_draw_arrays
 GO(glMultiModeDrawArraysIBM, vFpppii)
-//GO(glMultiModeDrawElementsIBM, vFppubp_ii)
+GOM(glMultiModeDrawElementsIBM, vFEppupui)
 //IBM_static_data
 GO(glFlushStaticDataIBM, vFu)
 //IBM_vertex_array_lists
@@ -2952,7 +2954,7 @@ GO(glXCreatePixmap, LFXpLp)
 GO(glXCreateWindow, LFXpLp)
 GOM(glXChooseVisual, pFEXip)
 GO(glXCopyImageSubDataNV, vFXpuiiiiipuiiiiiiii)
-//GO(glXCopySubBufferMESA, vFppiiii)
+GO(glXCopySubBufferMESA, vFXpiiii)
 GO(glXDestroyContext, vFXp)
 GO(glXDestroyGLXPbufferSGIX, vFXp)
 GO(glXDestroyGLXPixmap, vFXL)

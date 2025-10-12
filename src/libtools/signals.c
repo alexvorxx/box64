@@ -160,8 +160,6 @@ uint64_t RunFunctionHandler(x64emu_t* emu, int* exit, int dynarec, x64_ucontext_
     int old_cs = R_CS;
     R_CS = 0x33;
 
-    emu->eflags.x64 &= ~(1<<F_TF); // this one needs to cleared
-
     if(dynarec)
         DynaCall(emu, fnc);
     else
@@ -884,8 +882,6 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
     (void)ucntx; (void)cur_db;
     void* pc = NULL;
 #endif
-    // setup libc context stack frame, on caller stack
-    frame = frame&~15;
 
     // stack tracking
     x64_stack_t *new_ss = my_context->onstack[sig]?(x64_stack_t*)pthread_getspecific(sigstack_key):NULL;
@@ -899,6 +895,7 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
             new_ss->ss_flags = SS_ONSTACK;
         }
     } else {
+        frame = frame&~15;
         frame -= 0x200; // redzone
     }
 
@@ -932,6 +929,7 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
     sigcontext->uc_mcontext.gregs[X64_RIP] = R_RIP;
     // flags
     sigcontext->uc_mcontext.gregs[X64_EFL] = emu->eflags.x64;
+    CLEAR_FLAG(F_TF);   // now clear TF flags inside the signal handler
     // get segments
     sigcontext->uc_mcontext.gregs[X64_CSGSFS] = ((uint64_t)(R_CS)) | (((uint64_t)(R_GS))<<16) | (((uint64_t)(R_FS))<<32);
     if(R_CS==0x23) {
@@ -988,6 +986,7 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
     uint32_t mmapped = memExist((uintptr_t)info->si_addr);
     uint32_t sysmapped = (info->si_addr<(void*)box64_pagesize)?1:mmapped;
     uint32_t real_prot = 0;
+    int skip = 1;   // in case sigjump is used to restore exectuion, 1 will switch to interpreter, 3 will switch to dynarec
     if(prot&PROT_READ) real_prot|=PROT_READ;
     if(prot&PROT_WRITE) real_prot|=PROT_WRITE;
     if(prot&PROT_EXEC) real_prot|=PROT_WRITE;
@@ -1012,6 +1011,7 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
                 if(!mmapped) info2->si_code = 1;
                 info2->si_errno = 0;
             } else if (info->si_errno==0xb09d) {
+                // bound exception
                 sigcontext->uc_mcontext.gregs[X64_ERR] = 0;
                 sigcontext->uc_mcontext.gregs[X64_TRAPNO] = 5;
                 info2->si_errno = 0;
@@ -1037,6 +1037,7 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
             info2->si_code = 128;
             info2->si_addr = NULL;
             sigcontext->uc_mcontext.gregs[X64_TRAPNO] = 13;
+            skip = 3;   // can resume in dynarec
             // some special cases...
             if(int_n==3) {
                 info2->si_signo = X64_SIGTRAP;
@@ -1056,15 +1057,18 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
             sigcontext->uc_mcontext.gregs[X64_ERR] = 0;
             sigcontext->uc_mcontext.gregs[X64_TRAPNO] = 0;
             info2->si_signo = X64_SIGFPE;
+            skip = 3; // can resume in dynarec
         }
     } else if(sig==X64_SIGFPE) {
         if (info->si_code == FPE_INTOVF)
             sigcontext->uc_mcontext.gregs[X64_TRAPNO] = 4;
         else
             sigcontext->uc_mcontext.gregs[X64_TRAPNO] = 19;
+        skip = 3;
     } else if(sig==X64_SIGILL) {
         info2->si_code = 2;
         sigcontext->uc_mcontext.gregs[X64_TRAPNO] = 6;
+        info2->si_addr = (void*)sigcontext->uc_mcontext.gregs[X64_RIP];
     } else if(sig==X64_SIGTRAP) {
         if(info->si_code==1) {  //single step
             info2->si_code = 2;
@@ -1073,6 +1077,8 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
             info2->si_code = 128;
         sigcontext->uc_mcontext.gregs[X64_TRAPNO] = info->si_code;
         sigcontext->uc_mcontext.gregs[X64_ERR] = 0;
+    } else {
+        skip = 3;   // other signal can resume in interpretor
     }
     //TODO: SIGABRT generate what?
     printf_log((sig==10)?LOG_DEBUG:log_minimum, "Signal %d: si_addr=%p, TRAPNO=%d, ERR=%d, RIP=%p, prot=%x, mmapped:%d\n", sig, (void*)info2->si_addr, sigcontext->uc_mcontext.gregs[X64_TRAPNO], sigcontext->uc_mcontext.gregs[X64_ERR],sigcontext->uc_mcontext.gregs[X64_RIP], prot, mmapped);
@@ -1102,7 +1108,7 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
     int ret;
     int dynarec = 0;
     #ifdef DYNAREC
-    if(sig!=X64_SIGSEGV && !(Locks&is_dyndump_locked) && !(Locks&is_memprot_locked))
+    if(!(sig==X64_SIGSEGV || (Locks&is_dyndump_locked) || (Locks&is_memprot_locked)))
         dynarec = 1;
     #endif
     ret = RunFunctionHandler(emu, &exits, dynarec, sigcontext, my_context->signals[info2->si_signo], 3, info2->si_signo, info2, sigcontext);
@@ -1142,6 +1148,8 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
             GO(R14);
             GO(R15);
             #undef GO
+            if((skip==1) && (emu->ip.q[0]!=sigcontext->uc_mcontext.gregs[X64_RIP]))
+                skip = 3;   // if it jumps elsewhere, it can resume with dynarec...
             emu->ip.q[0]=sigcontext->uc_mcontext.gregs[X64_RIP];
             // flags
             emu->eflags.x64=sigcontext->uc_mcontext.gregs[X64_EFL];
@@ -1157,7 +1165,7 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
             #undef GO
             for(int i=0; i<6; ++i)
                 emu->segs_serial[i] = 0;
-            printf_log((sig==10)?LOG_DEBUG:log_minimum, "Context has been changed in Sigactionhanlder, doing siglongjmp to resume emu at %p, RSP=%p\n", (void*)R_RIP, (void*)R_RSP);
+            printf_log((sig==10)?LOG_DEBUG:log_minimum, "Context has been changed in Sigactionhanlder, doing siglongjmp to resume emu at %p, RSP=%p (resume with %s)\n", (void*)R_RIP, (void*)R_RSP, (skip==3)?"Dynarec":"Interp");
             if(old_code)
                 *old_code = -1;    // re-init the value to allow another segfault at the same place
             //relockMutex(Locks);   // do not relock mutex, because of the siglongjmp, whatever was running is canceled
@@ -1169,9 +1177,9 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
             emu->xSPSave = emu->old_savedsp;
             #endif
             #ifdef ANDROID
-            siglongjmp(*emu->jmpbuf, 1);
+            siglongjmp(*emu->jmpbuf, skip);
             #else
-            siglongjmp(emu->jmpbuf, 1);
+            siglongjmp(emu->jmpbuf, skip);
             #endif
         }
         printf_log(LOG_INFO, "Warning, context has been changed in Sigactionhanlder%s\n", (sigcontext->uc_mcontext.gregs[X64_RIP]!=sigcontext_copy.uc_mcontext.gregs[X64_RIP])?" (EIP changed)":"");
@@ -1334,7 +1342,7 @@ void my_box64signalhandler(int32_t sig, siginfo_t* info, void * ucntx)
 {
     sig = signal_from_x64(sig);
     // sig==X64_SIGSEGV || sig==X64_SIGBUS || sig==X64_SIGILL || sig==X64_SIGABRT here!
-    int log_minimum = (BOX64ENV(showsegv))?LOG_NONE:((sig==X64_SIGSEGV && my_context->is_sigaction[sig])?LOG_DEBUG:LOG_INFO);
+    int log_minimum = (BOX64ENV(showsegv))?LOG_NONE:((((sig==X64_SIGSEGV) || (sig==X64_SIGILL)) && my_context->is_sigaction[sig])?LOG_DEBUG:LOG_INFO);
     if(signal_jmpbuf_active) {
         signal_jmpbuf_active = 0;
         longjmp(SIG_JMPBUF, 1);

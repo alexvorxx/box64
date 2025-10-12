@@ -86,7 +86,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     STLXRB(x4, x1, wback);
                     CBNZx_MARKLOCK(x4);
                 }
-                SMDMB();
             }
             break;
         case 0x01:
@@ -115,14 +114,12 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     } else {
                         STADDLxw(gd, wback);
                     }
-                    SMDMB();
                 } else {
                     MARKLOCK;
                     LDAXRxw(x1, wback);
                     ADDxw_REG(x4, x1, gd);
                     STLXRxw(x3, x4, wback);
                     CBNZx_MARKLOCK(x3);
-                    SMDMB();
                 }
                 if(!ALIGNED_ATOMICxw) {
                     B_MARK2_nocond;
@@ -135,7 +132,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     STLXRB(x3, x4, wback);
                     CBNZx_MARK(x3);
                     STRxw_U12(x4, wback, 0);    // put the whole value
-                    SMDMB();
                 }
                 MARK2;
                 UFLAG_IF {
@@ -175,7 +171,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     STLXRB(x4, x1, wback);
                     CBNZx_MARKLOCK(x4);
                 }
-                SMDMB();
             }
             break;
         case 0x09:
@@ -200,7 +195,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     STLXRxw(x3, x1, wback);
                     CBNZx_MARKLOCK(x3);
                 }
-                SMDMB();
             }
             break;
 
@@ -266,7 +260,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x4, ed, wback);
                             CBNZw_MARKLOCK(x4);
                         }
-                        SMDMB();
                     }
                     break;
                 case 0xB0:
@@ -319,7 +312,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                     UFLAG_IF {emit_cmp8(dyn, ninst, x6, x2, x3, x4, x5);}
                                     BFIx(xRAX, x2, 0, 8);
                                 }
-                                SMDMB();
                             }
                             break;
                         default:
@@ -342,11 +334,13 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                     CMPSxw_REG(xRAX, ed);
                                 }
                                 MOVxw_REG(x1, ed); // save value
-                                Bcond(cNE, 4+4);
+                                Bcond(cNE, 4 + (rex.w ? 4 : 8));
                                 MOVxw_REG(ed, gd);
+                                if (!rex.w) { B_NEXT_nocond; }
                                 MOVxw_REG(xRAX, x1);
                             } else {
                                 addr = geted(dyn, addr, ninst, nextop, &wback, x2, &fixedaddress, NULL, 0, 0, rex, LOCK_LOCK, 0, 0);
+                                UFLAG_IF { MOVxw_REG(x6, xRAX); }
                                 if(!ALIGNED_ATOMICxw) {
                                     if(cpuext.uscat) {
                                         ANDx_mask(x1, wback, 1, 0, 3);  // mask = F
@@ -358,18 +352,20 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                     }
                                 }
                                 // Aligned version
-                                if(cpuext.atomics) {
+                                // disabling use of atomics for now, as it seems to make (at least)
+                                //  HorizonZeroDawn and Cyberpunk2077 (both from GoG) unstable
+                                //  but why?!
+                                if (rex.w /* RAX should NOT be zero-upped if equal */ && cpuext.atomics && 0) {
                                     UFLAG_IF {
                                         MOVxw_REG(x1, xRAX);
                                         CASALxw(x1, gd, wback);
-                                        SMDMB();
-                                        if(!ALIGNED_ATOMICxw) {
+                                        MOVxw_REG(xRAX, x1);
+                                        if (!ALIGNED_ATOMICxw) {
                                             B_MARK_nocond;
                                         }
                                     } else {
                                         CASALxw(xRAX, gd, wback);
-                                        SMDMB();
-                                        if(!ALIGNED_ATOMICxw) {
+                                        if (!ALIGNED_ATOMICxw) {
                                             B_NEXT_nocond;
                                         }
                                     }
@@ -377,12 +373,14 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                     MARKLOCK;
                                     LDAXRxw(x1, wback);
                                     CMPSxw_REG(xRAX, x1);
-                                    B_MARK(cNE);
+                                    Bcond(cNE, 4 + (rex.w ? 8 : 12));
                                     // EAX == Ed
                                     STLXRxw(x4, gd, wback);
                                     CBNZx_MARKLOCK(x4);
                                     // done
-                                    if(!ALIGNED_ATOMICxw) {
+                                    if (!rex.w) { B_MARK_nocond; }
+                                    MOVxw_REG(xRAX, x1);
+                                    if (!ALIGNED_ATOMICxw) {
                                         B_MARK_nocond;
                                     }
                                 }
@@ -394,19 +392,17 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                     SUBxw_UXTB(x3, x3, x1);
                                     CBNZw_MARK3(x3);
                                     CMPSxw_REG(xRAX, x1);
-                                    B_MARK(cNE);
+                                    Bcond(cNE, 4 + (rex.w ? 12 : 16));
                                     // EAX == Ed
                                     STLXRB(x4, gd, wback);
                                     CBNZx_MARK3(x4);
                                     STRxw_U12(gd, wback, 0);
+                                    if (!rex.w) { B_MARK_nocond; }
+                                    MOVxw_REG(xRAX, x1);
                                 }
                                 MARK;
-                                SMDMB();
-                                // Common part (and fallback for EAX != Ed)
-                                UFLAG_IF {emit_cmp32(dyn, ninst, rex, xRAX, x1, x3, x4, x5); MOVxw_REG(xRAX, x1);}
-                                else {
-                                    if(!ALIGNED_ATOMICxw || !cpuext.atomics)
-                                        MOVxw_REG(xRAX, x1);    // upper par of RAX will be erase on 32bits, no mater what
+                                UFLAG_IF {
+                                    emit_cmp32(dyn, ninst, rex, x6, x1, x3, x4, x5);
                                 }
                             }
                             break;
@@ -468,7 +464,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x4, ed, wback);
                             CBNZw_MARKLOCK(x4);
                         }
-                        SMDMB();
                     }
                     break;
 
@@ -550,7 +545,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                 STLXRB(x4, ed, wback);
                                 CBNZw_MARKLOCK(x4);
                             }
-                            SMDMB();
                         }
                         break;
                     case 6:
@@ -593,7 +587,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                 STLXRB(x4, ed, wback);
                                 CBNZw_MARKLOCK(x4);
                             }
-                            SMDMB();
                         }
                         break;
                     case 7:
@@ -638,7 +631,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                 STLXRB(x4, ed, wback);
                                 CBNZw_MARKLOCK(x4);
                             }
-                            SMDMB();
                         }
                         break;
                     default:
@@ -698,7 +690,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x4, ed, wback);
                             CBNZw_MARKLOCK(x4);
                         }
-                        SMDMB();
                     }
                     break;
 
@@ -722,25 +713,22 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                     UFLAG_IF {
                                         MOVxw_REG(x3, gd);
                                         LDADDALB(x3, gd, wback);
-                                        SMDMB();
                                         emit_add8(dyn, ninst, x3, gd, x4, x5);
                                     } else {
                                         LDADDALB(gd, gd, wback);
-                                        SMDMB();
                                     }
                                     GBBACK;
                                 } else {
                                     MARKLOCK;
-                                    LDAXRB(x1, wback);
-                                    ADDw_REG(x4, x1, gd);
+                                    LDAXRB(x5, wback);
+                                    ADDw_REG(x4, x5, gd);
                                     STLXRB(x3, x4, wback);
                                     CBNZx_MARKLOCK(x3);
-                                    SMDMB();
                                     IFX(X_ALL|X_PEND) {
-                                        MOVxw_REG(x2, x1);
+                                        MOVxw_REG(x2, x5);
                                         emit_add8(dyn, ninst, x2, gd, x3, x4);
                                     }
-                                    BFIz(gb1, x1, gb2, 8);
+                                    BFIz(gb1, x5, gb2, 8);
                                 }
                             }
                             break;
@@ -786,7 +774,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                     STLXRxw(x3, x4, wback);
                                     CBNZx_MARKLOCK(x3);
                                 }
-                                SMDMB();
                                 if(!ALIGNED_ATOMICxw) {
                                     UFLAG_IF {
                                         B_MARK2_nocond;
@@ -803,7 +790,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                     STLXRB(x3, x4, wback);
                                     CBNZx_MARK(x3);
                                     STRxw_U12(x4, wback, 0);
-                                    SMDMB();
                                 }
                                 MARK2;
                                 UFLAG_IF {
@@ -913,7 +899,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             }
                         }
                         MARK3;
-                        SMDMB();
                         UFLAG_IF {
                             IFNATIVE(NF_EQ) {} else {BFIw(xFlags, x1, F_ZF, 1);}
                         }
@@ -952,7 +937,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 emit_adc8(dyn, ninst, x1, x2, x4, x5);
                 STLXRB(x4, x1, wback);
                 CBNZx_MARKLOCK(x4);
-                SMDMB();
             }
             break;
         case 0x11:
@@ -971,7 +955,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 emit_adc32(dyn, ninst, rex, x1, gd, x4, x5);
                 STLXRxw(x4, x1, wback);
                 CBNZx_MARKLOCK(x4);
-                SMDMB();
             }
             break;
         case 0x20:
@@ -1001,7 +984,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     emit_and8(dyn, ninst, x1, gd, x3, x4);
                     STLXRB(x3, x1, wback);
                     CBNZx_MARKLOCK(x3);
-                    SMDMB();
                 }
             }
             break;
@@ -1029,7 +1011,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     emit_and32(dyn, ninst, rex, x1, gd, x3, x4);
                     STLXRxw(x3, x1, wback);
                     CBNZx_MARKLOCK(x3);
-                    SMDMB();
                 }
             }
             break;
@@ -1068,7 +1049,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     STLXRxw(x3, x4, wback);
                     CBNZx_MARKLOCK(x3);
                 }
-                SMDMB();
                 if(!ALIGNED_ATOMICxw) {
                     UFLAG_IF {
                         B_MARK2_nocond;
@@ -1084,7 +1064,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     STLXRB(x3, x4, wback);
                     CBNZx_MARK(x3);
                     STRxw_U12(x4, wback, 0);    // put the whole value
-                    SMDMB();
                 }
                 UFLAG_IF {
                     MARK2;
@@ -1126,7 +1105,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     STLXRxw(x3, x4, wback);
                     CBNZx_MARKLOCK(x3);
                 }
-                SMDMB();
                 if(!ALIGNED_ATOMICxw) {
                     B_MARK2_nocond;
                     MARK;   // unaligned! also, not enough
@@ -1138,7 +1116,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     STLXRB(x3, x4, wback);
                     CBNZx_MARK(x3);
                     STRxw_U12(x4, wback, 0);    // put the whole value
-                    SMDMB();
                 }
                 MARK2;
                 UFLAG_IF {
@@ -1182,7 +1159,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 case 1: //OR
@@ -1213,7 +1189,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 case 2: //ADC
@@ -1236,7 +1211,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         STLXRB(x3, x1, wback);
                         CBNZx_MARKLOCK(x3);
                     }
-                    SMDMB();
                     break;
                 case 3: //SBB
                     INST_NAME("SBB Eb, Ib");
@@ -1258,7 +1232,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         STLXRB(x3, x1, wback);
                         CBNZx_MARKLOCK(x3);
                     }
-                    SMDMB();
                     break;
                 case 4: //AND
                     INST_NAME("AND Eb, Ib");
@@ -1288,7 +1261,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 case 5: //SUB
@@ -1319,7 +1291,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 case 6: //XOR
@@ -1350,7 +1321,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 case 7: //CMP
@@ -1410,7 +1380,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             } else {
                                 STADDLxw(x5, wback);
                             }
-                            SMDMB();
                         } else {
                             MARKLOCK;
                             LDAXRxw(x1, wback);
@@ -1423,7 +1392,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             }
                             STLXRxw(x3, x4, wback);
                             CBNZx_MARKLOCK(x3);
-                            SMDMB();
                         }
                         if(!ALIGNED_ATOMICxw) {
                             B_MARK2_nocond;
@@ -1442,7 +1410,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x4, wback);
                             CBNZx_MARK(x3);
                             STRxw_U12(x4, wback, 0);    // put the whole value
-                            SMDMB();
                         }
                         MARK2;
                         UFLAG_IF {
@@ -1483,7 +1450,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                                 STLXRxw(x3, x1, wback);
                                 CBNZx_MARKLOCK(x3);
                             }
-                            SMDMB();
                         }
                     }
                     break;
@@ -1505,7 +1471,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         emit_adc32(dyn, ninst, rex, x1, x5, x3, x4);
                         STLXRxw(x3, x1, wback);
                         CBNZx_MARKLOCK(x3);
-                        SMDMB();
                     }
                     break;
                 case 3: //SBB
@@ -1526,7 +1491,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         emit_sbb32(dyn, ninst, rex, x1, x5, x3, x4);
                         STLXRxw(x3, x1, wback);
                         CBNZx_MARKLOCK(x3);
-                        SMDMB();
                     }
                     break;
                 case 4: //AND
@@ -1556,7 +1520,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRxw(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 case 5: //SUB
@@ -1595,7 +1558,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             } else {
                                 STADDLxw(x5, wback);
                             }
-                            SMDMB();
                         } else {
                             MARKLOCK;
                             LDAXRxw(x1, wback);
@@ -1608,7 +1570,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             }
                             STLXRxw(x3, x4, wback);
                             CBNZx_MARKLOCK(x3);
-                            SMDMB();
                         }
                         if(!ALIGNED_ATOMICxw) {
                             UFLAG_IF {
@@ -1631,7 +1592,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x4, wback);
                             CBNZx_MARK(x3);
                             STRxw_U12(x4, wback, 0);    // put the whole value
-                            SMDMB();
                         }
                         UFLAG_IF {
                             MARK2;
@@ -1669,7 +1629,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRxw(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 case 7: //CMP
@@ -1721,7 +1680,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     CBNZx_MARKLOCK(x3);
                 }
                 BFIx(gb1, x1, gb2, 8);
-                SMDMB();
             }
             break;
         case 0x87:
@@ -1771,7 +1729,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     STRxw_U12(gd, ed, 0);
                     MARK2;
                 }
-                SMDMB();
                 if(!ALIGNED_ATOMICxw || !cpuext.atomics) {
                     MOVxw_REG(gd, x1);
                 }
@@ -1785,7 +1742,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 case 1:
                     INST_NAME("LOCK TEST Eb, Ib");
                     SETFLAGS(X_ALL, SF_SET_PENDING);
-                    SMDMB();
                     GETEB(x1, 1);
                     u8 = F8;
                     emit_test8c(dyn, ninst, x1, u8, x3, x4, x5);
@@ -1808,7 +1764,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 default:
@@ -1836,7 +1791,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRxw(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 default:
@@ -1872,7 +1826,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 case 1: //DEC Eb
@@ -1899,7 +1852,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x1, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                     }
                     break;
                 default:
@@ -1942,7 +1894,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRxw(x3, x4, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                         if(!ALIGNED_ATOMICxw) {
                             UFLAG_IF {
                                 B_MARK2_nocond;
@@ -1958,7 +1909,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x4, wback);
                             CBNZw_MARK(x3);
                             STRxw_U12(x4, wback, 0);
-                            SMDMB();
                         }
                         UFLAG_IF {
                             MARK2;
@@ -1998,7 +1948,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRxw(x3, x4, wback);
                             CBNZx_MARKLOCK(x3);
                         }
-                        SMDMB();
                         if(!ALIGNED_ATOMICxw) {
                             UFLAG_IF {
                                 B_MARK2_nocond;
@@ -2014,7 +1963,6 @@ uintptr_t dynarec64_F0(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             STLXRB(x3, x4, wback);
                             CBNZw_MARK(x3);
                             STRxw_U12(x4, wback, 0);
-                            SMDMB();
                         }
                         UFLAG_IF {
                             MARK2;

@@ -100,18 +100,12 @@ typedef struct instruction_la64_s {
     int                 pass2choice;// value for choices that are fixed on pass2 for pass3
     uintptr_t           natcall;
     uint16_t            retn;
-    uint16_t            purge_ymm;  // need to purge some ymm
-    uint16_t            ymm0_in;    // bitmap of ymm to zero at purge
-    uint16_t            ymm0_add;   // the ymm0 added by the opcode
-    uint16_t            ymm0_sub;   // the ymm0 removed by the opcode
-    uint16_t            ymm0_out;   // the ymm0 at th end of the opcode
     uint16_t            ymm0_pass2, ymm0_pass3;
     uint8_t             barrier_maybe;
     uint8_t             will_write:2;    // [strongmem] will write to memory
     uint8_t             will_read:1;     // [strongmem] will read from memory
     uint8_t             last_write:1;    // [strongmem] the last write in a SEQ
     uint8_t             lock:1;          // [strongmem] lock semantic
-    uint8_t             lock_prefixed:1; // [strongmem] the opcode is lock prefixed
     uint8_t             df_notneeded;
     uint8_t             nat_flags_fusion:1;
     uint8_t             nat_flags_nofusion:1;
@@ -185,12 +179,12 @@ int Table64(dynarec_la64_t *dyn, uint64_t val, int pass);  // add a value to tab
 
 void CreateJmpNext(void* addr, void* next);
 
-#define GO_TRACE(A, B, s0) \
-    GETIP(addr, s0);       \
-    MV(A1, xRIP);          \
-    STORE_XEMU_CALL();     \
-    MOV64x(A2, B);         \
-    CALL(const_##A, -1);   \
+#define GO_TRACE(A, B, s0)         \
+    GETIP(addr, s0);               \
+    MV(x1, xRIP);                  \
+    STORE_XEMU_CALL();             \
+    MOV64x(x2, B);                 \
+    CALL(const_##A, -1, x1, x2);   \
     LOAD_XEMU_CALL()
 
 #endif //__DYNAREC_ARM_PRIVATE_H_

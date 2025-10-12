@@ -302,6 +302,11 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             break;
 
         case 0x19:
+        case 0x1A:
+        case 0x1B:
+        case 0x1C:
+        case 0x1D:
+        case 0x1E:
         case 0x1F:                      /* NOP (multi-byte) */
             nextop = F8;
             FAKEED(0);
@@ -739,7 +744,10 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             GETEX(0);
             GETGX;
             for(int i=0; i<4; ++i)
-                GX->f[i] = sqrtf(EX->f[i]);
+                if (isnan(EX->f[i]))
+                    GX->f[i] = EX->f[i];
+                else
+                    GX->f[i] = (EX->f[i] < 0) ? (-NAN) : sqrtf(EX->f[i]);
             break;
         case 0x52:                      /* RSQRTPS Gx, Ex */
             nextop = F8;
@@ -763,7 +771,10 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             GETEX(0);
             GETGX;
             for(int i=0; i<4; ++i)
-                GX->f[i] = 1.0f/EX->f[i];
+                if (isnan(EX->f[i]))
+                    GX->f[i] = EX->f[i];
+                else
+                    GX->f[i] = 1.0f / EX->f[i];
             break;
         case 0x54:                      /* ANDPS Gx, Ex */
             nextop = F8;
@@ -1407,7 +1418,6 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                         ED->q[0] = GD->dword[0];
                     else
                         ED->dword[0] = GD->dword[0];
-                    R_RAX = R_EAX;   // to erase upper part of RAX
                 } else {
                     R_RAX = ED->dword[0];
                 }
@@ -1791,8 +1801,8 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                         tmp64u2= ED->q[1];
                         if(R_RAX == tmp64u && R_RDX == tmp64u2) {
                             SET_FLAG(F_ZF);
-                            ED->q[0] = R_EBX;
-                            ED->q[1] = R_ECX;
+                            ED->q[0] = R_RBX;
+                            ED->q[1] = R_RCX;
                         } else {
                             CLEAR_FLAG(F_ZF);
                             R_RAX = tmp64u;

@@ -35,7 +35,7 @@ uintptr_t geted(dynarec_rv64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
     MAYUSE(delta);
 
     if (l == LOCK_LOCK) {
-        dyn->insts[ninst].lock_prefixed = 1;
+        dyn->insts[ninst].lock = 1;
     }
 
     if (rex.is32bits)
@@ -262,6 +262,7 @@ static uintptr_t geted_32(dynarec_rv64_t* dyn, uintptr_t addr, int ninst, uint8_
                     } else {
                         if (sib >> 6) {
                             SLLI(ret, TO_NAT(sib_reg), (sib >> 6));
+                            ZEROUP(ret);
                             if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                         } else
                             ret = TO_NAT(sib_reg);
@@ -738,11 +739,12 @@ void iret_to_epilog(dynarec_rv64_t* dyn, uintptr_t ip, int ninst, int is64bits)
         POP1_32(x2);
         POP1_32(xFlags);
     }
+    FLAGS_ADJUST_FROM11(xFlags, xFlags, x3);
 
     SH(x2, xEmu, offsetof(x64emu_t, segs[_CS]));
     SW(xZR, xEmu, offsetof(x64emu_t, segs_serial[_CS]));
     // clean EFLAGS
-    MOV32w(x1, 0x3F7FD7);
+    MOV32w(x1, 0x3F7FF7);
     AND(xFlags, xFlags, x1);
     ORI(xFlags, xFlags, 0x2);
     SET_DFNONE();
@@ -2060,25 +2062,6 @@ static void sse_purgecache(dynarec_rv64_t* dyn, int ninst, int next, int s1)
             }
         }
 
-    // AVX
-    if (dyn->ymm_zero) {
-        if (old == -1) {
-            MESSAGE(LOG_DUMP, "\tPurge %sSSE Cache ------\n", next ? "locally " : "");
-            ++old;
-        }
-        for (int i = 0; i < 16; ++i)
-            if (is_avx_zero(dyn, ninst, i)) {
-                if (cpuext.xtheadmempair) {
-                    ADDI(s1, xEmu, offsetof(x64emu_t, ymm[i]));
-                    TH_SDD(xZR, xZR, s1, 0);
-                } else {
-                    SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]));
-                    SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]) + 8);
-                }
-            }
-        if (!next)
-            avx_mark_zero_reset(dyn, ninst);
-    }
     if (old != -1) {
         MESSAGE(LOG_DUMP, "\t------ Purge SSE Cache\n");
     }
@@ -2097,32 +2080,10 @@ static void sse_reflectcache(dynarec_rv64_t* dyn, int ninst, int s1)
             else
                 FSD(dyn->e.ssecache[i].reg, xEmu, offsetof(x64emu_t, xmm[i]));
         }
-
-    // AVX
-    if (dyn->ymm_zero)
-        for (int i = 0; i < 16; ++i)
-            if (is_avx_zero(dyn, ninst, i)) {
-                if (cpuext.xtheadmempair) {
-                    ADDI(s1, xEmu, offsetof(x64emu_t, ymm[i]));
-                    TH_SDD(xZR, xZR, s1, 0);
-                } else {
-                    SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]));
-                    SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]) + 8);
-                }
-            }
 }
 
 void sse_reflect_reg(dynarec_rv64_t* dyn, int ninst, int s1, int a)
 {
-    if (is_avx_zero(dyn, ninst, a)) {
-        if (cpuext.xtheadmempair) {
-            ADDI(s1, xEmu, offsetof(x64emu_t, ymm[a]));
-            TH_SDD(xZR, xZR, s1, 0);
-        } else {
-            SD(xZR, xEmu, offsetof(x64emu_t, ymm[a]));
-            SD(xZR, xEmu, offsetof(x64emu_t, ymm[a]) + 8);
-        }
-    }
     if (dyn->e.ssecache[a].v == -1)
         return;
     if (dyn->e.ssecache[a].vector) {
@@ -2133,14 +2094,6 @@ void sse_reflect_reg(dynarec_rv64_t* dyn, int ninst, int s1, int a)
         FSW(dyn->e.ssecache[a].reg, xEmu, offsetof(x64emu_t, xmm[a]));
     else
         FSD(dyn->e.ssecache[a].reg, xEmu, offsetof(x64emu_t, xmm[a]));
-}
-
-void ymm_mark_zero(dynarec_rv64_t* dyn, int ninst, int a)
-{
-#if STEP == 0
-    dyn->insts[ninst].ymm0_add |= (1 << a);
-#endif
-    avx_mark_zero(dyn, ninst, a);
 }
 
 void fpu_pushcache(dynarec_rv64_t* dyn, int ninst, int s1, int not07)
@@ -2161,15 +2114,6 @@ void fpu_pushcache(dynarec_rv64_t* dyn, int ninst, int s1, int not07)
                     FSW(dyn->e.ssecache[i].reg, xEmu, offsetof(x64emu_t, xmm[i]));
                 else
                     FSD(dyn->e.ssecache[i].reg, xEmu, offsetof(x64emu_t, xmm[i]));
-                if (is_avx_zero(dyn, ninst, i)) {
-                    if (cpuext.xtheadmempair) {
-                        ADDI(s1, xEmu, offsetof(x64emu_t, ymm[i]));
-                        TH_SDD(xZR, xZR, s1, 0);
-                    } else {
-                        SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]));
-                        SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]) + 8);
-                    }
-                }
             }
         MESSAGE(LOG_DUMP, "\t------- Push (float) XMM Cache (%d)\n", n);
     }
@@ -2208,15 +2152,6 @@ void fpu_pushcache(dynarec_rv64_t* dyn, int ninst, int s1, int not07)
                     SET_ELEMENT_WIDTH(s1, VECTOR_SEWANY, 0);
                     ADDI(s1, xEmu, offsetof(x64emu_t, xmm[i]));
                     VSE_V(dyn->e.ssecache[i].reg, s1, dyn->vector_eew, VECTOR_UNMASKED, VECTOR_NFIELD1);
-                }
-                if (is_avx_zero(dyn, ninst, i)) {
-                    if (cpuext.xtheadmempair) {
-                        ADDI(s1, xEmu, offsetof(x64emu_t, ymm[i]));
-                        TH_SDD(xZR, xZR, s1, 0);
-                    } else {
-                        SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]));
-                        SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]) + 8);
-                    }
                 }
             }
         MESSAGE(LOG_DUMP, "\t------- Push (vector) XMM Cache (%d)\n", n);
@@ -2329,10 +2264,6 @@ int fpu_needpurgecache(dynarec_rv64_t* dyn, int ninst)
     // sse
     for (int i = 0; i < 16; ++i)
         if (dyn->e.ssecache[i].v != -1) return 1;
-    // avx
-    if (dyn->ymm_zero)
-        for (int i = 0; i < 16; ++i)
-            if (is_avx_zero(dyn, ninst, i)) return 1;
     return 0;
 }
 
@@ -2371,13 +2302,6 @@ static int findCacheSlot(dynarec_rv64_t* dyn, int ninst, int t, int n, extcache_
                 case EXT_CACHE_XMMW:
                     if (t == EXT_CACHE_XMMR)
                         return i;
-                case EXT_CACHE_YMMR:
-                    if (t == EXT_CACHE_YMMW)
-                        return i;
-                    break;
-                case EXT_CACHE_YMMW:
-                    if (t == EXT_CACHE_YMMR)
-                        return i;
                     break;
             }
         }
@@ -2390,9 +2314,7 @@ static void swapCache(dynarec_rv64_t* dyn, int ninst, int i, int j, extcache_t* 
     if (i == j) return;
 
     if (cache->extcache[i].t == EXT_CACHE_XMMR || cache->extcache[i].t == EXT_CACHE_XMMW
-        || cache->extcache[j].t == EXT_CACHE_XMMR || cache->extcache[j].t == EXT_CACHE_XMMW
-        || cache->extcache[i].t == EXT_CACHE_YMMR || cache->extcache[i].t == EXT_CACHE_YMMW
-        || cache->extcache[j].t == EXT_CACHE_YMMR || cache->extcache[j].t == EXT_CACHE_YMMW) {
+        || cache->extcache[j].t == EXT_CACHE_XMMR || cache->extcache[j].t == EXT_CACHE_XMMW) {
         int reg_i = EXTREG(i);
         int reg_j = EXTREG(j);
         if (!cache->extcache[i].v) {
@@ -2450,7 +2372,7 @@ static void swapCache(dynarec_rv64_t* dyn, int ninst, int i, int j, extcache_t* 
 static void loadCache(dynarec_rv64_t* dyn, int ninst, int stack_cnt, int s1, int s2, int s3, int* s1_val, int* s2_val, int* s3_top, extcache_t* cache, int i, int t, int n)
 {
     int reg = EXTREG(i);
-    if (cache->extcache[i].v && (cache->extcache[i].t == EXT_CACHE_XMMR || cache->extcache[i].t == EXT_CACHE_XMMW || cache->extcache[i].t == EXT_CACHE_YMMR || cache->extcache[i].t == EXT_CACHE_YMMW)) {
+    if (cache->extcache[i].v && (cache->extcache[i].t == EXT_CACHE_XMMR || cache->extcache[i].t == EXT_CACHE_XMMW)) {
         int j = i + 1;
         while (cache->extcache[j].v)
             ++j;
@@ -2480,13 +2402,6 @@ static void loadCache(dynarec_rv64_t* dyn, int ninst, int stack_cnt, int s1, int
             MESSAGE(LOG_DUMP, "\t  - Loading %s\n", getCacheName(t, n));
             SET_ELEMENT_WIDTH(s1, VECTOR_SEWANY, 0);
             ADDI(s1, xEmu, offsetof(x64emu_t, xmm[n]));
-            VLE_V(reg, s1, dyn->vector_eew, VECTOR_UNMASKED, VECTOR_NFIELD1);
-            break;
-        case EXT_CACHE_YMMR:
-        case EXT_CACHE_YMMW:
-            MESSAGE(LOG_DUMP, "\t  - Loading %s\n", getCacheName(t, n));
-            SET_ELEMENT_WIDTH(s1, VECTOR_SEWANY, 0);
-            ADDI(s1, xEmu, offsetof(x64emu_t, ymm[n]));
             VLE_V(reg, s1, dyn->vector_eew, VECTOR_UNMASKED, VECTOR_NFIELD1);
             break;
         case EXT_CACHE_SS:
@@ -2551,19 +2466,12 @@ static void unloadCache(dynarec_rv64_t* dyn, int ninst, int stack_cnt, int s1, i
     int reg = EXTREG(i);
     switch (t) {
         case EXT_CACHE_XMMR:
-        case EXT_CACHE_YMMR:
             MESSAGE(LOG_DUMP, "\t  - ignoring %s\n", getCacheName(t, n));
             break;
         case EXT_CACHE_XMMW:
             MESSAGE(LOG_DUMP, "\t  - Unloading %s\n", getCacheName(t, n));
             SET_ELEMENT_WIDTH(s1, VECTOR_SEWANY, 0);
             ADDI(s1, xEmu, offsetof(x64emu_t, xmm[n]));
-            VSE_V(reg, s1, dyn->vector_eew, VECTOR_UNMASKED, VECTOR_NFIELD1);
-            break;
-        case EXT_CACHE_YMMW:
-            MESSAGE(LOG_DUMP, "\t  - Unloading %s\n", getCacheName(t, n));
-            SET_ELEMENT_WIDTH(s1, VECTOR_SEWANY, 0);
-            ADDI(s1, xEmu, offsetof(x64emu_t, ymm[n]));
             VSE_V(reg, s1, dyn->vector_eew, VECTOR_UNMASKED, VECTOR_NFIELD1);
             break;
         case EXT_CACHE_SS:
@@ -2732,8 +2640,6 @@ static void fpuCacheTransform(dynarec_rv64_t* dyn, int ninst, int s1, int s2, in
                     cache.extcache[i].t = EXT_CACHE_ST_D;
                 } else if (cache.extcache[i].t == EXT_CACHE_XMMR && cache_i2.extcache[i].t == EXT_CACHE_XMMW) {
                     cache.extcache[i].t = EXT_CACHE_XMMW;
-                } else if (cache.extcache[i].t == EXT_CACHE_YMMR && cache_i2.extcache[i].t == EXT_CACHE_YMMW) {
-                    cache.extcache[i].t = EXT_CACHE_YMMW;
                 } else if (cache.extcache[i].t == EXT_CACHE_XMMW && cache_i2.extcache[i].t == EXT_CACHE_XMMR) {
                     // refresh cache...
                     MESSAGE(LOG_DUMP, "\t  - Refreh %s\n", getCacheName(cache.extcache[i].t, cache.extcache[i].n));
@@ -2741,13 +2647,6 @@ static void fpuCacheTransform(dynarec_rv64_t* dyn, int ninst, int s1, int s2, in
                     ADDI(s1, xEmu, offsetof(x64emu_t, xmm[cache.extcache[i].n]));
                     VSE_V(EXTREG(i), s1, dyn->vector_eew, VECTOR_UNMASKED, VECTOR_NFIELD1);
                     cache.extcache[i].t = EXT_CACHE_XMMR;
-                } else if (cache.extcache[i].t == EXT_CACHE_YMMW && cache_i2.extcache[i].t == EXT_CACHE_YMMR) {
-                    // refresh cache...
-                    MESSAGE(LOG_DUMP, "\t  - Refreh %s\n", getCacheName(cache.extcache[i].t, cache.extcache[i].n));
-                    SET_ELEMENT_WIDTH(s1, VECTOR_SEWANY, 0);
-                    ADDI(s1, xEmu, offsetof(x64emu_t, ymm[cache.extcache[i].n]));
-                    VSE_V(EXTREG(i), s1, dyn->vector_eew, VECTOR_UNMASKED, VECTOR_NFIELD1);
-                    cache.extcache[i].t = EXT_CACHE_YMMR;
                 }
             }
         }
@@ -2803,7 +2702,7 @@ static void flagsCacheTransform(dynarec_rv64_t* dyn, int ninst, int s1)
     }
     if (go) {
         if (dyn->f.pending != SF_PENDING) {
-            LW(s1, xEmu, offsetof(x64emu_t, df));
+            LWU(s1, xEmu, offsetof(x64emu_t, df));
             j64 = (GETMARKF2) - (dyn->native_size);
             BEQZ(s1, j64);
         }
@@ -3254,28 +3153,4 @@ void vector_loadmask(dynarec_rv64_t* dyn, int ninst, int vreg, uint64_t imm, int
         }
     }
 #endif
-}
-
-
-void avx_purge_ymm(dynarec_rv64_t* dyn, int ninst, uint16_t mask, int s1)
-{
-    int do_something = 0;
-    for (int i = 0; i < 16; ++i)
-        if (mask & (1 << i)) {
-            if (is_avx_zero_unset(dyn, ninst, i)) {
-                if (!do_something) {
-                    MESSAGE(LOG_NONE, "Purge YMM mask=%04x --------\n", mask);
-                    do_something = 1;
-                }
-                if (cpuext.xtheadmempair) {
-                    ADDI(s1, xEmu, offsetof(x64emu_t, ymm[i]));
-                    TH_SDD(xZR, xZR, s1, 0);
-                } else {
-                    SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]));
-                    SD(xZR, xEmu, offsetof(x64emu_t, ymm[i]) + 8);
-                }
-            }
-        }
-    if (do_something)
-        MESSAGE(LOG_NONE, "---------- Purge YMM\n");
 }

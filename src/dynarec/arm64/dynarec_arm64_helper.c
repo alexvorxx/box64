@@ -31,8 +31,7 @@ uintptr_t geted(dynarec_arm_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, u
     MAYUSE(dyn); MAYUSE(ninst); MAYUSE(delta);
 
     if (l == LOCK_LOCK) {
-        dyn->insts[ninst].lock_prefixed = 1;
-        DMB_ISH();
+        dyn->insts[ninst].lock = 1;
     }
 
     if(rex.is32bits)
@@ -719,42 +718,48 @@ void iret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, int is32bits, i
     // POP IP
     NOTEST(x2);
     if(is64bits) {
-        POP1(xRIP);
+        POP1(x1);
         POP1(x2);
-        POP1(xFlags);
+        POP1(x3);
     } else {
-        POP1_32(xRIP);
+        POP1_32(x1);
         POP1_32(x2);
-        POP1_32(xFlags);
+        POP1_32(x3);
     }
-    // x2 is CS
-    STRH_U12(x2, xEmu, offsetof(x64emu_t, segs[_CS]));
-    STRw_U12(xZR, xEmu, offsetof(x64emu_t, segs_serial[_CS]));
+    // check CS is NULL, sgfault if it is
+    CBZw_MARK3(x1);
     // clean EFLAGS
-    MOV32w(x1, 0x3F7FD7);
-    ANDx_REG(xFlags, xFlags, x1);
-    ORRx_mask(xFlags, xFlags, 1, 0b111111, 0); // xFlags | 0b10
+    MOV32w(x4, 0x3F7FD7);
+    ANDx_REG(x3, x3, x4);
+    ORRx_mask(x3, x3, 1, 0b111111, 0); // xFlags | 0b10
     SET_DFNONE();
     if(is32bits) {
-        ANDw_mask(x2, x2, 0, 7);   // mask 0xff
+        ANDw_mask(x4, x2, 0, 7);   // mask 0xff
         // check if return segment is 64bits, then restore rsp too
-        CMPSw_U12(x2, 0x23);
+        CMPSw_U12(x4, 0x23);
         B_MARKSEG(cEQ);
     }
     // POP RSP
     if(is64bits) {
-        POP1(x3);   //rsp
-        POP1(x2);   //ss
+        POP1(x4);   //rsp
+        POP1(x5);   //ss
     } else {
-        POP1_32(x3);   //rsp
-        POP1_32(x2);   //ss
+        POP1_32(x4);   //rsp
+        POP1_32(x5);   //ss
     }
+    // check if SS is NULL
+    CBZw(x5, MARK);
     // POP SS
-    STRH_U12(x2, xEmu, offsetof(x64emu_t, segs[_SS]));
+    STRH_U12(x5, xEmu, offsetof(x64emu_t, segs[_SS]));
     STRw_U12(xZR, xEmu, offsetof(x64emu_t, segs_serial[_SS]));
     // set new RSP
-    MOVx_REG(xRSP, x3);
+    MOVx_REG(xRSP, x4);
     MARKSEG;
+    // x2 is CS, x1 is IP, x3 is eFlags
+    STRH_U12(x2, xEmu, offsetof(x64emu_t, segs[_CS]));
+    STRw_U12(xZR, xEmu, offsetof(x64emu_t, segs_serial[_CS]));
+    MOVx_REG(xRIP, x1);
+    MOVw_REG(xFlags, x3);
     // Ret....
     // epilog on purpose, CS might have changed!
     if(dyn->need_reloc)
@@ -763,6 +768,17 @@ void iret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, int is32bits, i
         MOV64x(x2, getConst(const_epilog));
     BR(x2);
     CLEARIP();
+    MARK;
+    if(is64bits)
+        ADDx_U12(xRSP, xRSP, 8*2);
+    else
+        ADDx_U12(xRSP, xRSP, 4*2);
+    MARK3;
+    if(is64bits)
+        ADDx_U12(xRSP, xRSP, 8*3);
+    else
+        ADDx_U12(xRSP, xRSP, 4*3);
+    CALL_S(const_native_priv, -1);
 }
 
 void call_c(dynarec_arm_t* dyn, int ninst, arm64_consts_t fnc, int reg, int ret, int saveflags, int savereg)
@@ -2492,7 +2508,7 @@ static void fpuCacheTransform(dynarec_arm_t* dyn, int ninst, int s1, int s2, int
     }
     MESSAGE(LOG_DUMP, "\t---- Cache Transform\n");
 }
-static void flagsCacheTransform(dynarec_arm_t* dyn, int ninst, int s1)
+static void flagsCacheTransform(dynarec_arm_t* dyn, int ninst)
 {
     int j64;
     int jmp = dyn->insts[ninst].x64.jmp_insts;
@@ -2516,15 +2532,16 @@ static void flagsCacheTransform(dynarec_arm_t* dyn, int ninst, int s1)
     }
     if(go) {
         if(dyn->f.pending!=SF_PENDING) {
-            LDRw_U12(s1, xEmu, offsetof(x64emu_t, df));
+            LDRw_U12(x1, xEmu, offsetof(x64emu_t, df));
             j64 = (GETMARKF2)-(dyn->native_size);
-            CBZw(s1, j64);
+            CBZw(x1, j64);
         }
         if(dyn->insts[ninst].need_nat_flags)
-            MRS_nzcv(s1);
-        CALL_(const_updateflags, -1, s1);
+            MRS_nzcv(x6);
+        TABLE64C(x1, const_updateflags_arm64);
+        BLR(x1);
         if(dyn->insts[ninst].need_nat_flags)
-            MSR_nzcv(s1);
+            MSR_nzcv(x6);
         MARKF2;
     }
 }
@@ -2607,13 +2624,14 @@ static void nativeFlagsTransform(dynarec_arm_t* dyn, int ninst, int s1, int s2)
     MESSAGE(LOG_DUMP, "\t---- Native Flags transform\n");
 }
 
-void CacheTransform(dynarec_arm_t* dyn, int ninst, int cacheupd, int s1, int s2, int s3) {
+// Might use all Scratch registers!
+void CacheTransform(dynarec_arm_t* dyn, int ninst, int cacheupd) {
     if(cacheupd&1)
-        flagsCacheTransform(dyn, ninst, s1);
+        flagsCacheTransform(dyn, ninst);
     if(cacheupd&2)
-        fpuCacheTransform(dyn, ninst, s1, s2, s3);
+        fpuCacheTransform(dyn, ninst, x1, x2, x3);
     if(cacheupd&4)
-        nativeFlagsTransform(dyn, ninst, s1, s2);
+        nativeFlagsTransform(dyn, ninst, x1, x2);
 }
 
 void fpu_reflectcache(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3)

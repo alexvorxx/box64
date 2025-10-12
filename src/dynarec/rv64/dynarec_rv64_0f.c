@@ -310,6 +310,11 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             break;
 
         case 0x19:
+        case 0x1A:
+        case 0x1B:
+        case 0x1C:
+        case 0x1D:
+        case 0x1E:
         case 0x1F:
             INST_NAME("NOP (multibyte)");
             nextop = F8;
@@ -975,8 +980,19 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             d0 = fpu_get_scratch(dyn);
             for (int i = 0; i < 4; ++i) {
                 FLW(d0, wback, fixedaddress + 4 * i);
+                if (!BOX64ENV(dynarec_fastnan)) {
+                    FEQS(x3, d0, d0);
+                    BNEZ(x3, 4 + 2 * 4); // isnan(d0)? copy it
+                    FSW(d0, gback, gdoffset + i * 4);
+                    J(4 + 5 * 4); // continue
+                }
                 FSQRTS(d0, d0);
-                FSW(d0, gback, gdoffset + 4 * i);
+                if (!BOX64ENV(dynarec_fastnan)) {
+                    FEQS(x3, d0, d0);
+                    BNEZ(x3, 4 + 4); // isnan(d0)? negate it
+                    FNEGS(d0, d0);
+                }
+                FSW(d0, gback, gdoffset + i * 4);
             }
             break;
         case 0x52:
@@ -987,28 +1003,29 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             s0 = fpu_get_scratch(dyn);
             s1 = fpu_get_scratch(dyn); // 1.0f
             v0 = fpu_get_scratch(dyn); // 0.0f
-            // do accurate computation, because riscv doesn't have rsqrt
-            MOV32w(x3, 1);
-            FCVTSW(s1, x3, RD_DYN);
+            LUI(x3, 0x3f800);
+            FMVWX(s1, x3); // 1.0f
             if (!BOX64ENV(dynarec_fastnan)) {
                 FCVTSW(v0, xZR, RD_DYN);
             }
             for (int i = 0; i < 4; ++i) {
                 FLW(s0, wback, fixedaddress + i * 4);
                 if (!BOX64ENV(dynarec_fastnan)) {
-                    FLES(x3, v0, s0); // s0 >= 0.0f?
-                    BNEZ(x3, 6 * 4);
-                    FEQS(x3, s0, s0); // isnan(s0)?
-                    BEQZ(x3, 2 * 4);
-                    // s0 is negative, so generate a NaN
-                    FDIVS(s0, s1, v0);
-                    // s0 is a NaN, just copy it
+                    FLTS(x3, v0, s0); // s0 > 0.0f?
+                    BNEZ(x3, 4 + 5 * 4);
+                    FEQS(x3, v0, s0); // s0 == 0.0f?
+                    BEQZ(x3, 4 + 3 * 4);
+                    FDIVS(s0, s1, v0); // generate an inf
                     FSW(s0, gback, gdoffset + i * 4);
-                    J(4 * 4);
-                    // do regular computation
+                    J(4 + 6 * 4); // continue
                 }
                 FSQRTS(s0, s0);
                 FDIVS(s0, s1, s0);
+                if (!BOX64ENV(dynarec_fastnan)) {
+                    FEQS(x3, s0, s0);
+                    BNEZ(x3, 4 + 4); // isnan(s0)? negate it
+                    FNEGS(s0, s0);
+                }
                 FSW(s0, gback, gdoffset + i * 4);
             }
             break;
@@ -1023,7 +1040,18 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             FMVWX(d0, x3); // 1.0f
             for (int i = 0; i < 4; ++i) {
                 FLW(d1, wback, fixedaddress + 4 * i);
+                if (!BOX64ENV(dynarec_fastnan)) {
+                    FEQS(x3, d1, d1);
+                    BNEZ(x3, 4 + 2 * 4); // isnan(d1)? copy it
+                    FSW(d1, gback, gdoffset + i * 4);
+                    J(4 + 5 * 4); // continue
+                }
                 FDIVS(d1, d0, d1);
+                if (!BOX64ENV(dynarec_fastnan)) {
+                    FEQS(x3, d1, d1);
+                    BNEZ(x3, 4 + 4); // isnan(d1)? negate it
+                    FNEGS(d1, d1);
+                }
                 FSW(d1, gback, gdoffset + 4 * i);
             }
             break;
@@ -1057,7 +1085,6 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0x57:
             INST_NAME("XORPS Gx, Ex");
             nextop = F8;
-            // TODO: it might be possible to check if SS or SD are used and not purge them to optimize a bit
             GETGX();
             if (MODREG && gd == (nextop & 7) + (rex.b << 3)) {
                 // just zero dest
@@ -1834,7 +1861,10 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             } else {
                 SMREAD();
                 addr = geted(dyn, addr, ninst, nextop, &wback, x3, x1, &fixedaddress, rex, NULL, 1, 0);
-                SRAIxw(x1, gd, 5 + rex.w); // r1 = (gd>>5)
+                if (rex.w)
+                    SRAI(x1, gd, 6);
+                else
+                    SRAIW(x1, gd, 5);
                 ADDSL(x3, wback, x1, 2 + rex.w, x1);
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
@@ -1857,6 +1887,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 WBACK;
             } else {
                 FAKEED;
+                if (!rex.w && !rex.is32bits && MODREG) { ZEROUP(ed); }
                 F8;
             }
             break;
@@ -1886,7 +1917,10 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             } else {
                 SMREAD();
                 addr = geted(dyn, addr, ninst, nextop, &wback, x3, x1, &fixedaddress, rex, NULL, 1, 0);
-                SRAIxw(x1, gd, 5 + rex.w);
+                if (rex.w)
+                    SRAI(x1, gd, 6);
+                else
+                    SRAIW(x1, gd, 5);
                 ADDSL(x3, wback, x1, 2 + rex.w, x1);
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
@@ -1919,6 +1953,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 WBACK;
             } else {
                 FAKEED;
+                if (!rex.w && !rex.is32bits && MODREG) { ZEROUP(ed); }
                 F8;
             }
             break;
@@ -2113,7 +2148,10 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             } else {
                 SMREAD();
                 addr = geted(dyn, addr, ninst, nextop, &wback, x2, x1, &fixedaddress, rex, NULL, 1, 0);
-                SRAIxw(x1, gd, 5 + rex.w);
+                if (rex.w)
+                    SRAI(x1, gd, 6);
+                else
+                    SRAIW(x1, gd, 5);
                 ADDSL(x3, wback, x1, 2 + rex.w, x1);
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
@@ -2283,7 +2321,10 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             } else {
                 SMREAD();
                 addr = geted(dyn, addr, ninst, nextop, &wback, x3, x1, &fixedaddress, rex, NULL, 1, 0);
-                SRAIxw(x1, gd, 5 + rex.w);
+                if (rex.w)
+                    SRAI(x1, gd, 6);
+                else
+                    SRAIW(x1, gd, 5);
                 ADDSL(x3, wback, x1, 2 + rex.w, x1);
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
@@ -2493,7 +2534,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             u8 = (F8) & 3;
             LHU(gd, wback, fixedaddress + u8 * 2);
             break;
-        case 0xC6: // TODO: Optimize this!
+        case 0xC6:
             INST_NAME("SHUFPS Gx, Ex, Ib");
             nextop = F8;
             GETGX();

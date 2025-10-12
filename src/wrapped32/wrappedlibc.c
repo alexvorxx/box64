@@ -291,13 +291,14 @@ static void* findcompareFct(void* fct)
     return NULL;
 }
 
-#if 0
 // ftw
 #define GO(A)   \
-static uintptr_t my32_ftw_fct_##A = 0;                                      \
-static int my32_ftw_##A(void* fpath, void* sb, int flag)                       \
+static uintptr_t my32_ftw_fct_##A = 0;                                          \
+static int my32_ftw_##A(void* fpath, void* sb, int flag)                        \
 {                                                                               \
-    return (int)RunFunction(my_context, my32_ftw_fct_##A, 3, fpath, sb, flag);   \
+    static struct i386_stat i386st;                                             \
+    FillStatFromStat64(3, sb, &i386st);                                         \
+    return (int)RunFunctionFmt(my32_ftw_fct_##A, "ppi", fpath, &i386st, flag);  \
 }
 SUPER()
 #undef GO
@@ -315,13 +316,12 @@ static void* findftwFct(void* fct)
     printf_log(LOG_NONE, "Warning, no more slot for libc ftw callback\n");
     return NULL;
 }
-#endif
 // ftw64
 #define GO(A)   \
 static uintptr_t my32_ftw64_fct_##A = 0;                                            \
 static int my32_ftw64_##A(void* fpath, void* sb, int flag)                          \
 {                                                                                   \
-    struct i386_stat64 i386st;                                                      \
+    static struct i386_stat64 i386st;                                               \
     UnalignStat64_32(sb, &i386st);                                                  \
     return (int)RunFunctionFmt(my32_ftw64_fct_##A, "ppi", fpath, &i386st, flag);    \
 }
@@ -1121,6 +1121,7 @@ EXPORT int my32_vswscanf(x64emu_t* emu, void* buff, void* fmt, void* b)
 
 EXPORT int my32__vswscanf(x64emu_t* emu, void* buff, void* fmt, void* b) __attribute__((alias("my32_vswscanf")));
 EXPORT int my32_swscanf(x64emu_t* emu, void* buff, void* fmt, void* b) __attribute__((alias("my32_vswscanf")));
+EXPORT int my32___isoc99_swscanf(x64emu_t* emu, void* stream, void* fmt, void* b) __attribute__((alias("my32_vswscanf")));
 
 #if 0
 EXPORT void my32_verr(x64emu_t* emu, int eval, void* fmt, void* b) {
@@ -1587,19 +1588,12 @@ EXPORT int my32_mkstemps64(x64emu_t* emu, char* template, int suffixlen)
     free(fname);
     return ret;
 }
+#endif
 
 EXPORT int32_t my32_ftw(x64emu_t* emu, void* pathname, void* B, int32_t nopenfd)
 {
-    static iFppi_t f = NULL;
-    if(!f) {
-        library_t* lib = my_lib;
-        if(!lib) return 0;
-        f = (iFppi_t)dlsym(lib->priv.w.lib, "ftw");
-    }
-
-    return f(pathname, findftwFct(B), nopenfd);
+    return ftw64(pathname, findftwFct(B), nopenfd);
 }
-#endif
 EXPORT int32_t my32_nftw(x64emu_t* emu, void* pathname, void* B, int32_t nopenfd, int32_t flags)
 {
     return nftw64(pathname, findnftwFct(B), nopenfd, flags);
@@ -1635,24 +1629,84 @@ EXPORT int32_t my32_epoll_wait(x64emu_t* emu, int32_t epfd, void* events, int32_
         UnalignEpollEvent32(events, _events, ret);
     return ret;
 }
+typedef struct my_glob_32_s
+{
+    ulong_t gl_pathc;
+    ptr_t   gl_pathv;       //char**
+    ulong_t gl_offs;
+    int     gl_flags;
+    ptr_t   gl_closedir;    //void (*gl_closedir) (void *);
+    ptr_t   gl_readir;      //struct dirent *(*gl_readdir) (void *);
+    ptr_t   gl_opendir;     //void *(*gl_opendir) (const char *);
+    ptr_t   gl_lstat;       //int (*gl_lstat) (const char *__restrict, struct stat *__restrict);
+    ptr_t   gl_stat;        //int (*gl_stat) (const char *__restrict, struct stat *__restrict);
+} my_glob_32_t;
+// glob64 is identical, except function are 64bits versions
+
+static void convert_glob_to_32(void* d, void* s, int is64)
+{
+    if(!d || !s) return;
+    glob_t* src = s;
+    my_glob_32_t* dst = d;
+    for(int i=0; i<src->gl_pathc; ++i)
+        ((ptr_t*)src->gl_pathv)[i] = to_ptrv(src->gl_pathv[i]);
+    dst->gl_pathc = to_ulong(src->gl_pathc);
+    dst->gl_pathv = to_ptrv(src->gl_pathv);
+    dst->gl_offs = to_ulong(src->gl_offs);
+    dst->gl_flags = src->gl_flags;
+    // TODO: functions pointers
+}
+static void convert_glob_to_64(void* d, void* s, int is64)
+{
+    if(!d || !s) return;
+    my_glob_32_t* src = s;
+    glob_t* dst = d;
+    dst->gl_pathc = from_ulong(src->gl_pathc);
+    dst->gl_pathv = from_ptrv(src->gl_pathv);
+    dst->gl_offs = from_ulong(src->gl_offs);
+    dst->gl_flags = src->gl_flags;
+    for(int i=dst->gl_pathc-1; i>=0; --i)
+        dst->gl_pathv[i] = from_ptrv(((ptr_t*)dst->gl_pathv)[i]);
+    // TODO: functions pointers
+}
+
 EXPORT int32_t my32_glob(x64emu_t *emu, void* pat, int32_t flags, void* errfnc, void* pglob)
 {
+    glob_t glob_l = {0};
+    if(flags & GLOB_ALTDIRFUNC) printf_log(LOG_NONE, "Error: using unsupport GLOB_ALTDIRFUNC in glob\n");
+    convert_glob_to_64(&glob_l, pglob, 0);
     static iFpipp_t f = NULL;
     if(!f) {
         library_t* lib = my_lib;
         if(!lib) return 0;
         f = (iFpipp_t)dlsym(NULL, "glob");
     }
-
-    return f(pat, flags, findgloberrFct(errfnc), pglob);
+    int ret = f(pat, flags, findgloberrFct(errfnc), pglob);
+    convert_glob_to_32(pglob, &glob_l, 0);
+    return ret;
 }
-#if 0
+EXPORT void my32_globfree(x64emu_t* emu, void* pglob)
+{
+    glob_t glob_l = {0};
+    convert_glob_to_64(&glob_l, pglob, 0);
+    globfree(&glob_l);
+}
 #ifndef ANDROID
 EXPORT int32_t my32_glob64(x64emu_t *emu, void* pat, int32_t flags, void* errfnc, void* pglob)
 {
-    return glob64(pat, flags, findgloberrFct(errfnc), pglob);
+    glob64_t glob_l = {0};
+    if(flags & GLOB_ALTDIRFUNC) printf_log(LOG_NONE, "Error: using unsupport GLOB_ALTDIRFUNC in glob64\n");
+    convert_glob_to_64(&glob_l, pglob, 1);
+    int ret = glob64(pat, flags, findgloberrFct(errfnc), pglob);
+    convert_glob_to_32(pglob, &glob_l, 1);
+    return ret;
 }
-#endif
+EXPORT void my32_globfree64(x64emu_t* emu, void* pglob)
+{
+    glob64_t glob_l = {0};
+    convert_glob_to_64(&glob_l, pglob, 1);
+    globfree64(&glob_l);
+}
 #endif
 EXPORT int my32_scandir(x64emu_t *emu, void* dir, ptr_t* namelist, void* sel, void* comp)
 {

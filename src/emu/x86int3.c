@@ -144,7 +144,7 @@ void x86Int3(x64emu_t* emu, uintptr_t* addr)
                     perr = 2;
                 } else  if(!strcmp(s, "chdir")) {
                     pu32=(uint32_t*)from_ptrv(R_ESP+4);
-                    snprintf(buff, 255, "%04d|%p: Calling %s(\"%s\")", tid, from_ptriv(R_ESP), (char *)s, pu32?((pu32==(uint32_t*)1)?"/1/":(char*)pu32):"/0/");
+                    snprintf(buff, 255, "%04d|%p: Calling %s(\"%s\")", tid, from_ptriv(R_ESP), (char *)s, pu32?((pu32==(uint32_t*)1)?"/1/":(char*)(uintptr_t)(*pu32)):"/0/");
                 } else  if(!strcmp(s, "poll")) {
                     pu32=from_ptrv(*(ptr_t*)from_ptrv(R_ESP+4));
                     char tmp[50];
@@ -403,6 +403,9 @@ void x86Int3(x64emu_t* emu, uintptr_t* addr)
                 } else  if(!strcmp(s, "__errno_location")) {
                     snprintf(buff, 255, "%04d|%p: Calling %s()", tid, from_ptriv(R_ESP), (char *)s);
                     perr = 4;
+                } else if (!strcmp(s, "nanosleep")) {
+                    pu32 = *(uint32_t**)from_ptrv(R_ESP+4);
+                    snprintf(buff, 256, "%04d|%p: Calling %s(%p[%d, %d], %p)", tid, from_ptriv(R_ESP), (char *)s, (void*)from_ptriv(R_ESP+4), pu32?pu32[0]:0, pu32?pu32[1]:0, (void*)from_ptriv(R_ESP+8));
                 } else {
                     snprintf(buff, 255, "%04d|%p: Calling %s (%08X, %08X, %08X...)", tid, from_ptriv(R_ESP), (char *)s, from_ptri(uint32_t, R_ESP+4), from_ptri(uint32_t, R_ESP+8), from_ptri(uint32_t, R_ESP+12));
                 }

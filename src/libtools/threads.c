@@ -30,6 +30,7 @@
 #endif
 #ifdef BOX32
 #include "box32.h"
+#include "threads32.h"
 #endif
 
 //void _pthread_cleanup_push_defer(void* buffer, void* routine, void* arg);	// declare hidden functions
@@ -125,6 +126,9 @@ int GetStackSize(uintptr_t attr, void** stack, size_t* stacksize)
 }
 
 void my_longjmp(x64emu_t* emu, /*struct __jmp_buf_tag __env[1]*/void *p, int32_t __val);
+#ifdef BOX32
+void my32_longjmp(x64emu_t* emu, /*struct __jmp_buf_tag __env[1]*/void *p, int32_t __val);
+#endif
 
 static pthread_key_t thread_key;
 
@@ -149,7 +153,13 @@ static void emuthread_cancel(void* p)
 	// check cancels threads
 	for(int i=et->cancel_size-1; i>=0; --i) {
 		et->emu->flags.quitonlongjmp = 0;
-		my_longjmp(et->emu, ((x64_unwind_buff_t*)et->cancels[i])->__cancel_jmp_buf, 1);
+		et->emu->quit = 0;
+		#ifdef BOX32
+		if(et->is32bits)
+			my32_longjmp(et->emu, ((i386_unwind_buff_t*)et->cancels[i])->__cancel_jmp_buf, 1);
+		else
+		#endif
+			my_longjmp(et->emu, ((x64_unwind_buff_t*)et->cancels[i])->__cancel_jmp_buf, 1);
 		DynaRun(et->emu);	// will return after a __pthread_unwind_next()
 	}
 	#ifdef BOX32
@@ -202,7 +212,7 @@ x64emu_t* thread_get_emu()
 		else
             stack = InternalMmap(NULL, stacksize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_GROWSDOWN, -1, 0);
 		if(stack!=MAP_FAILED)
-			setProtection((uintptr_t)stack, stacksize, PROT_READ|PROT_WRITE);
+			setProtection_stack((uintptr_t)stack, stacksize, PROT_READ|PROT_WRITE);
 		x64emu_t *emu = NewX64Emu(my_context, my_context->exit_bridge, (uintptr_t)stack, stacksize, 1);
 		SetupX64Emu(emu, NULL);
 		thread_set_emu(emu);
@@ -525,7 +535,7 @@ EXPORT int my_pthread_create(x64emu_t *emu, void* t, void* attr, void* start_rou
 	} else {
         stack = InternalMmap(NULL, stacksize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_GROWSDOWN, -1, 0);
         if(stack!=MAP_FAILED)
-	        setProtection((uintptr_t)stack, stacksize, PROT_READ|PROT_WRITE);
+	        setProtection_stack((uintptr_t)stack, stacksize, PROT_READ|PROT_WRITE);
 		own = 1;
 	}
 
@@ -554,7 +564,7 @@ void* my_prepare_thread(x64emu_t *emu, void* f, void* arg, int ssize, void** pet
 	int stacksize = (ssize)?ssize:(2*1024*1024);	//default stack size is 2Mo
     void* stack = InternalMmap(NULL, stacksize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_GROWSDOWN, -1, 0);
     if(stack!=MAP_FAILED)
-		setProtection((uintptr_t)stack, stacksize, PROT_READ|PROT_WRITE);
+		setProtection_stack((uintptr_t)stack, stacksize, PROT_READ|PROT_WRITE);
 	emuthread_t *et = (emuthread_t*)box_calloc(1, sizeof(emuthread_t));
 	x64emu_t *emuthread = NewX64Emu(emu->context, (uintptr_t)f, (uintptr_t)stack, stacksize, 1);
 	SetupX64Emu(emuthread, emu					);

@@ -1956,6 +1956,19 @@ EXPORT int32_t my_open(x64emu_t* emu, void* pathname, int32_t flags, uint32_t mo
         return -1;
     }
     #endif
+
+    if (!strcmp((const char*)pathname, "box64-custom-bashrc-file")) {
+        int tmp = shm_open("box64-custom-bashrc-file", O_RDWR | O_CREAT, S_IRWXU);
+        if (tmp < 0) return open(pathname, flags, mode); // error fallback
+        shm_unlink("box64-custom-bashrc-file");
+        const char* content = "if [ -f ~/.bashrc ]\nthen\n. ~/.bashrc\nfi\nexport PS1=\"(box64) \"$PS1\nexport BOX64_NOBANNER=1\nexport BOX64_LOG=0\n";
+        size_t dummy;
+        dummy = write(tmp, content, strlen(content));
+        (void)dummy;
+        lseek(tmp, 0, SEEK_SET);
+        return tmp;
+    }
+
     int ret = open(pathname, flags, mode);
     return ret;
 }
@@ -3058,7 +3071,11 @@ EXPORT void* my_mmap64(x64emu_t* emu, void *addr, size_t length, int prot, int f
             }
         }
         // hack to capture full size of the mmap done by wine
+#if defined(ANDROID) || defined(WINLATOR_GLIBC)
+        if(emu && (fd==-1) && (flags&(MAP_PRIVATE|MAP_ANON))==(MAP_PRIVATE|MAP_ANON) && !(flags&MAP_NORESERVE)) {
+#else
         if(emu && (fd==-1) && (flags&(MAP_PRIVATE|MAP_ANON))==(MAP_PRIVATE|MAP_ANON)) {
+#endif
             last_mmap_addr[last_mmap_idx] = ret;
             last_mmap_len[last_mmap_idx] = length;
         } else {
@@ -3069,7 +3086,7 @@ EXPORT void* my_mmap64(x64emu_t* emu, void *addr, size_t length, int prot, int f
         if(emu)
             setProtection_mmap((uintptr_t)ret, length, prot);
         else
-            setProtection((uintptr_t)ret, length, prot);
+            setProtection_box((uintptr_t)ret, length, prot);
         if(addr && ret!=addr)
             e = EEXIST;
     }
@@ -3187,6 +3204,35 @@ EXPORT void* my_mallinfo(x64emu_t* emu, void* p)
         *(struct mallinfo*)p=f();
     else
         memset(p, 0, sizeof(struct mallinfo));
+    return p;
+}
+
+struct my_mallinfo2_s {
+    size_t arena;
+    size_t ordblks;
+    size_t smblks;
+    size_t hblks;
+    size_t hblkhd;
+    size_t usmblks;
+    size_t fsmblks;
+    size_t uordblks;
+    size_t fordblks;
+    size_t keepcost;
+};
+
+typedef struct my_mallinfo2_s (*mallinfo2_fnc)(void);
+EXPORT void* my_mallinfo2(x64emu_t* emu, void* p)
+{
+    static mallinfo2_fnc f = NULL;
+    static int inited = 0;
+    if(!inited) {
+        inited = 1;
+        f = (mallinfo2_fnc)dlsym(my_lib->w.lib, "mallinfo2");
+    }
+    if(f)
+        *(struct my_mallinfo2_s*)p = f();
+    else
+        memset(p, 0, sizeof(struct my_mallinfo2_s));
     return p;
 }
 

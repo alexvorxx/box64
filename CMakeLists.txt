@@ -471,24 +471,13 @@ endif()
 set(INTERPRETER
     "${BOX64_ROOT}/src/emu/x64run.c"
     "${BOX64_ROOT}/src/emu/x64run0f.c"
-    "${BOX64_ROOT}/src/emu/x64run64.c"
-    "${BOX64_ROOT}/src/emu/x64run64avx.c"
     "${BOX64_ROOT}/src/emu/x64run66.c"
     "${BOX64_ROOT}/src/emu/x64run660f.c"
     "${BOX64_ROOT}/src/emu/x64run66f20f.c"
     "${BOX64_ROOT}/src/emu/x64run66f30f.c"
-    "${BOX64_ROOT}/src/emu/x64run6664.c"
     "${BOX64_ROOT}/src/emu/x64run66d9.c"
     "${BOX64_ROOT}/src/emu/x64run66dd.c"
     "${BOX64_ROOT}/src/emu/x64run66f0.c"
-    "${BOX64_ROOT}/src/emu/x64run67.c"
-    "${BOX64_ROOT}/src/emu/x64run6764.c"
-    "${BOX64_ROOT}/src/emu/x64run67avx.c"
-    "${BOX64_ROOT}/src/emu/x64run67_32.c"
-    "${BOX64_ROOT}/src/emu/x64run6764_32.c"
-    "${BOX64_ROOT}/src/emu/x64run670f.c"
-    "${BOX64_ROOT}/src/emu/x64run6766.c"
-    "${BOX64_ROOT}/src/emu/x64run67660f.c"
     "${BOX64_ROOT}/src/emu/x64rund8.c"
     "${BOX64_ROOT}/src/emu/x64rund9.c"
     "${BOX64_ROOT}/src/emu/x64runda.c"
@@ -538,6 +527,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedayatanaappindicator3.c"
     "${BOX64_ROOT}/src/wrapped/wrappedbz2.c"
     "${BOX64_ROOT}/src/wrapped/wrappedcap.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedcuda.c"
     "${BOX64_ROOT}/src/wrapped/wrappedcairo.c"
     "${BOX64_ROOT}/src/wrapped/wrappedcairogobject.c"
     "${BOX64_ROOT}/src/wrapped/wrappedcrashhandler.c"
@@ -598,6 +588,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibavcodec58.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibavformat58.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibavutil56.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibblas.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibbsd.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibc.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibcmusl.c"
@@ -617,6 +608,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibharfbuzz.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibibus.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibice.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedliblapack.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibm.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibncurses.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibncurses6.c"
@@ -943,6 +935,7 @@ if(ARM_DYNAREC)
         "${BOX64_ROOT}/src/dynarec/arm64/arm64_printer.c"
         "${BOX64_ROOT}/src/dynarec/arm64/dynarec_arm64_jmpnext.c"
         "${BOX64_ROOT}/src/dynarec/arm64/dynarec_arm64_consts.c"
+        "${BOX64_ROOT}/src/dynarec/arm64/updateflags_arm64.c"
     )
     set(DYNAREC_ASM
         ${DYNAREC_ASM}
@@ -995,6 +988,8 @@ if(ARM_DYNAREC)
     "${BOX64_ROOT}/src/dynarec/arm64/dynarec_arm64_avx_f2_0f38.c"
     "${BOX64_ROOT}/src/dynarec/arm64/dynarec_arm64_avx_f2_0f3a.c"
     "${BOX64_ROOT}/src/dynarec/arm64/dynarec_arm64_avx_f3_0f38.c"
+
+    "${BOX64_ROOT}/src/dynarec/arm64/updateflags_arm64_pass.c"
     )
 endif()
 
@@ -1056,6 +1051,11 @@ if(RV64_DYNAREC)
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_f30f.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_f30f_vector.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_avx.c"
+    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_avx_0f.c"
+    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_avx_66_0f.c"
+    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_avx_66_0f38.c"
+    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_avx_66_0f3a.c"
+    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_avx_f2_0f.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_avx_f3_0f.c"
     )
 endif()
@@ -1217,6 +1217,7 @@ else()
         endif()
     else()
 	    set_property(TARGET ${BOX64} APPEND_STRING PROPERTY LINK_FLAGS "-Wl,--no-as-needed -lc -lm -ldl -lrt -lpthread -lresolv -lutil -Wl,--as-needed -pthread ")
+		target_link_libraries(${BOX64} c m dl pthread resolv util c)
     endif()
 endif()
 if(DYNAREC)

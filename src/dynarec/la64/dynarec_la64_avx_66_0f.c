@@ -384,28 +384,32 @@ uintptr_t dynarec64_AVX_66_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip,
             GETGY_empty_EY_xy(v0, v1, 0);
             u8 = sse_setround(dyn, ninst, x6, x4);
             if(vex.l){
-                d1 = fpu_get_scratch(dyn);
-                XVFTINT_W_S(d1, v1);
                 if (!BOX64ENV(dynarec_fastround)) {
+                    d1 = fpu_get_scratch(dyn);
                     q0 = fpu_get_scratch(dyn);
                     q1 = fpu_get_scratch(dyn); // mask
                     d0 = fpu_get_scratch(dyn);
+                    XVFTINT_W_S(d1, v1);
                     XVLDI(q0, 0b1001110000000); // broadcast 0x80000000 to all
                     XVLDI(d0, (0b10011 << 8) | 0x4f);
                     XVFCMP_S(q1, d0, v1, cULE); // get Nan,+overflow mark
                     XVBITSEL_V(v0, d1, q0, q1);
+                } else {
+                    XVFTINT_W_S(v0, v1);
                 }
             } else {
-                d1 = fpu_get_scratch(dyn);
-                VFTINT_W_S(d1, v1);
                 if (!BOX64ENV(dynarec_fastround)) {
+                    d1 = fpu_get_scratch(dyn);
                     q0 = fpu_get_scratch(dyn);
                     q1 = fpu_get_scratch(dyn); // mask
                     d0 = fpu_get_scratch(dyn);
+                    VFTINT_W_S(d1, v1);
                     VLDI(q0, 0b1001110000000); // broadcast 0x80000000 to all
                     VLDI(d0, (0b10011 << 8) | 0x4f);
                     VFCMP_S(q1, d0, v1, cULE); // get Nan,+overflow mark
                     VBITSEL_V(v0, d1, q0, q1);
+                } else {
+                    VFTINT_W_S(v0, v1);
                 }
             }
             x87_restoreround(dyn, ninst, u8);
@@ -532,7 +536,7 @@ uintptr_t dynarec64_AVX_66_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip,
             VLDIxy(q0, 0b0010011111111); // broadcast 0xff as 16-bit elements to all lanes
             if (v1 == v2) {
                 VMAXIxy(H, d0, v1, 0);
-                VMINxy(H, d0, v1, q0);
+                VMINxy(H, d0, d0, q0);
                 VPICKEVxy(B, v0, d0, d0);
             } else {
                 VMAXIxy(H, d0, v1, 0);
@@ -1266,7 +1270,7 @@ uintptr_t dynarec64_AVX_66_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip,
             VAND_Vxy(v0, v0, d0);
             break;
         case 0xF4:
-            INST_NAME("VPMULLUDQ Gx, Ex");
+            INST_NAME("VPMULUDQ Gx, Vx, Ex");
             nextop = F8;
             GETGY_empty_VYEY_xy(v0, v1, v2, 0);
             VMULWEVxy(D_WU, v0, v1, v2);

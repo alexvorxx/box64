@@ -12,6 +12,7 @@
 
 #include "os.h"
 #include "env.h"
+#include "custommem.h"
 #include "khash.h"
 #include "debug.h"
 #include "fileutils.h"
@@ -294,7 +295,7 @@ static void pushNewEntry(const char* name, box64env_t* env, int gen)
     k = kh_get(box64env_entry, khp, name);
     if (k == kh_end(khp)) {
         int ret;
-        k = kh_put(box64env_entry, khp, strdup(name), &ret);
+        k = kh_put(box64env_entry, khp, box_strdup(name), &ret);
     } else {
         freeEnv(&kh_value(khp, k));
     }
@@ -475,11 +476,6 @@ void InitializeEnvFiles()
     }
 }
 
-static char old_entryname[256] = "";
-const char* GetLastApplyEntryName()
-{
-    return old_entryname;
-}
 static void internalApplyEnvFileEntry(const char* entryname, const box64env_t* env)
 {
 #define INTEGER(NAME, name, default, min, max, wine) \
@@ -520,6 +516,7 @@ static void internalApplyEnvFileEntry(const char* entryname, const box64env_t* e
 #undef STRING
 }
 
+static char old_entryname[256] = "";
 void ApplyEnvFileEntry(const char* entryname)
 {
     if (!entryname || !box64env_entries) return;
@@ -807,15 +804,15 @@ done:
 #define HEADER_SIGN "DynaCache"
 #define SET_VERSION(MAJ, MIN, REV) (((MAJ)<<24)|((MIN)<<16)|(REV))
 #ifdef ARM64
-#define ARCH_VERSION SET_VERSION(0, 0, 3)
+#define ARCH_VERSION SET_VERSION(0, 0, 6)
 #elif defined(RV64)
-#define ARCH_VERSION SET_VERSION(0, 0, 2)
+#define ARCH_VERSION SET_VERSION(0, 0, 3)
 #elif defined(LA64)
-#define ARCH_VERSION SET_VERSION(0, 0, 2)
+#define ARCH_VERSION SET_VERSION(0, 0, 3)
 #else
 #error meh!
 #endif
-#define DYNAREC_VERSION SET_VERSION(0, 0, 3)
+#define DYNAREC_VERSION SET_VERSION(0, 0, 4)
 
 typedef struct DynaCacheHeader_s {
     char sign[10];  //"DynaCache\0"

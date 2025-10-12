@@ -172,6 +172,11 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             break;
         case 0x18:
         case 0x19:
+        case 0x1A:
+        case 0x1B:
+        case 0x1C:
+        case 0x1D:
+        case 0x1E:
         case 0x1F:
             INST_NAME("NOP (multibyte)");
             nextop = F8;
@@ -797,7 +802,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     }
                     sse_forget_reg(dyn, ninst, gd);
                     MOV32w(x1, gd);
-                    CALL(const_native_aesimc, -1);
+                    CALL(const_native_aesimc, -1, x1, 0);
                     break;
                 case 0xDC:
                     INST_NAME("AESENC Gx, Ex"); // AES-NI
@@ -811,7 +816,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         d0 = -1;
                     sse_forget_reg(dyn, ninst, gd);
                     MOV32w(x1, gd);
-                    CALL(const_native_aese, -1);
+                    CALL(const_native_aese, -1, x1, 0);
                     GETGX(q0, 1);
                     VXOR_V(q0, q0, (d0 != -1) ? d0 : q1);
                     break;
@@ -827,7 +832,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         d0 = -1;
                     sse_forget_reg(dyn, ninst, gd);
                     MOV32w(x1, gd);
-                    CALL(const_native_aeselast, -1);
+                    CALL(const_native_aeselast, -1, x1, 0);
                     GETGX(q0, 1);
                     VXOR_V(q0, q0, (d0 != -1) ? d0 : q1);
                     break;
@@ -843,7 +848,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         d0 = -1;
                     sse_forget_reg(dyn, ninst, gd);
                     MOV32w(x1, gd);
-                    CALL(const_native_aesd, -1);
+                    CALL(const_native_aesd, -1, x1, 0);
                     GETGX(q0, 1);
                     VXOR_V(q0, q0, (d0 != -1) ? d0 : q1);
                     break;
@@ -859,7 +864,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         d0 = -1;
                     sse_forget_reg(dyn, ninst, gd);
                     MOV32w(x1, gd);
-                    CALL(const_native_aesdlast, -1);
+                    CALL(const_native_aesdlast, -1, x1, 0);
                     GETGX(q0, 1);
                     VXOR_V(q0, q0, (d0 != -1) ? d0 : q1);
                     break;
@@ -1143,7 +1148,15 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     INST_NAME("PINSRB Gx, ED, Ib");
                     nextop = F8;
                     GETGX(q0, 1);
-                    GETED(1);
+                    if (MODREG) {
+                        ed = TO_NAT((nextop & 7) + (rex.b << 3));
+                        wback = 0;
+                    } else {
+                        SMREAD();
+                        addr = geted(dyn, addr, ninst, nextop, &wback, x2, x1, &fixedaddress, rex, NULL, 1, 1);
+                        LD_B(x1, wback, fixedaddress);
+                        ed = x1;
+                    }
                     u8 = F8;
                     VINSGR2VR_B(q0, ed, (u8 & 0xf));
                     break;
@@ -1256,7 +1269,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     }
                     u8 = F8;
                     MOV32w(x4, u8);
-                    CALL(const_native_pclmul, -1);
+                    CALL4(const_native_pclmul, -1, x1, x2, x3, x4);
                     break;
                 case 0x61:
                     INST_NAME("PCMPESTRI Gx, Ex, Ib");
@@ -1272,15 +1285,15 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         if (ed > 7)
                             sse_reflect_reg(dyn, ninst, ed);
                         ADDI_D(x1, xEmu, offsetof(x64emu_t, xmm[ed]));
+                        ed = x1;
                     } else {
-                        addr = geted(dyn, addr, ninst, nextop, &ed, x1, x5, &fixedaddress, rex, NULL, 0, 1);
-                        if (ed != x1) MV(x1, ed);
+                        addr = geted(dyn, addr, ninst, nextop, &ed, x1, x2, &fixedaddress, rex, NULL, 0, 1);
                     }
                     MV(x2, xRDX);
                     MV(x4, xRAX);
                     u8 = F8;
                     MOV32w(x5, u8);
-                    CALL(const_sse42_compare_string_explicit_len, x1);
+                    CALL6(const_sse42_compare_string_explicit_len, x1, ed, x2, x3, x4, x5, 0);
                     ZEROUP(x1);
                     BNEZ_MARK(x1);
                     MOV32w(xRCX, (u8 & 1) ? 8 : 16);
@@ -1305,13 +1318,13 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         ed = (nextop & 7) + (rex.b << 3);
                         if (ed > 7) sse_reflect_reg(dyn, ninst, ed);
                         ADDI_D(x1, xEmu, offsetof(x64emu_t, xmm[ed]));
+                        ed = x1;
                     } else {
                         addr = geted(dyn, addr, ninst, nextop, &ed, x1, x2, &fixedaddress, rex, NULL, 0, 1);
-                        if (ed != x1) MV(x1, ed);
                     }
                     u8 = F8;
                     MOV32w(x3, u8);
-                    CALL(const_sse42_compare_string_implicit_len, x1);
+                    CALL4(const_sse42_compare_string_implicit_len, x1, ed, x2, x3, 0);
                     BNEZ_MARK(x1);
                     MOV32w(xRCX, (u8 & 1) ? 8 : 16);
                     B_NEXT_nocond;
@@ -1344,7 +1357,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     }
                     u8 = F8;
                     MOV32w(x4, u8);
-                    CALL(const_native_aeskeygenassist, -1);
+                    CALL4(const_native_aeskeygenassist, -1, x1, x2, x3, x4);
                     break;
                 default:
                     DEFAULT;

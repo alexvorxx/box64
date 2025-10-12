@@ -400,8 +400,6 @@ uint32_t RunFunctionHandler32(int* exit, int dynarec, i386_ucontext_t* sigcontex
     int old_cs = R_CS;
     R_CS = 0x23;
 
-    emu->eflags.x64 &= ~(1<<F_TF); // this one needs to cleared
-
     if(dynarec)
         DynaCall(emu, fnc);
     else
@@ -467,7 +465,7 @@ void convert_siginfo_to_32(void* d, void* s, int sig)
 
     memcpy(dst, src, sizeof(my_siginfo32_t));
     if(sig==X64_SIGILL || sig==X64_SIGFPE || sig==X64_SIGSEGV || sig==X64_SIGBUS)
-        dst->_sifields._sigfault.__si_addr = to_ptrv(src->si_addr);
+        dst->_sifields._sigfault.__si_addr = to_ptr(((uintptr_t)src->si_addr)&0xffffffff);  // in case addr is not a 32bits value...
     if(sig==X64_SIGCHLD) {
         dst->_sifields._sigchld.__si_pid = src->si_pid;
         dst->_sifields._sigchld.__si_uid = src->si_uid;
@@ -494,7 +492,7 @@ void my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigi
     // get that actual ESP first!
     if(!emu)
         emu = thread_get_emu();
-    uintptr_t frame = R_RSP;
+    uintptr_t frame = R_ESP;
 #if defined(DYNAREC)
     dynablock_t* db = (dynablock_t*)cur_db;//FindDynablockFromNativeAddress(pc);
     ucontext_t *p = (ucontext_t *)ucntx;
@@ -548,6 +546,7 @@ void my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigi
     sigcontext->uc_mcontext.gregs[I386_EIP] = R_EIP;//emu->old_ip;   // old_ip should be more accurate as the "current" IP, but it's not always up-to-date
     // flags
     sigcontext->uc_mcontext.gregs[I386_EFL] = emu->eflags.x64;
+    CLEAR_FLAG(F_TF);   // now clear TF flags inside the signal handler
     // get segments
     sigcontext->uc_mcontext.gregs[I386_CS] = R_CS;
     sigcontext->uc_mcontext.gregs[I386_DS] = R_DS;
@@ -594,6 +593,7 @@ void my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigi
     uint32_t mmapped = memExist((uintptr_t)info->si_addr);
     uint32_t sysmapped = (info->si_addr<(void*)box64_pagesize)?1:mmapped;
     uint32_t real_prot = 0;
+    int skip = 1;   // in case sigjump is used to restore exectuion, 1 will switch to interpreter, 3 will switch to dynarec
     if(prot&PROT_READ) real_prot|=PROT_READ;
     if(prot&PROT_WRITE) real_prot|=PROT_WRITE;
     if(prot&PROT_EXEC) real_prot|=PROT_WRITE;
@@ -639,7 +639,7 @@ void my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigi
             info2->si_code = 128;
             info2->_sifields._sigfault.__si_addr = 0;
             sigcontext->uc_mcontext.gregs[I386_TRAPNO] = 13;
-
+            skip = 3;   // can resume in dynarec
             // some special cases...
             if(int_n==3) {
                 info2->si_signo = X64_SIGTRAP;
@@ -659,15 +659,18 @@ void my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigi
             sigcontext->uc_mcontext.gregs[I386_ERR] = 0;
             sigcontext->uc_mcontext.gregs[I386_TRAPNO] = 0;
             info2->si_signo = X64_SIGFPE;
+            skip = 3; // can resume in dynarec
         }
     } else if(sig==X64_SIGFPE) {
         if (info->si_code == FPE_INTOVF)
             sigcontext->uc_mcontext.gregs[I386_TRAPNO] = 4;
         else
             sigcontext->uc_mcontext.gregs[I386_TRAPNO] = 19;
+        skip = 3;
     } else if(sig==X64_SIGILL) {
         info2->si_code = 2;
         sigcontext->uc_mcontext.gregs[I386_TRAPNO] = 6;
+        info2->_sifields._sigfault.__si_addr = sigcontext->uc_mcontext.gregs[I386_EIP];
     } else if(sig==X64_SIGTRAP) {
         if(info->si_code==1) {  //single step
             info2->si_code = 2;
@@ -676,6 +679,8 @@ void my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigi
             info2->si_code = 128;
         sigcontext->uc_mcontext.gregs[I386_TRAPNO] = info->si_code;
         sigcontext->uc_mcontext.gregs[I386_ERR] = 0;
+    } else {
+        skip = 3;   // other signal can resume in interpretor
     }
     //TODO: SIGABRT generate what?
     printf_log((sig==10)?LOG_DEBUG:log_minimum, "Signal32 %d: si_addr=%p, TRAPNO=%d, ERR=%d, RIP=%p, prot:%x, mmaped:%d\n", sig, from_ptrv(info2->_sifields._sigfault.__si_addr), sigcontext->uc_mcontext.gregs[I386_TRAPNO], sigcontext->uc_mcontext.gregs[I386_ERR],from_ptrv(sigcontext->uc_mcontext.gregs[I386_EIP]), prot, mmapped);
@@ -727,6 +732,8 @@ void my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigi
             GO(SP);
             GO(BX);
             #undef GO
+            if((skip==1) && (emu->ip.q[0]!=sigcontext->uc_mcontext.gregs[I386_EIP]))
+                skip = 3;   // if it jumps elsewhere, it can resume with dynarec...
             emu->ip.q[0]=sigcontext->uc_mcontext.gregs[I386_EIP];
             // flags
             emu->eflags.x64=sigcontext->uc_mcontext.gregs[I386_EFL];
@@ -741,7 +748,7 @@ void my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigi
             #undef GO
             for(int i=0; i<6; ++i)
                 emu->segs_serial[i] = 0;
-            printf_log((sig==10)?LOG_DEBUG:log_minimum, "Context has been changed in Sigactionhanlder, doing siglongjmp to resume emu at %p, RSP=%p\n", (void*)R_RIP, (void*)R_RSP);
+            printf_log((sig==10)?LOG_DEBUG:log_minimum, "Context has been changed in Sigactionhanlder, doing siglongjmp to resume emu at %p, RSP=%p (resume with %s)\n", (void*)R_RIP, (void*)R_RSP, (skip==3)?"Dynarec":"Interp");
             if(old_code)
                 *old_code = -1;    // re-init the value to allow another segfault at the same place
             //relockMutex(Locks);   // do not relock mutex, because of the siglongjmp, whatever was running is canceled
@@ -753,9 +760,9 @@ void my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigi
             emu->xSPSave = emu->old_savedsp;
             #endif
             #ifdef ANDROID
-            siglongjmp(*emu->jmpbuf, 1);
+            siglongjmp(*emu->jmpbuf, skip);
             #else
-            siglongjmp(emu->jmpbuf, 1);
+            siglongjmp(emu->jmpbuf, skip);
             #endif
         }
         printf_log(LOG_INFO, "Warning, context has been changed in Sigactionhanlder%s\n", (sigcontext->uc_mcontext.gregs[I386_EIP]!=sigcontext_copy.uc_mcontext.gregs[I386_EIP])?" (EIP changed)":"");
