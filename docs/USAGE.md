@@ -210,6 +210,14 @@ Forbid dynablock creation in the address range specified, helpful for debugging 
 
  * 0xXXXXXXXX-0xYYYYYYYY: Define the range where dynablock creation is forbidden (inclusive-exclusive). 
 
+### BOX64_DYNAREC_NOARCH
+
+Remove Architecture metatdata from Dynarec blocks (used on signal). Availble in WowBox64.
+
+ * 0: Generate all architecture metadata for each blocks, including x87/mmx/SSE/AVX regs tracking. Wil use some more memory. [Default]
+ * 1: Generate only essential metadata for each blocks (flags, alignments), saving some memory, but some encrypted software might fails. 
+ * 2: Do not generate metadata for blocks. Saving a bit more memory but might fails on signal handling. 
+
 ### BOX64_RDTSC_1GHZ
 
 Use hardware counter for rdtsc if available.
@@ -262,6 +270,13 @@ Add --no-sandbox argument to the guest program.
  * 1: Add --no-sandbox argument to the guest program. 
 
 ## Compatibility
+
+### BOX64_AES
+
+Expose AES capabilities. Availble in WowBox64.
+
+ * 0: Do not expose AES capabilities. 
+ * 1: Expose AES capabilities. [Default]
 
 ### BOX64_ARCH
 
@@ -401,7 +416,7 @@ Path to look for x86_64 binaries.
 
 ### BOX64_PCLMULQDQ
 
-Expose PCLMULQDQ capabilities.
+Expose PCLMULQDQ capabilities. Availble in WowBox64.
 
  * 0: Do not expose PCLMULQDQ capabilities. 
  * 1: Expose PCLMULQDQ capabilities. [Default]
@@ -428,7 +443,7 @@ Use a workaround for SDL_GetJoystickGUIDInfo function for wrapped SDL2.
 
 ### BOX64_SHAEXT
 
-Expose SHAEXT (a.k.a. SHA_NI) capabilities.
+Expose SHAEXT (a.k.a. SHA_NI) capabilities. Availble in WowBox64.
 
  * 0: Do not expose SHAEXT capabilities. 
  * 1: Expose SHAEXT capabilities. [Default]
@@ -601,10 +616,10 @@ Disable the Box64 banner. Availble in WowBox64.
 
 ### BOX64_NODYNAREC_DELAY
 
-Remove NoDynarec range after a delay Availble in WowBox64.
+Remove NoDynarec range after a delay. Availble in WowBox64.
 
- * 0: Do not remove NoDynarec range [Default]
- * 1: Remove the NoDynarec range once 2 threads have been created 
+ * 0: Do not remove NoDynarec range. [Default]
+ * 1: Remove the NoDynarec range once 2 threads have been created. 
 
 ### BOX64_NOSIGSEGV
 

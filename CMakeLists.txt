@@ -38,6 +38,7 @@ option(SAVE_MEM "Set to ON to build dynarec with some slower memory saving optim
 option(NOLOADADDR "Set to ON to avoid fixing the load address of Box64" OFF)
 option(NOGIT "Set to ON if not building from a git clone repo (like when building from a zip download from github)" ${NOGIT})
 option(BAD_SIGNAL "Set to ON to activate the workaround for incoherent si_info on SIGSEGV" ${BAD_SIGNAL})
+option(BAD_PKILL "Set to ON to activate the workaround for incoherent pthread_kill" ${BAD_SIGNAL})
 option(SW64 "Set ON if targeting an SW64 based device" ${SW64})
 option(CI "Set to ON if running in CI" ${CI})
 option(WITH_MOLD "Set to ON to use with mold" ${WITH_MOLD})
@@ -66,6 +67,7 @@ if(LARCH64)
     set(ARM_DYNAREC OFF CACHE BOOL "")
     set(RV64_DYNAREC OFF CACHE BOOL "")
     set(LARCH64_DYNAREC ON CACHE BOOL "")
+    set(BAD_PKILL ON CACHE BOOL "")
     if(LARCH64_ABI_1)
         message(STATUS "Build for Loongarch64 ABI 1.0 system")
         add_definitions(-DLA64_ABI_1)
@@ -224,6 +226,7 @@ elseif(M1)
     set(CFLAGS -pipe -march=armv8.5-a+simd+crypto)
 elseif(LARCH64)
     add_definitions(-DLA64)
+    add_definitions(-DBAD_PKILL)
     set(CFLAGS -pipe -march=loongarch64)
     set(ASMFLAGS  -pipe -march=loongarch64)
 elseif(RV64)
@@ -259,6 +262,9 @@ if(WINLATOR_GLIBC)
 endif()
 if(BAD_SIGNAL)
     add_definitions(-DBAD_SIGNAL)
+endif()
+if(BAD_PKILL)
+    add_definitions(-DBAD_PKILL)
 endif()
 if(SAVE_MEM)
     add_definitions(-DSAVE_MEM)
@@ -1094,6 +1100,7 @@ if(LARCH64_DYNAREC)
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_66f20f.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_66f30f.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_67.c"
+    "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_6764.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_f0.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_f20f.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_f30f.c"
