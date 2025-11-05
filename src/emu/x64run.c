@@ -783,6 +783,8 @@ x64emurun:
                 goto fini;
             }
             emu->segs[tmp8u] = ED->word[0];
+            if(((tmp8u==_FS) || (tmp8u==_GS)) && emu->segs[tmp8u])
+                GetSegmentBaseEmu(emu, tmp8u);  // refresh segs_offs
             if(tmp8u==_SS && tf)   // disable trace when SS is accessed
                 no_tf = 1;
             break;
@@ -2070,6 +2072,7 @@ x64emurun:
             } else
             #endif
             {
+                CHECK_FLAGS(emu);
                 printf_log(LOG_DEBUG, "HLT encountered in interpreter, exiting\n");
                 emu->quit = 1;
                 goto fini;

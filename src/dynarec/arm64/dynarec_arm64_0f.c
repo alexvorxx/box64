@@ -20,6 +20,9 @@
 #include "dynarec_arm64_private.h"
 #include "dynarec_arm64_functions.h"
 #include "../dynarec_helper.h"
+#ifndef __WIN32
+#include "elfloader.h"
+#endif
 
 uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog)
 {
@@ -165,7 +168,14 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             SMEND();
             GETIP(addr);
             STORE_XEMU_CALL(xRIP);
-            CALL_S(const_x64syscall, -1);
+            #ifndef __WIN32
+            if(!box64_wine || FindElfAddress(my_context, ip)) {
+                CALL_S(const_x64syscall_linux, -1);
+            } else
+            #endif
+            {
+                CALL_S(const_x64syscall, -1);
+            }
             LOAD_XEMU_CALL(xRIP);
             TABLE64(x3, addr); // expected return address
             SUBx_REG(x3, x3, xRIP);
@@ -1774,6 +1784,9 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             INST_NAME("POP FS");
             POP1z(x2);
             STRH_U12(x2, xEmu, offsetof(x64emu_t, segs[_FS]));
+            CBZw_NEXT(x2);
+            MOV32w(x1, _FS);
+            CALL(const_getsegmentbase, -1);
             break;
         case 0xA2:
             INST_NAME("CPUID");
@@ -1857,6 +1870,9 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             INST_NAME("POP GS");
             POP1z(x2);
             STRH_U12(x2, xEmu, offsetof(x64emu_t, segs[_GS]));
+            CBZw_NEXT(x2);
+            MOV32w(x1, _GS);
+            CALL(const_getsegmentbase, -1);
             break;
 
         case 0xAB:

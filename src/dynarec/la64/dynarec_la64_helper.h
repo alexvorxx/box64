@@ -682,7 +682,7 @@
 #define CALL6(F, ret, arg1, arg2, arg3, arg4, arg5, arg6) call_c(dyn, ninst, F, x6, ret, 1, 0, arg1, arg2, arg3, arg4, arg5, arg6)
 // CALL_ will use x6 for the call address. Return value can be put in ret (unless ret is -1)
 // R0 will not be pushed/popd if ret is -2
-#define CALL_(F, ret, reg, arg1, arg2) call_c(dyn, ninst, F, x6, ret, 1, reg, arg1, arg2, 0, 0, 0, 0)
+#define CALL_(F, ret, reg, arg1, arg2)              call_c(dyn, ninst, F, x6, ret, 1, reg, arg1, arg2, 0, 0, 0, 0)
 #define CALL4_(F, ret, reg, arg1, arg2, arg3, arg4) call_c(dyn, ninst, F, x6, ret, 1, reg, arg1, arg2, arg3, arg4, 0, 0)
 // CALL_S will use x6 for the call address. Return value can be put in ret (unless ret is -1)
 // R0 will not be pushed/popd if ret is -2. Flags are not save/restored
@@ -1297,6 +1297,10 @@
 #define emit_shrd32         STEPNAME(emit_shrd32)
 #define emit_ror32          STEPNAME(emit_ror32)
 #define emit_ror32c         STEPNAME(emit_ror32c)
+#define emit_rol8          STEPNAME(emit_rol8)
+#define emit_rol8c         STEPNAME(emit_rol8c)
+#define emit_rol16          STEPNAME(emit_rol16)
+#define emit_rol16c         STEPNAME(emit_rol16c)
 #define emit_rol32          STEPNAME(emit_rol32)
 #define emit_rol32c         STEPNAME(emit_rol32c)
 
@@ -1441,6 +1445,10 @@ void emit_shld32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int 
 void emit_shrd32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s5, int s3, int s4, int s6);
 void emit_ror32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
 void emit_ror32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
+void emit_rol8(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
+void emit_rol8c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4, int s5);
+void emit_rol16(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
+void emit_rol16c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4, int s5);
 void emit_rol32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
 void emit_rol32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
 
@@ -1805,5 +1813,76 @@ uintptr_t dynarec64_DF(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
     } while (0)
 
 #define PURGE_YMM()
+
+#define ALIGNED_ATOMICxw ((fixedaddress && !(fixedaddress & (((1 << (2 + rex.w)) - 1)))) || BOX64ENV(dynarec_aligned_atomics))
+#define ALIGNED_ATOMICH  ((fixedaddress && !(fixedaddress & 1)) || BOX64ENV(dynarec_aligned_atomics))
+
+
+// lock op related macros
+/*
+  LOCK_3264_CROSS_8BYTE cross 8byte, lock lower part 8byte.
+  use ll.d lock lower 8byte. ld.d load ed to likely emulate atomic 4byte/8byte operation
+    op = atomic function
+    x1 = original ed
+    x2 = wback ed addr
+    x4 = result
+    x5 = 8 byte lower block for sc
+    x6 = aligned addr
+*/
+#define LOCK_3264_CROSS_8BYTE(op, x1, wback, x4, x5, x6) \
+    MV(x6, wback);                                       \
+    BSTRINS_D(x6, xZR, 2, 0);                            \
+    MARKLOCK2;                                           \
+    LL_D(x5, x6, 0);                                     \
+    DBAR(0b00101);                                       \
+    LDxw(x1, wback, 0);                                  \
+    op;                                                  \
+    SC_D(x5, x6, 0);                                     \
+    BEQZ_MARKLOCK2(x5);                                  \
+    SDxw(x4, wback, 0);
+
+/*
+    LOCK_3264_IN_8BYTE unaligned but in 8 bytes.
+    use ll.d/sc.d to atomic operation. use amcas.db.d when possible
+    x1 = original ed
+    x2 = wback ed addr / aligned ed addr
+    x3 = offset
+    x4 = result
+    x5 = 8 byte block
+    x6 = mask, amcas orignal val
+    x7 = imm if inst use imm op
+*/
+#define LOCK_32_IN_8BYTE(op, x1, wback, x3, x4, x5, x6, x7) \
+    if (wback != x2) {                                      \
+        MV(x2, wback);                                      \
+        wback = x2;                                         \
+    }                                                       \
+    BSTRINS_D(wback, xZR, 2, 0);                            \
+    SLLI_W(x3, x3, 3);                                      \
+    if (cpuext.lamcas) {                                    \
+        LD_D(x5, wback, 0);                                 \
+        MARKLOCK;                                           \
+    } else {                                                \
+        MARKLOCK;                                           \
+        LL_D(x5, wback, 0);                                 \
+    }                                                       \
+    SRL_D(x1, x5, x3);                                      \
+    BSTRPICK_D(x1, x1, 31, 0);                              \
+    op;                                                     \
+    BSTRPICK_D(x4, x4, 31, 0);                              \
+    SLL_D(x4, x4, x3);                                      \
+    ADDI_D(x6, xZR, -1);                                    \
+    BSTRINS_D(x6, xZR, 63, 32);                             \
+    SLL_D(x6, x6, x3);                                      \
+    ANDN(x6, x5, x6);                                       \
+    OR(x4, x6, x4);                                         \
+    if (cpuext.lamcas) {                                    \
+        MV(x6, x5);                                         \
+        AMCAS_DB_D(x5, x4, wback);                          \
+        BNE_MARKLOCK(x5, x6);                               \
+    } else {                                                \
+        SC_D(x4, wback, 0);                                 \
+        BEQZ_MARKLOCK(x4);                                  \
+    }
 
 #endif //__DYNAREC_LA64_HELPER_H__

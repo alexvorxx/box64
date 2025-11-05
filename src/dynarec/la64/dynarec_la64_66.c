@@ -115,7 +115,7 @@ uintptr_t dynarec64_66(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             switch (rep) {
                 case 0: addr = dynarec64_660F(dyn, addr, ip, ninst, rex, ok, need_epilog); break;
                 case 1: addr = dynarec64_66F20F(dyn, addr, ip, ninst, rex, ok, need_epilog); break;
-                case 2: addr = dynarec64_66F30F(dyn, addr, ip, ninst, rex, ok, need_epilog); break;                
+                case 2: addr = dynarec64_66F30F(dyn, addr, ip, ninst, rex, ok, need_epilog); break;
                 default:
                     DEFAULT;
             }
@@ -511,6 +511,12 @@ uintptr_t dynarec64_66(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 ed = x1;
             }
             ST_H(ed, xEmu, offsetof(x64emu_t, segs[u8]));
+            if ((u8 == _FS) || (u8 == _GS)) {
+                // refresh offset if needed
+                CBZ_NEXT(ed);
+                MOV32w(x1, u8);
+                CALL(const_getsegmentbase, -1, x1, x2);
+            }
             break;
         case 0x90:
         case 0x91:
@@ -811,12 +817,10 @@ uintptr_t dynarec64_66(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             switch ((nextop >> 3) & 7) {
                 case 0:
                     INST_NAME("ROL Ew, Ib");
-                    MESSAGE(LOG_DUMP, "Need Optimization\n");
-                    SETFLAGS(X_OF | X_CF, SF_SET_DF, NAT_FLAGS_NOFUSION);
+                    SETFLAGS(X_OF | X_CF, SF_SUBSET_PENDING, NAT_FLAGS_FUSION);
                     GETEW(x1, 1);
                     u8 = F8;
-                    MOV32w(x2, u8);
-                    CALL_(const_rol16, x1, x3, x1, x2);
+                    emit_rol16c(dyn, ninst, rex, ed, u8, x4, x5, x6);
                     EWBACK;
                     break;
                 case 1:
@@ -896,19 +900,24 @@ uintptr_t dynarec64_66(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 case 0:
                     if (opcode == 0xD1) {
                         INST_NAME("ROL Ew, 1");
-                        MOV32w(x2, 1);
+                        SETFLAGS(X_OF | X_CF, SF_SUBSET_PENDING, NAT_FLAGS_FUSION);
+                        if (BOX64DRENV(dynarec_safeflags) > 1) MAYSETFLAGS();
+                        GETEW(x1, 1);
+                        emit_rol16c(dyn, ninst, rex, ed, 1, x4, x5, x6);
+                        EWBACK;
+                        break;
                     } else {
                         INST_NAME("ROL Ew, CL");
                         ANDI(x2, xRCX, 0x1f);
                         BEQ_NEXT(x2, xZR);
+                        SETFLAGS(X_OF | X_CF, SF_SUBSET_PENDING, NAT_FLAGS_FUSION);
+                        if (BOX64DRENV(dynarec_safeflags) > 1) MAYSETFLAGS();
+                        GETEW(x1, 1);
+                        emit_rol16(dyn, ninst, rex, ed, x2, x4, x5, x6);
+                        EWBACK;
+                        break;
                     }
-                    MESSAGE(LOG_DUMP, "Need Optimization\n");
-                    SETFLAGS(X_OF | X_CF, SF_SET_DF, NAT_FLAGS_NOFUSION);
-                    if (BOX64DRENV(dynarec_safeflags) > 1) MAYSETFLAGS();
-                    GETEW(x1, 1);
-                    CALL_(const_rol16, x1, x3, x1, x2);
-                    EWBACK;
-                    break;
+
                 case 5:
                     if (opcode == 0xD1) {
                         INST_NAME("SHR Ew, 1");
@@ -1000,7 +1009,7 @@ uintptr_t dynarec64_66(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     SLLI_D(x7, xRDX, 48);
                     SRLI_D(x7, x7, 32);
                     OR(x2, x2, x7);
-                    if(BOX64ENV(dynarec_div0)) {
+                    if (BOX64ENV(dynarec_div0)) {
                         BNE_MARK3(ed, xZR);
                         GETIP_(ip, x6);
                         STORE_XEMU_CALL();
