@@ -52,6 +52,33 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
     GETREX();
 
     switch (opcode) {
+        case 0x00:
+            INST_NAME("LOCK ADD Eb, Gb");
+            SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
+            nextop = F8;
+            GETGD;
+            if (MODREG) {
+                ed = TO_NAT((nextop & 7) + (rex.b << 3));
+                emit_add8(dyn, ninst, ed, gd, x3, x4);
+            } else {
+                addr = geted(dyn, addr, ninst, nextop, &wback, x2, x1, &fixedaddress, rex, LOCK_LOCK, 0, 0);
+                if (cpuext.lam_bh) {
+                    AMADD_DB_B(x1, gd, wback);
+                } else {
+                    ANDI(x3, wback, 0b11);
+                    BNEZ_MARK(x3);
+                    LOCK_8_ALIGNED_4BYTE(ADD_W(x4, x1, gd), x1, wback, x3, x4, x5, x6);
+                    B_MARK3_nocond;
+                    MARK;
+                    LOCK_8_IN_4BYTE(ADD_W(x4, x1, gd), x1, wback, x3, x4, x5, x6, x7);
+                    MARK3;
+                }
+                IFXORNAT (X_ALL | X_PEND) {
+                    emit_add8(dyn, ninst, x1, gd, x3, x4);
+                }
+            }
+            SMDMB();
+            break;
         case 0x01:
             INST_NAME("LOCK ADD Ed, Gd");
             SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
@@ -82,7 +109,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         ANDI(x3, wback, 0b111);
                         SLTI(x4, x3, 4);
                         BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                        LOCK_32_IN_8BYTE(ADD_W(x4, x1, gd), x1, wback, x3, x4, x5, x6, x7);
+                        LOCK_32_IN_8BYTE(ADD_W(x4, x1, gd), x1, wback, x3, x4, x5, x6);
                         B_MARK3_nocond;
                     }
                 }
@@ -126,7 +153,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         ANDI(x3, wback, 0b111);
                         SLTI(x4, x3, 4);
                         BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                        LOCK_32_IN_8BYTE(OR(x4, x1, gd), x1, wback, x3, x4, x5, x6, x7);
+                        LOCK_32_IN_8BYTE(OR(x4, x1, gd), x1, wback, x3, x4, x5, x6);
                         B_MARK3_nocond;
                     }
                 }
@@ -458,7 +485,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                         ANDI(x3, wback, 0b111);
                                         SLTI(x4, x3, 4);
                                         BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                        LOCK_32_IN_8BYTE(ADD_W(x4, x1, gd), x1, wback, x3, x4, x5, x6, x7);
+                                        LOCK_32_IN_8BYTE(ADD_W(x4, x1, gd), x1, wback, x3, x4, x5, x6);
                                         B_MARK3_nocond;
                                     }
                                 }
@@ -655,7 +682,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         SLTI(x4, x3, 4);
                         BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
                         ADD_W(x7, gd, x7);
-                        LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                        LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                         B_MARK3_nocond;
                     }
                 }
@@ -712,7 +739,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
                         SUB_W(x7, xZR, gd);
                         SUB_W(x7, x7, x6);
-                        LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                        LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                         B_MARK3_nocond;
                     }
                 }
@@ -758,7 +785,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         ANDI(x3, wback, 0b111);
                         SLTI(x4, x3, 4);
                         BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                        LOCK_32_IN_8BYTE(AND(x4, x1, gd), x1, wback, x3, x4, x5, x6, x7);
+                        LOCK_32_IN_8BYTE(AND(x4, x1, gd), x1, wback, x3, x4, x5, x6);
                         B_MARK3_nocond;
                     }
                 }
@@ -803,7 +830,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         ANDI(x3, wback, 0b111);
                         SLTI(x4, x3, 4);
                         BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                        LOCK_32_IN_8BYTE(SUB_W(x4, x1, gd), x1, wback, x3, x4, x5, x6, x7);
+                        LOCK_32_IN_8BYTE(SUB_W(x4, x1, gd), x1, wback, x3, x4, x5, x6);
                         B_MARK3_nocond;
                     }
                 }
@@ -846,7 +873,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         ANDI(x3, wback, 0b111);
                         SLTI(x4, x3, 4);
                         BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                        LOCK_32_IN_8BYTE(XOR(x4, x1, gd), x1, wback, x3, x4, x5, x6, x7);
+                        LOCK_32_IN_8BYTE(XOR(x4, x1, gd), x1, wback, x3, x4, x5, x6);
                         B_MARK3_nocond;
                     }
                 }
@@ -940,7 +967,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -996,7 +1023,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(OR(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(OR(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -1057,7 +1084,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -1120,7 +1147,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -1176,7 +1203,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(AND(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(AND(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -1230,7 +1257,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(ADD_W(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -1284,7 +1311,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(XOR(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(XOR(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -1319,7 +1346,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         BNEZ_MARK2(x3);
                     }
                     /* LoongArch Reference Manual Vol1 2.2.7.1
-                        If the AM* atomic memory access instruction has the same register number as rd and rk, 
+                        If the AM* atomic memory access instruction has the same register number as rd and rk,
                         the execution result is uncertain. Please software to avoid this situation.
                     */
                     AMSWAP_DB_D(x1, gd, wback);
@@ -1337,7 +1364,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         ANDI(x3, wback, 0b111);
                         SLTI(x4, x3, 4);
                         BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                        LOCK_32_IN_8BYTE(ADDI_W(x4, gd, 0), x1, wback, x3, x4, x5, x6, x7);
+                        LOCK_32_IN_8BYTE(ADDI_W(x4, gd, 0), x1, wback, x3, x4, x5, x6);
                         B_MARK3_nocond;
                     }
                 }
@@ -1380,7 +1407,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(XOR(x4, x1, x7), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(XOR(x4, x1, x7), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -1441,7 +1468,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(SUB_W(x4, xZR, x1), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(SUB_W(x4, xZR, x1), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -1493,7 +1520,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(ADDI_W(x4, x1, 1), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(ADDI_W(x4, x1, 1), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }
@@ -1536,7 +1563,7 @@ uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                                 ANDI(x3, wback, 0b111);
                                 SLTI(x4, x3, 4);
                                 BEQZ_MARK2(x4); // addr %8 >4 , cross 8bytes or cross cacheline
-                                LOCK_32_IN_8BYTE(ADDI_W(x4, x1, -1), x1, wback, x3, x4, x5, x6, x7);
+                                LOCK_32_IN_8BYTE(ADDI_W(x4, x1, -1), x1, wback, x3, x4, x5, x6);
                                 B_MARK3_nocond;
                             }
                         }

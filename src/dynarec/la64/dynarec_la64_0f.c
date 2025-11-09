@@ -1410,7 +1410,7 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
             }
-            if (X_CF) {
+            IFX (X_CF) {
                 ANDI(x2, gd, rex.w ? 0x3f : 0x1f);
                 SRLxw(x4, ed, x2);
                 if (cpuext.lbt)
@@ -1426,7 +1426,7 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
                 GETED(1);
                 GETGD;
-                u8 = F8;
+                u8 = F8 & (rex.w ? 63 : 31);
                 emit_shld32c(dyn, ninst, rex, ed, gd, u8, x3, x4);
                 WBACK;
             } else {
@@ -1496,8 +1496,7 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
                 GETED(1);
                 GETGD;
-                u8 = F8;
-                u8 &= (rex.w ? 0x3f : 0x1f);
+                u8 = F8 & (rex.w ? 63 : 31);
                 emit_shrd32c(dyn, ninst, rex, ed, gd, u8, x3, x4);
                 WBACK;
             } else {
@@ -1906,8 +1905,13 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             break;
         case 0xBC:
             INST_NAME("BSF Gd, Ed");
-            SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
+            if (!BOX64DRENV(dynarec_safeflags)) {
+                SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
+            } else {
+                SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_NOFUSION);
+            }
             SET_DFNONE();
+            CLEAR_FLAGS(x2);
             nextop = F8;
             GETED(0);
             GETGD;
@@ -1916,29 +1920,25 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 ed = x4;
             }
             BNE_MARK(ed, xZR);
-            if (cpuext.lbt) {
-                ADDI_D(x3, xZR, 1 << F_ZF);
-                X64_SET_EFLAGS(x3, X_ZF);
-            } else {
-                ORI(xFlags, xFlags, 1 << F_ZF);
-            }
-            B_NEXT_nocond;
+            IFX (X_ZF) ORI(xFlags, xFlags, 1 << F_ZF);
+            B_MARK2_nocond;
             MARK;
-            // gd is undefined if ed is all zeros, don't worry.
-            if (rex.w)
-                CTZ_D(gd, ed);
-            else
-                CTZ_W(gd, ed);
-            if (cpuext.lbt) {
-                X64_SET_EFLAGS(xZR, X_ZF);
-            } else {
-                BSTRINS_D(xFlags, xZR, F_ZF, F_ZF);
+            CTZxw(gd, ed);
+            MARK2;
+            IFX (BOX64DRENV(dynarec_safeflags)) {
+                IFX (X_PF) emit_pf(dyn, ninst, gd, x2, x5);
             }
+            SPILL_EFLAGS();
             break;
         case 0xBD:
             INST_NAME("BSR Gd, Ed");
-            SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
+            if (!BOX64DRENV(dynarec_safeflags)) {
+                SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
+            } else {
+                SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_NOFUSION);
+            }
             SET_DFNONE();
+            CLEAR_FLAGS(x2);
             nextop = F8;
             GETED(0);
             GETGD;
@@ -1947,25 +1947,17 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 ed = x4;
             }
             BNE_MARK(ed, xZR);
-            if (cpuext.lbt) {
-                ADDI_D(x3, xZR, 1 << F_ZF);
-                X64_SET_EFLAGS(x3, X_ZF);
-            } else {
-                ORI(xFlags, xFlags, 1 << F_ZF);
-            }
-            B_NEXT_nocond;
+            IFX (X_ZF) ORI(xFlags, xFlags, 1 << F_ZF);
+            B_MARK2_nocond;
             MARK;
-            if (cpuext.lbt) {
-                X64_SET_EFLAGS(xZR, X_ZF);
-            } else {
-                BSTRINS_D(xFlags, xZR, F_ZF, F_ZF);
-            }
-            if (rex.w)
-                CLZ_D(gd, ed);
-            else
-                CLZ_W(gd, ed);
+            CLZxw(gd, ed);
             ADDI_D(x1, xZR, rex.w ? 63 : 31);
             SUB_D(gd, x1, gd);
+            MARK2;
+            if (BOX64DRENV(dynarec_safeflags)) {
+                IFX (X_PF) emit_pf(dyn, ninst, gd, x2, x5);
+            }
+            SPILL_EFLAGS();
             break;
         case 0xBE:
             INST_NAME("MOVSX Gd, Eb");

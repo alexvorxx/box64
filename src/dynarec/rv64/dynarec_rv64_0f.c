@@ -1874,7 +1874,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
             }
-            if (X_CF) {
+            IFX (X_CF) {
                 BEXT(x4, ed, gd, x2);
                 ANDI(xFlags, xFlags, ~1); // F_CF is 1
                 OR(xFlags, xFlags, x4);
@@ -1952,8 +1952,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
                 GETED(1);
                 GETGD;
-                u8 = F8;
-                u8 &= (rex.w ? 0x3f : 0x1f);
+                u8 = F8 & (rex.w ? 63 : 31);
                 emit_shrd32c(dyn, ninst, rex, ed, gd, u8, x3, x4, x5);
                 WBACK;
             } else {
@@ -2351,7 +2350,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             break;
         case 0xBC:
             INST_NAME("BSF Gd, Ed");
-            if (!BOX64ENV(dynarec_safeflags)) {
+            if (!BOX64DRENV(dynarec_safeflags)) {
                 SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             } else {
                 SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_NOFUSION);
@@ -2367,18 +2366,17 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             }
             BNE_MARK(ed, xZR);
             IFX (X_ZF) ORI(xFlags, xFlags, 1 << F_ZF);
-            XOR(gd, gd, gd); // ud behavior
             B_MARK2_nocond;
             MARK;
             CTZxw(gd, ed, rex.w, x3, x5);
             MARK2;
-            if (BOX64ENV(dynarec_safeflags)) {
-                if (X_PF) emit_pf(dyn, ninst, gd, x2, x5);
+            if (BOX64DRENV(dynarec_safeflags)) {
+                IFX (X_PF) emit_pf(dyn, ninst, gd, x2, x5);
             }
             break;
         case 0xBD:
             INST_NAME("BSR Gd, Ed");
-            if (!BOX64ENV(dynarec_safeflags)) {
+            if (!BOX64DRENV(dynarec_safeflags)) {
                 SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             } else {
                 SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_NOFUSION);
@@ -2394,15 +2392,14 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             }
             BNE_MARK(ed, xZR);
             IFX (X_ZF) ORI(xFlags, xFlags, 1 << F_ZF);
-            XOR(gd, gd, gd); // ud behavior
             B_MARK2_nocond;
             MARK;
             CLZxw(gd, ed, rex.w, x3, x5, x7);
             ADDI(x3, xZR, rex.w ? 63 : 31);
             SUB(gd, x3, gd);
             MARK2;
-            if (BOX64ENV(dynarec_safeflags)) {
-                if (X_PF) emit_pf(dyn, ninst, gd, x2, x5);
+            if (BOX64DRENV(dynarec_safeflags)) {
+                IFX (X_PF) emit_pf(dyn, ninst, gd, x2, x5);
             }
             break;
         case 0xBE:

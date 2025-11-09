@@ -384,6 +384,7 @@ void copyUCTXreg2Emu(x64emu_t* emu, ucontext_t* p, uintptr_t ip) {
 
 KHASH_SET_INIT_INT64(unaligned)
 static kh_unaligned_t    *unaligned = NULL;
+static kh_unaligned_t    *autosmc = NULL;
 
 void add_unaligned_address(uintptr_t addr)
 {
@@ -400,6 +401,23 @@ int is_addr_unaligned(uintptr_t addr)
         return 0;
     khint_t k = kh_get(unaligned, unaligned, addr);
     return (k==kh_end(unaligned))?0:1;
+}
+
+void add_autosmc_address(uintptr_t addr)
+{
+    if(!autosmc)
+        autosmc = kh_init(unaligned);
+    khint_t k;
+    int ret;
+    k = kh_put(unaligned, autosmc, addr, &ret);    // just add
+}
+
+int is_addr_autosmc(uintptr_t addr)
+{
+    if(!autosmc)
+        return 0;
+    khint_t k = kh_get(unaligned, autosmc, addr);
+    return (k==kh_end(autosmc))?0:1;
 }
 
 #ifdef DYNAREC
@@ -437,6 +455,16 @@ int mark_db_unaligned(dynablock_t* db, uintptr_t x64pc)
 if(BOX64ENV(showsegv)) printf_log(LOG_INFO, "Marked db %p as dirty, and address %p as needing unaligned handling\n", db, (void*)x64pc);
     return 2;   // marked, exit handling...
 }
+
+int mark_db_autosmc(dynablock_t* db, uintptr_t x64pc)
+{
+    add_autosmc_address(x64pc);
+    db->hash++; // dirty the block
+    MarkDynablock(db);      // and mark it
+if(BOX64ENV(showsegv)) printf_log(LOG_INFO, "Marked db %p as dirty, and address %p as creating internal SMC\n", db, (void*)x64pc);
+    return 2;   // marked, exit handling...
+}
+
 #endif
 
 #ifdef DYNAREC
@@ -1590,7 +1618,19 @@ void my_box64signalhandler(int32_t sig, siginfo_t* info, void * ucntx)
                 adjustregs(emu, pc);
                 if(db && db->arch_size)
                     ARCH_ADJUST(db, emu, p, x64pc);
-                dynarec_log(LOG_INFO, "Dynablock (%p, x64addr=%p, need_test=%d/%d/%d) %s, getting out at %p (%p)!\n", db, db->x64_addr, db_need_test, db->dirty, db->always_test, (addr>=db->x64_addr && addr<(db->x64_addr+db->x64_size))?"Auto-SMC":"unprotected", (void*)R_RIP, (void*)addr);
+                int autosmc = (addr>=db->x64_addr && addr<(db->x64_addr+db->x64_size));
+                if(autosmc && BOX64ENV(dynarec_dirty)) {
+                    // check if current block should be cut there
+                    int inst = getX64AddressInst(db, (uintptr_t)pc);
+                    // is it the last instruction
+                    uintptr_t next = getX64InstAddress(db, inst+1);
+                    if(next!=(uintptr_t)-1LL) {
+                        // there is a next, so lets mark the address and dirty the block
+                        mark_db_autosmc(db, x64pc);
+                    }
+
+                }
+                dynarec_log(LOG_INFO, "Dynablock (%p, x64addr=%p, need_test=%d/%d/%d) %s, getting out at %p (%p)!\n", db, db->x64_addr, db_need_test, db->dirty, db->always_test, autosmc?"Auto-SMC":"unprotected", (void*)R_RIP, (void*)addr);
                 //relockMutex(Locks);
                 unlock_signal();
                 if(Locks & is_dyndump_locked)
@@ -1961,7 +2001,7 @@ void my_sigactionhandler(int32_t sig, siginfo_t* info, void * ucntx)
     }
     my_sigactionhandler_oldcode(emu, sig, 0, info, ucntx, NULL, db, x64pc);
 }
-
+#define MY_SIGHANDLER ((signum==X64_SIGSEGV || signum==X64_SIGBUS || signum==X64_SIGILL || signum==X64_SIGABRT)?my_box64signalhandler:my_sigactionhandler)
 EXPORT sighandler_t my_signal(x64emu_t* emu, int signum, sighandler_t handler)
 {
     if(signum<0 || signum>MAX_SIGNAL)
@@ -1983,7 +2023,7 @@ EXPORT sighandler_t my_signal(x64emu_t* emu, int signum, sighandler_t handler)
         struct sigaction newact = {0};
         struct sigaction oldact = {0};
         newact.sa_flags = 0x04;
-        newact.sa_sigaction = my_sigactionhandler;
+        newact.sa_sigaction = MY_SIGHANDLER;
         sigaction(signal_from_x64(signum), &newact, &oldact);
         return oldact.sa_handler;
     } else
@@ -2015,7 +2055,7 @@ int EXPORT my_sigaction(x64emu_t* emu, int signum, const x64_sigaction_t *act, x
             my_context->signals[signum] = (uintptr_t)act->_u._sa_sigaction;
             my_context->is_sigaction[signum] = 1;
             if(act->_u._sa_handler!=NULL && act->_u._sa_handler!=(sighandler_t)1) {
-                newact.sa_sigaction = my_sigactionhandler;
+                newact.sa_sigaction = MY_SIGHANDLER;
             } else
                 newact.sa_sigaction = act->_u._sa_sigaction;
         } else {
@@ -2023,7 +2063,7 @@ int EXPORT my_sigaction(x64emu_t* emu, int signum, const x64_sigaction_t *act, x
             my_context->is_sigaction[signum] = 0;
             if(act->_u._sa_handler!=NULL && act->_u._sa_handler!=(sighandler_t)1) {
                 newact.sa_flags|=0x04;
-                newact.sa_sigaction = my_sigactionhandler;
+                newact.sa_sigaction = MY_SIGHANDLER;
             } else
                 newact.sa_handler = act->_u._sa_handler;
         }
@@ -2040,7 +2080,7 @@ int EXPORT my_sigaction(x64emu_t* emu, int signum, const x64_sigaction_t *act, x
             oldact->_u._sa_sigaction = old.sa_sigaction; //TODO should wrap...
         else
             oldact->_u._sa_handler = old.sa_handler;  //TODO should wrap...
-        if((uintptr_t)oldact->_u._sa_sigaction == (uintptr_t)my_sigactionhandler && old_handler)
+        if((uintptr_t)oldact->_u._sa_sigaction == (uintptr_t)MY_SIGHANDLER && old_handler)
             oldact->_u._sa_sigaction = (void*)old_handler;
         oldact->sa_restorer = NULL; // no handling for now...
     }
@@ -2072,7 +2112,7 @@ int EXPORT my_syscall_rt_sigaction(x64emu_t* emu, int signum, const x64_sigactio
                 my_context->signals[signum] = (uintptr_t)act->_u._sa_sigaction;
                 my_context->is_sigaction[signum] = 1;
                 if(act->_u._sa_handler!=NULL && act->_u._sa_handler!=(sighandler_t)1) {
-                    newact.k_sa_handler = (void*)my_sigactionhandler;
+                    newact.k_sa_handler = (void*)MY_SIGHANDLER;
                 } else {
                     newact.k_sa_handler = (void*)act->_u._sa_sigaction;
                 }
@@ -2081,7 +2121,7 @@ int EXPORT my_syscall_rt_sigaction(x64emu_t* emu, int signum, const x64_sigactio
                 my_context->is_sigaction[signum] = 0;
                 if(act->_u._sa_handler!=NULL && act->_u._sa_handler!=(sighandler_t)1) {
                     newact.sa_flags|=0x4;
-                    newact.k_sa_handler = (void*)my_sigactionhandler;
+                    newact.k_sa_handler = (void*)MY_SIGHANDLER;
                 } else {
                     newact.k_sa_handler = act->_u._sa_handler;
                 }
@@ -2115,7 +2155,7 @@ int EXPORT my_syscall_rt_sigaction(x64emu_t* emu, int signum, const x64_sigactio
             if(act->sa_flags&0x04) {
                 if(act->_u._sa_handler!=NULL && act->_u._sa_handler!=(sighandler_t)1) {
                     my_context->signals[signum] = (uintptr_t)act->_u._sa_sigaction;
-                    newact.sa_sigaction = my_sigactionhandler;
+                    newact.sa_sigaction = MY_SIGHANDLER;
                 } else {
                     newact.sa_sigaction = act->_u._sa_sigaction;
                 }
@@ -2123,7 +2163,7 @@ int EXPORT my_syscall_rt_sigaction(x64emu_t* emu, int signum, const x64_sigactio
                 if(act->_u._sa_handler!=NULL && act->_u._sa_handler!=(sighandler_t)1) {
                     my_context->signals[signum] = (uintptr_t)act->_u._sa_handler;
                     my_context->is_sigaction[signum] = 0;
-                    newact.sa_sigaction = my_sigactionhandler;
+                    newact.sa_sigaction = MY_SIGHANDLER;
                     newact.sa_flags|=0x4;
                 } else {
                     newact.sa_handler = act->_u._sa_handler;

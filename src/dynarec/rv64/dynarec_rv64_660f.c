@@ -1170,7 +1170,7 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             break;
         case 0xA3:
             INST_NAME("BT Ew, Gw");
-            if (!BOX64ENV(dynarec_safeflags)) {
+            if (!BOX64DRENV(dynarec_safeflags)) {
                 SETFLAGS(X_ALL & ~X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             } else {
                 SETFLAGS(X_CF, SF_SUBSET, NAT_FLAGS_NOFUSION);
@@ -1213,7 +1213,7 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             break;
         case 0xAB:
             INST_NAME("BTS Ew, Gw");
-            if (!BOX64ENV(dynarec_safeflags)) {
+            if (!BOX64DRENV(dynarec_safeflags)) {
                 SETFLAGS(X_ALL & ~X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             } else {
                 SETFLAGS(X_CF, SF_SUBSET, NAT_FLAGS_NOFUSION);
@@ -1277,7 +1277,7 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             break;
         case 0xB3:
             INST_NAME("BTR Ew, Gw");
-            if (!BOX64ENV(dynarec_safeflags)) {
+            if (!BOX64DRENV(dynarec_safeflags)) {
                 SETFLAGS(X_ALL & ~X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             } else {
                 SETFLAGS(X_CF, SF_SUBSET, NAT_FLAGS_NOFUSION);
@@ -1350,7 +1350,7 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             switch ((nextop >> 3) & 7) {
                 case 4:
                     INST_NAME("BT Ew, Ib");
-                    if (!BOX64ENV(dynarec_safeflags)) {
+                    if (!BOX64DRENV(dynarec_safeflags)) {
                         SETFLAGS(X_ALL & ~X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
                     } else {
                         SETFLAGS(X_CF, SF_SUBSET, NAT_FLAGS_NOFUSION);
@@ -1367,7 +1367,7 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     break;
                 case 5:
                     INST_NAME("BTS Ew, Ib");
-                    if (!BOX64ENV(dynarec_safeflags)) {
+                    if (!BOX64DRENV(dynarec_safeflags)) {
                         SETFLAGS(X_ALL & ~X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
                     } else {
                         SETFLAGS(X_CF, SF_SUBSET, NAT_FLAGS_NOFUSION);
@@ -1395,7 +1395,7 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     break;
                 case 6:
                     INST_NAME("BTR Ew, Ib");
-                    if (!BOX64ENV(dynarec_safeflags)) {
+                    if (!BOX64DRENV(dynarec_safeflags)) {
                         SETFLAGS(X_ALL & ~X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
                     } else {
                         SETFLAGS(X_CF, SF_SUBSET, NAT_FLAGS_NOFUSION);
@@ -1423,7 +1423,7 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     break;
                 case 7:
                     INST_NAME("BTC Ew, Ib");
-                    if (!BOX64ENV(dynarec_safeflags)) {
+                    if (!BOX64DRENV(dynarec_safeflags)) {
                         SETFLAGS(X_ALL & ~X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
                     } else {
                         SETFLAGS(X_CF, SF_SUBSET, NAT_FLAGS_NOFUSION);
@@ -1451,7 +1451,7 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             break;
         case 0xBB:
             INST_NAME("BTC Ew, Gw");
-            if (!BOX64ENV(dynarec_safeflags)) {
+            if (!BOX64DRENV(dynarec_safeflags)) {
                 SETFLAGS(X_ALL & ~X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             } else {
                 SETFLAGS(X_CF, SF_SUBSET, NAT_FLAGS_NOFUSION);
@@ -1493,36 +1493,53 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             break;
         case 0xBC:
             INST_NAME("BSF Gw, Ew");
-            SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
+            if (BOX64DRENV(dynarec_safeflags)) {
+                SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_NOFUSION);
+                IFX (X_ALL) CLEAR_FLAGS();
+            } else
+                SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             SET_DFNONE();
             nextop = F8;
             GETEW(x5, 0);
             GETGW(x4);
             BNE_MARK(ed, xZR);
-            ORI(xFlags, xFlags, 1 << F_ZF);
-            B_NEXT_nocond;
+            IFX (X_ZF) ORI(xFlags, xFlags, 1 << F_ZF);
+            B_MARK2_nocond;
             MARK;
-            // gd is undefined if ed is all zeros, don't worry.
+            IFXA (X_ZF, !BOX64DRENV(dynarec_safeflags))
+                ANDI(xFlags, xFlags, ~(1 << F_ZF));
             CTZxw(gd, ed, 0, x1, x2);
-            ANDI(xFlags, xFlags, ~(1 << F_ZF));
             GWBACK;
+            MARK2;
+            if (BOX64DRENV(dynarec_safeflags)) {
+                IFX (X_PF) emit_pf(dyn, ninst, gd, x1, x2);
+            }
             break;
         case 0xBD:
             INST_NAME("BSR Gw, Ew");
-            SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
+            if (BOX64DRENV(dynarec_safeflags)) {
+                SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_NOFUSION);
+                IFX (X_ALL) CLEAR_FLAGS();
+            } else
+                SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             SET_DFNONE();
             nextop = F8;
             GETEW(x5, 0);
             GETGW(x4);
             BNE_MARK(ed, xZR);
-            ORI(xFlags, xFlags, 1 << F_ZF);
-            B_NEXT_nocond;
+            IFX (X_ZF) ORI(xFlags, xFlags, 1 << F_ZF);
+            B_MARK2_nocond;
             MARK;
-            ANDI(xFlags, xFlags, ~(1 << F_ZF));
+            IFXA (X_ZF, !BOX64DRENV(dynarec_safeflags))
+                ANDI(xFlags, xFlags, ~(1 << F_ZF));
             CLZxw(gd, ed, 1, x1, x2, x6);
             ADDI(x1, xZR, 63);
             SUB(gd, x1, gd);
             GWBACK;
+            MARK2;
+            if (BOX64DRENV(dynarec_safeflags)) {
+                IFX (X_PF) emit_pf(dyn, ninst, gd, x1, x2);
+            }
             break;
         case 0xBE:
             INST_NAME("MOVSX Gw, Eb");

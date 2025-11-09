@@ -199,6 +199,9 @@ BOX64_ENV=BOX64_DYNAREC_BIGBLOCK=2
 BOX64_ENV1=BOX64_DYNAREC_FORWARD=1024
 BOX64_ENV2=BOX64_DYNAREC_CALLRET=1
 
+[GigaTribe]
+BOX64_EMULATED_LIBS=libpng16.so.16
+
 [GoatGame]
 BOX64_DYNAREC_STRONGMEM=1
 
@@ -329,12 +332,8 @@ BOX64_EMULATED_LIBS=libSDL2-2.0.so.0:libSDL2_ttf-2.0.so.0
 
 # Linux Steam configurations
 
-[steam-runtime-check-requirements]
-BOX64_EXIT=1
-
 [steam-runtime-launcher-service]
 BOX64_NOGTK=1
-BOX64_EXIT=1
 
 [steam]
 BOX64_CRASHHANDLER=0
@@ -808,6 +807,7 @@ BOX64_DYNAREC_BIGBLOCK=3
 BOX64_DYNAREC_SAFEFLAGS=2
 BOX64_DYNAREC_DIRTY=2   # this is like 50% faster than 1
 BOX64_DYNAREC_CALLRET=2 #1 will not work and 2 is 20% faster than 0 with dirty=2
+BOX64_DYNAREC_HOTPAGE_ALT=1 #is faster with that option
 
 [NeedForSpeedPayback.exe]
 BOX64_DYNAREC_STRONGMEM=0
