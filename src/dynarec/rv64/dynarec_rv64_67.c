@@ -165,7 +165,7 @@ uintptr_t dynarec64_67(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                             nextop = F8;
                             GETGXSS(s0);
                             if (MODREG) {
-                                v0 = sse_get_reg(dyn, ninst, x1, (nextop & 7) + (rex.b << 3), 1);
+                                v0 = sse_get_reg(dyn, ninst, x1, (nextop & 7) + (rex.b << 3), 0);
                             } else {
                                 v0 = fpu_get_scratch(dyn);
                                 SMREAD();
@@ -478,7 +478,7 @@ uintptr_t dynarec64_67(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 MOV64x(x2, i64);
                 emit_cmp32(dyn, ninst, rex, xRAX, x2, x3, x4, x5, x6);
             } else
-                emit_cmp32_0(dyn, ninst, rex, nextop, xRAX, x3, x4, x5);
+                emit_cmp32_0(dyn, ninst, rex, 0xC0 /* fake nextop */, xRAX, x3, x4, x5);
             break;
         case 0x63:
             INST_NAME("MOVSXD Gd, Ed");
@@ -579,7 +579,7 @@ uintptr_t dynarec64_67(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     else
                         i64 = F8S;
                     MOV64xw(x5, i64);
-                    emit_adc32(dyn, ninst, rex, ed, x5, x3, x4, x5, x6);
+                    emit_adc32(dyn, ninst, rex, ed, x5, x3, x4, x6, x7);
                     WBACK;
                     break;
                 case 3: // SBB

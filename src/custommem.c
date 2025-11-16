@@ -93,8 +93,9 @@ typedef struct blocklist_s {
     size_t              size;
     void*               first;
     uint32_t            lowest;
-    uint8_t             type;       // could use 7bits for type and 1bit fot is32bits,
+    uint8_t             type;       // could use 6bits for type and 1bit for is32bits and nopurge
     uint8_t             is32bits;   // but that wont really change the size of structure anyway
+    uint8_t             nopurge;    // set when block has no candidate for purge
 } blocklist_t;
 
 #define MMAPSIZE (512*1024)     // allocate 512kb sized blocks
@@ -107,6 +108,9 @@ static int                 n_blocks = 0;       // number of blocks for custom ma
 static int                 c_blocks = 0;       // capacity of blocks for custom malloc
 static blocklist_t*        p_blocks = NULL;    // actual blocks for custom malloc
 static int                 setting_prot = 0;
+
+// Block lookup cache 
+static blocklist_t*        last_found_block = NULL;
 
 typedef union mark_s {
     struct {
@@ -472,15 +476,23 @@ int blockstree_index = 0;
 
 blocklist_t* findBlock(uintptr_t addr)
 {
+    if (last_found_block && addr >= (uintptr_t)last_found_block->block && addr < (uintptr_t)last_found_block->block + last_found_block->size)
+        return last_found_block;
     if(blockstree) {
         uint32_t i;
         uintptr_t end;
-        if(rb_get_end(blockstree, addr, &i, &end))
+        if(rb_get_end(blockstree, addr, &i, &end)){
+            // Upate cache
+            last_found_block = &p_blocks[i];
             return &p_blocks[i];
+        }
     } else {
         for(int i=0; i<n_blocks; ++i)
-            if((addr>=(uintptr_t)p_blocks[i].block) && (addr<=(uintptr_t)p_blocks[i].block+p_blocks[i].size))
+            if((addr>=(uintptr_t)p_blocks[i].block) && (addr<=(uintptr_t)p_blocks[i].block+p_blocks[i].size)){
+                // Upate cache
+                last_found_block = &p_blocks[i];
                 return &p_blocks[i];
+            }
     }
     return NULL;
 }
@@ -595,6 +607,7 @@ void* map128_customMalloc(size_t size, int is32bits)
     int i = n_blocks++;
     if(n_blocks>c_blocks) {
         c_blocks += box64_is32bits?256:8;
+        last_found_block = NULL; // Prevents use-after-free
         p_blocks = (blocklist_t*)box_realloc(p_blocks, c_blocks*sizeof(blocklist_t));
     }
     size_t allocsize = MMAPSIZE128;
@@ -661,6 +674,7 @@ void* map128_customMalloc(size_t size, int is32bits)
     p_blocks[i].maxfree = allocsize - (mapsize+128);
     mutex_unlock(&mutex_blocks);
     add_blockstree((uintptr_t)p, (uintptr_t)p+allocsize, i);
+    last_found_block = &p_blocks[i];
     if(mapallmem) {
         if(setting_prot) {
             // defer the setProtection...
@@ -708,6 +722,7 @@ void* map64_customMalloc(size_t size, int is32bits)
     int i = n_blocks++;
     if (n_blocks > c_blocks) {
         c_blocks += box64_is32bits ? 256 : 8;
+        last_found_block = NULL; // Prevents use-after-free
         p_blocks = (blocklist_t*)box_realloc(p_blocks, c_blocks * sizeof(blocklist_t));
     }
 
@@ -762,6 +777,7 @@ void* map64_customMalloc(size_t size, int is32bits)
 
     mutex_unlock(&mutex_blocks);
     add_blockstree((uintptr_t)p, (uintptr_t)p + allocsize, i);
+    last_found_block = &p_blocks[i];
 
     if (mapallmem) {
         if (setting_prot) {
@@ -811,6 +827,7 @@ void* internal_customMalloc(size_t size, int is32bits)
     int i = n_blocks++;
     if(n_blocks>c_blocks) {
         c_blocks += box64_is32bits?256:8;
+        last_found_block = NULL; // Prevents use-after-free
         p_blocks = (blocklist_t*)box_realloc(p_blocks, c_blocks*sizeof(blocklist_t));
     }
     size_t allocsize = (fullsize>MMAPSIZE)?fullsize:MMAPSIZE;
@@ -880,6 +897,7 @@ void* internal_customMalloc(size_t size, int is32bits)
     p_blocks[i].maxfree = getMaxFreeBlock(p_blocks[i].block, p_blocks[i].size, p_blocks[i].first);
     mutex_unlock(&mutex_blocks);
     add_blockstree((uintptr_t)p, (uintptr_t)p+allocsize, i);
+    last_found_block = &p_blocks[i];
     if(mapallmem) {
         if(setting_prot) {
             // defer the setProtection...
@@ -1107,6 +1125,7 @@ void* internal_customMemAligned(size_t align, size_t size, int is32bits)
     int i = n_blocks++;
     if(n_blocks>c_blocks) {
         c_blocks += 4;
+        last_found_block = NULL; // Prevents use-after-free
         p_blocks = (blocklist_t*)box_realloc(p_blocks, c_blocks*sizeof(blocklist_t));
     }
     p_blocks[i].block = NULL;   // incase there is a re-entrance
@@ -1190,6 +1209,7 @@ void* internal_customMemAligned(size_t align, size_t size, int is32bits)
     if(mapallmem)
         setProtection((uintptr_t)p, allocsize, PROT_READ | PROT_WRITE);
     add_blockstree((uintptr_t)p, (uintptr_t)p+allocsize, i);
+    last_found_block = &p_blocks[i];
     return ret;
 }
 void* customMemAligned(size_t align, size_t size)
@@ -1379,24 +1399,30 @@ int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t 
             #define GO(A) if(bl->A) bl->A = ((void*)bl->A)+delta
             GO(block);
             GO(actual_block);
+            GO(previous);
             GO(instsize);
             GO(arch);
             GO(callrets);
             GO(jmpnext);
             GO(table64);
             GO(relocs);
+            #ifdef GBDJIT
+            GO(gdbjit_block);
+            #endif
             #undef GO
-            bl->previous = NULL;    // that seems safer that way
             // shift the self referece to dynablock
             if(bl->block!=bl->jmpnext) {
                 void** db_ref = (bl->jmpnext-sizeof(void*));
                 *db_ref = (*db_ref)+delta;
+                db_ref = (bl->jmpnext-sizeof(void*)+3*sizeof(void*));
+                *db_ref = native_next;
             }
             // adjust x64_addr with delta_map
             bl->x64_addr += delta_map;
             *(uintptr_t*)(bl->jmpnext+2*sizeof(void*)) = RelocGetNext();
             if(bl->relocs && bl->relocsize)
                 ApplyRelocs(bl, delta, delta_map, mapping_start);
+            ClearCache(bl->jmpnext, 4*sizeof(void*));
             ClearCache(bl->actual_block+sizeof(void*), bl->native_size);
             //add block, as dirty for now
             if(!addJumpTableIfDefault64(bl->x64_addr, bl->jmpnext)) {
@@ -1482,6 +1508,46 @@ dynablock_t* FindDynablockFromNativeAddress(void* p)
     return NULL;
 }
 
+int PurgeDynarecMap(mmaplist_t* list, size_t size)
+{
+    // check all blocks where hot==1 and in_used==0 and delete them
+    // return 1 as soon as one block has been deleted, 0 else
+    // beware that hot=0 blocks means thay should not be touched
+    int ret = 0;
+    for(int i=0; i<list->size && !ret; ++i) {
+        blocklist_t* bl = list->chunks[i];
+        if(bl->nopurge) continue;
+        blockmark_t* p = bl->block;
+        blockmark_t* end = bl->block + bl->size - sizeof(blockmark_t);
+
+        int purgeable = 0;
+        while(p<end) {
+            blockmark_t *n = NEXT_BLOCK(p);
+            if(p->next.fill) {
+                dynablock_t* dynablock = *(dynablock_t**)p->mark;
+                int hot = native_lock_get_d(&dynablock->hot);
+                if(hot==1 && dynablock->done) {
+                    int in_used = native_lock_get_d(&dynablock->in_used);
+                    if(!in_used) {
+                        // free the block, but unreference it first
+                        //if(setJumpTableDefaultIfRef64(dynablock->x64_addr, dynablock->block)) 
+                        {
+                            dynarec_log(LOG_INFO/*LOG_DEBUG*/, " PurgeDynablock %p\n", dynablock);
+                            if((n<end) && !n->next.fill )
+                                n = NEXT_BLOCK(n);  //because the block will be agglomerated
+                            FreeDynablock(dynablock, 0, 1);
+                            if((bl->maxfree>=size))
+                                ret = 1;
+                        } // fail to set default jump, so skipping
+                    } else purgeable = 1;
+                } else if(hot<2) purgeable = 1;
+            }
+            p = n;
+        }
+        bl->nopurge = purgeable?0:1;
+    }
+    return ret;
+}
 #ifdef TRACE_MEMSTAT
 static uint64_t dynarec_allocated = 0;
 #endif
@@ -1501,19 +1567,27 @@ uintptr_t AllocDynarecMap(uintptr_t x64_addr, size_t size, int is_new)
     list->dirty = 1;
     // check if there is space in current open ones
     uintptr_t sz = size + 2*sizeof(blockmark_t);
-    for(int i=0; i<list->size; ++i)
-        if(list->chunks[i]->maxfree>=size) {
-            // looks free, try to alloc!
-            size_t rsize = 0;
-            void* sub = getFirstBlock(list->chunks[i]->block, size, &rsize, list->chunks[i]->first);
-            if(sub) {
-                void* ret = allocBlock(list->chunks[i]->block, sub, size, &list->chunks[i]->first);
-                if(rsize==list->chunks[i]->maxfree)
-                    list->chunks[i]->maxfree = getMaxFreeBlock(list->chunks[i]->block, list->chunks[i]->size, list->chunks[i]->first);
-                //rb_set_64(list->chunks[i].tree, (uintptr_t)ret, (uintptr_t)ret+size, (uintptr_t)ret);
-                return (uintptr_t)ret;
+    int recheck = 0;
+    do {
+        for(int i=0; i<list->size; ++i) {
+            if(list->chunks[i]->maxfree>=size) {
+                // looks free, try to alloc!
+                size_t rsize = 0;
+                void* sub = getFirstBlock(list->chunks[i]->block, size, &rsize, list->chunks[i]->first);
+                if(sub) {
+                    void* ret = allocBlock(list->chunks[i]->block, sub, size, &list->chunks[i]->first);
+                    list->chunks[i]->nopurge = 0;
+                    if(rsize==list->chunks[i]->maxfree)
+                        list->chunks[i]->maxfree = getMaxFreeBlock(list->chunks[i]->block, list->chunks[i]->size, list->chunks[i]->first);
+                    //rb_set_64(list->chunks[i].tree, (uintptr_t)ret, (uintptr_t)ret+size, (uintptr_t)ret);
+                    return (uintptr_t)ret;
+                }
             }
         }
+        // check if we can remove blocks before allocating a new one
+        if(BOX64ENV(dynarec_purge))
+            recheck = recheck?0:PurgeDynarecMap(list, size);  // don't do purge all the time, it's too time consuming
+    } while(recheck);
     // need to add a new
     if(list->size == list->cap) {
         list->cap+=4;
@@ -1824,6 +1898,32 @@ void setJumpTableDefault64(void* addr)
         return;
     idx0 = (((uintptr_t)addr)    )&JMPTABLE_MASK0;
     native_lock_store_dd(&box64_jmptbl3[idx3][idx2][idx1][idx0], (uintptr_t)native_next);
+}
+int setJumpTableDefaultIfRef64(void* addr, void* jmp)
+{
+    uintptr_t idx3, idx2, idx1, idx0;
+    #ifdef JMPTABL_SHIFT4
+    uintptr_t idx4;
+    idx4 = (((uintptr_t)addr)>>JMPTABL_START4)&JMPTABLE_MASK4;
+    if(box64_jmptbl4[idx4] == box64_jmptbldefault3)
+        return 0;
+    uintptr_t ****box64_jmptbl3 = box64_jmptbl4[idx4];
+    #endif
+    idx3 = (((uintptr_t)addr)>>JMPTABL_START3)&JMPTABLE_MASK3;
+    if(box64_jmptbl3[idx3] == box64_jmptbldefault2)
+        return 0;
+    idx2 = (((uintptr_t)addr)>>JMPTABL_START2)&JMPTABLE_MASK2;
+    if(box64_jmptbl3[idx3][idx2] == box64_jmptbldefault1)
+        return 0;
+    idx1 = (((uintptr_t)addr)>>JMPTABL_START1)&JMPTABLE_MASK1;
+    if(box64_jmptbl3[idx3][idx2][idx1] == box64_jmptbldefault0)
+        return 0;
+    idx0 = (((uintptr_t)addr)    )&JMPTABLE_MASK0;
+    #ifdef JMPTABL_SHIFT4
+    return (native_lock_storeifref(create_jmptbl(0, idx0, idx1, idx2, idx3, idx4), native_next, jmp)==native_next)?1:0;
+    #else
+    return (native_lock_storeifref(create_jmptbl(0, idx0, idx1, idx2, idx3), native_next, jmp)==native_next)?1:0;
+    #endif
 }
 void setJumpTableDefaultRef64(void* addr, void* jmp)
 {
@@ -2958,6 +3058,7 @@ void fini_custommem_helper(box64context_t *ctx)
     for(int i=0; i<n_blocks; ++i)
         InternalMunmap(p_blocks[i].block, p_blocks[i].size);
     box_free(p_blocks);
+    last_found_block = NULL;
 #if !defined(USE_CUSTOM_MUTEX)
     pthread_mutex_destroy(&mutex_prot);
     pthread_mutex_destroy(&mutex_blocks);

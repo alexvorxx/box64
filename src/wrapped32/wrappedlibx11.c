@@ -1662,6 +1662,15 @@ EXPORT int my32_XQueryExtension(x64emu_t* emu, void* display, char* name, int* m
     }
     return ret;
 }
+EXPORT int my32_XkbQueryExtension(x64emu_t* emu, void* display, char* opcode, int* event_base, int* error, int* major, int* minor)
+{
+    int fallback;
+    int *event = event_base?event_base:&fallback;
+    int ret = my->XkbQueryExtension(display, opcode, event, error, major, minor);
+    if(!ret) return ret;
+    register_Xkb_events(*event);
+    return ret;
+}
 EXPORT int my32_XAddConnectionWatch(x64emu_t* emu, void* display, char* f, void* data)
 {
     return my->XAddConnectionWatch(display, findXConnectionWatchProcFct(f), data);
@@ -2527,7 +2536,7 @@ EXPORT int my32_XGetWindowProperty(x64emu_t* emu, void* dpy, XID window, XID pro
         unsigned long *src = prop_l;
         ulong_t* dst = prop_l;
         for(int i=0; i<*nitems_return; ++i)
-            dst[i] = to_ulong(src[i]);
+            dst[i] = to_ulong_silent(src[i]);
     }
     return ret;
 }
@@ -2680,13 +2689,35 @@ EXPORT int my32__XReply(x64emu_t* emu, void* dpy, void* rep, int extra, int disc
     return ret;
 }
 
+EXPORT void* my32_XGetICValues(x64emu_t* emu, size_t ic, ptr_t* V)
+{
+    void* ret = NULL;
+    while(!ret && *V) {
+        char* name = from_ptrv(V[0]);
+        void* val = from_ptrv(V[1]);
+        V+=2;
+        if(!strcmp(name, "filterEvents")) {
+            long fevent;
+            ret = my->XGetICValues(ic, name, &fevent, NULL);
+            if(!ret)
+                *(long_t*)val = to_long(fevent);
+        } else
+        {
+            printf_log_prefix(2, LOG_INFO, "Warning, unknown XGetICValues of %s\n", name);
+            ret = my->XGetICValues(ic, name, val, NULL);
+        }
+    }
+    return ret;
+}
+
 #define CUSTOM_INIT                 \
     AddAutomaticBridge(lib->w.bridge, vFp_32, *(void**)dlsym(lib->w.lib, "_XLockMutex_fn"), 0, "_XLockMutex_fn"); \
     AddAutomaticBridge(lib->w.bridge, vFp_32, *(void**)dlsym(lib->w.lib, "_XUnlockMutex_fn"), 0, "_XUnlockMutex_fn"); \
     if(BOX64ENV(x11threads)) my->XInitThreads();    \
     my_context->libx11 = lib;
 
-#define CUSTOM_FINI     \
+#define CUSTOM_FINI             \
+    unregister_Xkb_events();    \
     my_context->libx11 = NULL;
 #if 0
 #ifdef ANDROID

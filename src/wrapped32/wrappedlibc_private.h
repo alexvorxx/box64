@@ -121,8 +121,8 @@ GO(__bzero, vEpL)
 GOW(calloc, pELL)
 // callrpc
 //GOW(canonicalize_file_name, pEp)
-// capget
-// capset
+GO(capget, iFpp)
+GO(capset, iFpp)
 //GO(catclose, iEp)
 //GO(catgets, pEpiip)
 //GO(catopen, pEpi)
@@ -164,6 +164,7 @@ GOW(close, iEi)
 // __close  // Weak
 GOW(closedir, iEp)
 GO(closelog, vEv)
+GO(close_range, iEuui)
 GOM(__cmsg_nxthdr, pEpp)    //%noE
 //GO(confstr, uEipu)
 // __confstr_chk
@@ -421,8 +422,11 @@ GO(__fsetlocking, iESi)
 GO(fsetpos, iEpBlii_)
 //GO(fsetpos64, iEpp)
 GO(fsetxattr, iEippLi)
-GOM(fstat, iFip)    //%%,noE
-GO2(__fstat64_time64, iFip, fstat)
+GOM(fstat, iEip)    //%%,noE
+GOM(fstat64, iEip)  //%%,noE
+GOM(__fstat64_time64, iFEip)
+GOM(fstatat, iEEippi)
+GOM(fstatat64, iEEippi)
 GO2(__fstatat64_time64, iEippi, fstatat)
 GOWM(fstatfs, iEip) //%%,noE
 GOWM(fstatfs64, iEip)    //%%,noE
@@ -506,7 +510,7 @@ GOM(getgrnam, pEEp)
 GOM(getgrnam_r, iEEpppLp)
 GO(getgrouplist, iEpipp)
 GOW(getgroups, iEip)
-// __getgroups_chk
+GO(__getgroups_chk, iEipL)
 GOM(gethostbyaddr, pFEpui)
 GOM(gethostbyaddr_r, iFEpuippupp)
 GOM(gethostbyname, pFEp)
@@ -1076,7 +1080,7 @@ GOM(_longjmp, vEEpi)        //%%
 GOM(__longjmp_chk, vEEpi)   //%%
 GO(lrand48, lEv)
 // lrand48_r
-//GO(lremovexattr, iEpp)
+GO(lremovexattr, iEpp)
 GOM(lsearch, pEEppbL_Lp)      //%%
 GOW(lseek, lEili)
 // __lseek  // Weak
@@ -1109,7 +1113,7 @@ GOW(mbsnrtowcs, LEpbp_LLp)
 GOW(mbsrtowcs, LEpbp_Lp)
 // __mbsrtowcs_chk
 GO(mbstowcs, LEppL)
-// __mbstowcs_chk
+GO(__mbstowcs_chk, LEppLL)
 GO(mbtowc, iEppL)
 // mcheck
 // mcheck_check_all
@@ -1240,7 +1244,7 @@ GOW2(open64, iEEpON, my_open64)  //%%
 // __open64 // Weak
 GO(__open64_2, iEpO)
 //GOW(openat, iEipON)
-// __openat_2
+GO(__openat_2, iEipO)
 GOW(openat64, iEipON)
 //GO(__openat64_2, iEipON)
 // __open_catalog
@@ -1250,7 +1254,7 @@ GOW(open_memstream, SEpp)
 // open_wmemstream
 //DATAB(optarg, 4)
 //DATA(opterr, 4)
-//DATA(optind, 4)
+DATA(optind, 4)
 //DATA(optopt, 4)
 // outb // Weak
 // outl // Weak
@@ -1419,7 +1423,7 @@ GOM(__register_atfork, iEEpppp) //%%
 //GOW(re_match, iEppiip)
 // re_match_2   // Weak
 GO(remove, iEp)
-//GO(removexattr, iEpp)
+GO(removexattr, iEpp)
 // remque
 GO(rename, iEpp)
 GO(renameat, iEipip)
@@ -1642,11 +1646,11 @@ GOM(sscanf, iEEppV) //%%
 // ssignal  // Weak
 // sstk
 GOM(__stack_chk_fail, vEEv) //%%
-//GOM(lstat64, iEpp)	//%%,noE
-GO2(__lstat64_time64, iEEpp, my_lstat64)
-//GOM(stat64, iEpp)	//%%,noE
-GO2(__stat64_time64, iEEpp, my_stat64)
-GOM(stat, iFpp) //%%,noE
+GOM(lstat64, iEpp)	//%%,noE
+GOM(__lstat64_time64, iEEpp)
+GOM(stat64, iEpp)	//%%,noE
+GOM(__stat64_time64, iEEpp)
+GOM(stat, iEpp) //%%,noE
 GOWM(statfs, iEpp)  //%%,noE
 // __statfs
 GOWM(statfs64, iEpp)     //%%,noE
@@ -2230,6 +2234,10 @@ GO(name_to_handle_at, iEipppi) // only glibc 2.14+, so may not be present...
 
 //GOM(modify_ldt, iEEipL) // there is suposedly no glibc wrapper for this one
 
+// duplicated stuffs from libresolv
+GOWM(res_query, iEEpiipi)
+GOWM(res_search, iEEpiipi)
+
 #ifdef ANDROID
 //GOM(__libc_init, vEEpppp)
 GO(__errno, pEv)
@@ -2239,7 +2247,7 @@ GO(__errno, pEv)
 //GO(__errno,
 #endif
 
-//GOM(lstat,
+GOM(lstat, iEpp)    //%%,noE
 //GO(setprogname,
 //GO(getprogname,
 

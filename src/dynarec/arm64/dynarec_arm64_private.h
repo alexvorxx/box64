@@ -137,6 +137,9 @@ typedef struct instruction_arm64_s {
     flagcache_t         f_exit;     // flags status at end of instruction
     neoncache_t         n;          // neoncache at end of instruction (but before poping)
     flagcache_t         f_entry;    // flags status before the instruction begin
+    int                 cacheupd;
+    uint32_t            preload_xmmymm;
+    int                 preload_from;
 } instruction_arm64_t;
 
 typedef struct dynarec_arm_s {
@@ -146,6 +149,7 @@ typedef struct dynarec_arm_s {
     uintptr_t           start;      // start of the block
     uintptr_t           end;        // maximum end of the block (only used in pass0)
     uint32_t            isize;      // size in bytes of x64 instructions included
+    uint32_t            prefixsize; // size in byte of the prefix of the block
     void*               block;      // memory pointer where next instruction is emitted
     uintptr_t           native_start;  // start of the arm code
     size_t              native_size;   // size of emitted arm code
@@ -179,6 +183,11 @@ typedef struct dynarec_arm_s {
     uint8_t             doublepop;
     uint8_t             always_test;
     uint8_t             abort;      // abort the creation of the block
+    uint8_t             use_x87:1;  // set if x87 regs are used
+    uint8_t             use_mmx:1;
+    uint8_t             use_xmm:1;
+    uint8_t             use_ymm:1;
+    uint8_t             have_purge:1;   // set to 1 if block can be purged
     void*               gdbjit_block;
     uint32_t            need_x87check;  // needs x87 precision control check if non-null, or 0 if not
     uint32_t            need_dump;     // need to dump the block

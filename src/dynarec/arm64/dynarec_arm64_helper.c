@@ -561,6 +561,8 @@ void jump_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int reg, int ninst)
     NOTEST(x2);
     TABLE64C(x2, const_epilog);
     SMEND();
+    if(dyn->have_purge)
+        doLeaveBlock(dyn, ninst, x4, x5, x6);
     BR(x2);
 }
 
@@ -636,6 +638,8 @@ void jump_to_next(dynarec_arm_t* dyn, uintptr_t ip, int reg, int ninst, int is32
     if(reg!=x1) {
         MOVx_REG(x1, xRIP);
     }
+    if(dyn->have_purge && !dyn->insts[ninst].x64.has_callret)
+        doLeaveBlock(dyn, ninst, x4, x5, x6);
     #ifdef HAVE_TRACE
     //MOVx(x3, 15);    no access to PC reg
     BLR(dest); // save LR...
@@ -659,6 +663,8 @@ void ret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, rex_t rex)
         // pop the actual return address for ARM stack
         LDPx_S7_postindex(xLR, x6, xSP, 16);
         SUBx_REG(x6, x6, xRIP); // is it the right address?
+        if(dyn->have_purge)
+            doLeaveBlock(dyn, ninst, x4, x5, x3);
         CBNZx(x6, 2*4);
         RET(xLR);
         // not the correct return address, regular jump, but purge the stack first, it's unsync now...
@@ -666,6 +672,8 @@ void ret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, rex_t rex)
     }
     NOTEST(x2);
     int dest = indirect_lookup(dyn, ninst, rex.is32bits, x2, x3);
+    if(dyn->have_purge && !BOX64DRENV(dynarec_callret))
+        doLeaveBlock(dyn, ninst, x4, x5, x6);
     #ifdef HAVE_TRACE
     BLR(dest);
     #else
@@ -691,6 +699,8 @@ void retn_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, rex_t rex, int 
         // pop the actual return address for ARM stack
         LDPx_S7_postindex(xLR, x6, xSP, 16);
         SUBx_REG(x6, x6, xRIP); // is it the right address?
+        if(dyn->have_purge)
+            doLeaveBlock(dyn, ninst, x4, x5, x3);
         CBNZx(x6, 2*4);
         RET(xLR);
         // not the correct return address, regular jump
@@ -698,6 +708,8 @@ void retn_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, rex_t rex, int 
     }
     NOTEST(x2);
     int dest = indirect_lookup(dyn, ninst, rex.is32bits, x2, x3);
+    if(dyn->have_purge && !BOX64DRENV(dynarec_callret))
+        doLeaveBlock(dyn, ninst, x4, x5, x6);
     #ifdef HAVE_TRACE
     BLR(dest);
     #else
@@ -764,6 +776,8 @@ void iret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, int is32bits, i
         TABLE64C(x2, const_epilog);
     else
         MOV64x(x2, getConst(const_epilog));
+    if(dyn->have_purge)
+        doLeaveBlock(dyn, ninst, x4, x5, x6);
     BR(x2);
     CLEARIP();
     MARK;
@@ -1824,11 +1838,11 @@ void sse_purge07cache(dynarec_arm_t* dyn, int ninst, int s1)
 }
 
 // purge the SSE cache only
-static void sse_purgecache(dynarec_arm_t* dyn, int ninst, int next, int s1)
+static void sse_purgecache(dynarec_arm_t* dyn, int ninst, int next, int s1, uint32_t unneeded)
 {
     int old = -1;
     for (int i=0; i<16; ++i)
-        if(dyn->n.ssecache[i].v!=-1) {
+        if(dyn->n.ssecache[i].v!=-1 && !(unneeded&(1<<i))) {
             if(next) dyn->n.xmm_used |= (1<<i);
             if(dyn->n.ssecache[i].write) {
                 if (old==-1) {
@@ -1861,7 +1875,7 @@ static void sse_purgecache(dynarec_arm_t* dyn, int ninst, int next, int s1)
             avx_mark_zero_reset(dyn, ninst);
     }
     for(int i=0; i<32; ++i) {
-        if(dyn->n.neoncache[i].t==NEON_CACHE_YMMW) {
+        if(dyn->n.neoncache[i].t==NEON_CACHE_YMMW && !(unneeded&(1<<(dyn->n.neoncache[i].n+16)))) {
             if (old==-1) {
                 MESSAGE(LOG_DUMP, "\tPurge %sSSE Cache ------\n", next?"locally ":"");
                 ++old;
@@ -2065,11 +2079,11 @@ void fpu_popcache(dynarec_arm_t* dyn, int ninst, int s1, int not07)
     MESSAGE(LOG_DUMP, "\t------- Pop XMM Cache (%d)\n", n);
 }
 
-void fpu_purgecache(dynarec_arm_t* dyn, int ninst, int next, int s1, int s2, int s3)
+void fpu_purgecache(dynarec_arm_t* dyn, int ninst, int next, int s1, int s2, int s3, uint32_t unneeded)
 {
     x87_purgecache(dyn, ninst, next, s1, s2, s3);
     mmx_purgecache(dyn, ninst, next, s1);
-    sse_purgecache(dyn, ninst, next, s1);
+    sse_purgecache(dyn, ninst, next, s1, unneeded);
     if(!next) {
         fpu_reset_reg(dyn);
         dyn->insts[ninst].fpupurge = 1;
@@ -2318,18 +2332,17 @@ static void fpuCacheTransform(dynarec_arm_t* dyn, int ninst, int s1, int s2, int
     if(i2<0)
         return;
     MESSAGE(LOG_DUMP, "\tCache Transform ---- ninst=%d -> %d\n", ninst, i2);
+    uint32_t unneeded = dyn->insts[i2].n.xmm_unneeded | (dyn->insts[i2].n.ymm_unneeded<<16);
     if((!i2) || (dyn->insts[i2].x64.barrier&BARRIER_FLOAT)) {
-        if(dyn->n.stack_next)  {
-            fpu_purgecache(dyn, ninst, 1, s1, s2, s3);
-            MESSAGE(LOG_DUMP, "\t---- Cache Transform\n");
-            return;
+        int need_purge = 0;
+        if(dyn->n.stack_next)
+            need_purge = 1;
+        for(int i=0; i<24 && !need_purge; ++i)
+            if(dyn->n.neoncache[i].v) 
+                need_purge = 1;
+        if(need_purge) {       // there is something at ninst for i
+            fpu_purgecache(dyn, ninst, 1, s1, s2, s3, unneeded);
         }
-        for(int i=0; i<24; ++i)
-            if(dyn->n.neoncache[i].v) {       // there is something at ninst for i
-                fpu_purgecache(dyn, ninst, 1, s1, s2, s3);
-                MESSAGE(LOG_DUMP, "\t---- Cache Transform\n");
-                return;
-            }
         MESSAGE(LOG_DUMP, "\t---- Cache Transform\n");
         return;
     }
@@ -2353,7 +2366,7 @@ static void fpuCacheTransform(dynarec_arm_t* dyn, int ninst, int s1, int s2, int
             if(cache_i2.neoncache[i].v)
                 purge = 0;
         if(purge) {
-            fpu_purgecache(dyn, ninst, 1, s1, s2, s3);
+            fpu_purgecache(dyn, ninst, 1, s1, s2, s3, unneeded);
             MESSAGE(LOG_DUMP, "\t---- Cache Transform\n");
             return;
         }
@@ -2919,4 +2932,98 @@ int fpu_get_reg_ymm(dynarec_arm_t* dyn, int ninst, int t, int ymm, int k1, int k
     #endif
     printf_log(LOG_NONE, "BOX64 Dynarec: Error, unable to free a reg for YMM %d at inst=%d on pass %d\n", ymm, ninst, STEP);
     return i;
+}
+
+// Get an XMM quad reg and preload it (or do nothing if not possible)
+static int xmm_preload_reg(dynarec_arm_t* dyn, int ninst, int last, int xmm)
+{
+    dyn->n.ssecache[xmm].reg = fpu_get_reg_xmm(dyn, NEON_CACHE_XMMR, xmm);
+    int ret =  dyn->n.ssecache[xmm].reg;
+    dyn->n.ssecache[xmm].write = 0;
+    VLDR128_U12(ret, xEmu, offsetof(x64emu_t, xmm[xmm]));
+    return ret;
+}
+
+// Get an YMM quad reg and preload it (or do nothing if not possible)
+static int ymm_preload_reg(dynarec_arm_t* dyn, int ninst, int last, int ymm)
+{
+    int i = -1;
+    // search for when it will be loaded the first time
+    for(int ii=0; ii<32 && i==-1; ++ii)
+        if(dyn->insts[last].n.neoncache[ii].n==ymm && (dyn->insts[last].n.neoncache[ii].t==NEON_CACHE_YMMR || dyn->insts[last].n.neoncache[ii].t==NEON_CACHE_YMMW))
+            i = ii;
+    if(i!=-1) {
+        VLDR128_U12(i, xEmu, offsetof(x64emu_t, ymm[ymm]));
+        dyn->n.neoncache[i].t = NEON_CACHE_YMMR;
+        dyn->n.neoncache[i].n = ymm;
+    }
+    return i;
+}
+
+void doPreload(dynarec_arm_t* dyn, int ninst)
+{
+    int n = ninst?(ninst-1):ninst;
+    uint32_t preload = dyn->insts[ninst].preload_xmmymm;
+    int from = dyn->insts[ninst].preload_from;
+    if(!preload) return;
+    // preload XMM
+    MESSAGE(LOG_INFO, "Preload XMM/YMM -------- %x\n", preload);
+    for(int i=0; i<16; ++i) {
+        if(preload&(1<<i)) {
+            xmm_preload_reg(dyn, n, from, i);
+        }
+        if(preload&(1<<(16+i))) {
+            ymm_preload_reg(dyn, n, from, i);
+        }
+    }
+    MESSAGE(LOG_INFO, "-------- Preload XMM/YMM\n");
+}
+
+void doEnterBlock(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3)
+{
+    // get dynarec address. It is stored just before the start of the block
+    MESSAGE(LOG_INFO, "doEnter --------\n");
+    int delta = -(dyn->native_size + sizeof(void*));
+    LDRx_literal(s1, delta);
+    // now increment in_used
+    ADDx_U12(s1, s1, offsetof(dynablock_t, in_used));
+    if(cpuext.atomics) {
+        MOV32w(s3, 1);
+        STADDLw(s3, s1);
+    } else {
+        LDAXRw(s2, s1);
+        ADDw_U12(s2, s2, 1);
+        STLXRw(s3, s2, s1);
+        CBNZw(s3, -3*4);
+    }
+    // now increment hot
+    ADDx_U12(s1, s1, offsetof(dynablock_t, hot)-offsetof(dynablock_t, in_used));
+    if(cpuext.atomics) {
+        STADDLw(s3, s1);
+    } else {
+        LDAXRw(s2, s1);
+        ADDw_U12(s2, s2, 1);
+        STLXRw(s3, s2, s1);
+        CBNZw(s3, -3*4);
+    }
+    MESSAGE(LOG_INFO, "-------- doEnter\n");
+}
+void doLeaveBlock(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3)
+{
+    MESSAGE(LOG_INFO, "doLeave --------\n");
+    // get dynarec address
+    int delta = -(dyn->native_size + sizeof(void*));
+    LDRx_literal(s1, delta);
+    ADDx_U12(s1, s1, offsetof(dynablock_t, in_used));
+    // decrement in_used
+    if(cpuext.atomics) {
+        MOV32w(s3, -1);
+        STADDLw(s3, s1);
+    } else {
+        LDAXRw(s2, s1);
+        SUBw_U12(s2, s2, 1);
+        STLXRw(s3, s2, s1);
+        CBNZw(s3, -3*4);
+    }
+    MESSAGE(LOG_INFO, "-------- doLeave\n");
 }

@@ -533,8 +533,8 @@
 #() vFXpl -> vFXpl
 #() vFXpL -> vFXpL
 #() vFXpp -> vFXpp
-#() iEEip -> iEEip
 #() iFEip -> iFEip
+#() iEEip -> iEEip
 #() iEEup -> iEEup
 #() iFEup -> iFEup
 #() iEEpi -> iEEpi
@@ -579,6 +579,7 @@
 #() iEipL -> iEipL
 #() iEipp -> iEipp
 #() iFipp -> iFipp
+#() iEipO -> iEipO
 #() iFuip -> iFuip
 #() iEuui -> iEuui
 #() iEuuu -> iEuuu
@@ -711,6 +712,7 @@
 #() pFEiu -> pFEiu
 #() pEEip -> pEEip
 #() pFEiV -> pFEiV
+#() pFELV -> pFELV
 #() pEEpi -> pEEpi
 #() pFEpi -> pFEpi
 #() pEEpp -> pEEpp
@@ -1138,6 +1140,7 @@
 #() LFEpLp -> LFEpLp
 #() LFEXii -> LFEXii
 #() LEpLLS -> LEpLLS
+#() LEppLL -> LEppLL
 #() LEppLp -> LEppLp
 #() LEppLa -> LEppLa
 #() LFXCii -> LFXCii
@@ -1405,6 +1408,7 @@
 #() iEEipii -> iEEipii
 #() iEEipuu -> iEEipuu
 #() iEEipup -> iEEipup
+#() iEEippi -> iEEippi
 #() iEEippL -> iEEippL
 #() iEEuupi -> iEEuupi
 #() iFEpiup -> iFEpiup
@@ -1740,7 +1744,6 @@
 #() iFXpLiWL -> iFXpLiWL
 #() iFXpLLiL -> iFXpLLiL
 #() iFXppppi -> iFXppppi
-#() iFXppppp -> iFXppppp
 #() uFEpippi -> uFEpippi
 #() uFupuufp -> uFupuufp
 #() uFpppppp -> uFpppppp
@@ -2079,7 +2082,6 @@
 #() iFXLLpiiuuii -> iFXLLpiiuuii
 #() pFEpiiiiuuuu -> pFEpiiiiuuuu
 #() pFEpnCuuuCup -> pFEpnCuuuCup
-#() pFpppppppppp -> pFpppppppppp
 #() pFXpuiipuuii -> pFXpuiipuuii
 #() iFppLpLLpLpbL_ -> iFppLpLLpLpB
 #() iFXiiLiiibiip_ip -> iFXiiLiiiBip
@@ -2447,14 +2449,14 @@ wrappedlibc:
   - _obstack_newchunk
 - vEpu:
 - vEpp:
-- iFip:
-  - __fstat64_time64
 - iEip:
   - __futimens64
   - fstatvfs
   - fstatvfs64
   - futimens
   - futimes
+- iFip:
+  - __fstat64_time64
 - iEup:
   - getrlimit
   - setrlimit
@@ -2470,7 +2472,6 @@ wrappedlibc:
   - statvfs
   - statvfs64
   - utimes
-- iFpp:
 - iEpV:
   - execl
   - execlp
@@ -2577,6 +2578,8 @@ wrappedlibc:
   - __xmknod
 - iEippi:
   - __fstatat64_time64
+  - fstatat
+  - fstatat64
   - utimensat
 - iEippL:
   - readlinkat
@@ -2613,6 +2616,9 @@ wrappedlibc:
 - iEuppLp:
   - getgrgid_r
   - getpwuid_r
+- iEpiipi:
+  - res_query
+  - res_search
 - iEpiipV:
 - iEpiLpp:
 - iEpipOi:
@@ -3016,6 +3022,8 @@ wrappedlibx11:
   - XLookupKeysym
 - pFiV:
   - XVaCreateNestedList
+- pFLV:
+  - XGetICValues
 - pFpV:
   - XCreateIC
   - XGetIMValues
@@ -3136,6 +3144,7 @@ wrappedlibx11:
 - iFXppppp:
   - XRegisterIMInstantiateCallback
   - XUnregisterIMInstantiateCallback
+  - XkbQueryExtension
 - vFXLpiipi:
   - XmbDrawText
   - Xutf8DrawText

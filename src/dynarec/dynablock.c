@@ -437,11 +437,15 @@ dynablock_t* DBAlternateBlock(x64emu_t* emu, uintptr_t addr, uintptr_t filladdr,
 
 uintptr_t getX64Address(dynablock_t* db, uintptr_t native_addr)
 {
-    uintptr_t x64addr = (uintptr_t)db->x64_addr;
-    uintptr_t armaddr = (uintptr_t)db->block;
     if ((native_addr < (uintptr_t)db->block) || (native_addr > (uintptr_t)db->actual_block + db->size))
         return 0;
-    if (!db->isize) return (uintptr_t)db->x64_addr;
+    uintptr_t x64addr = (uintptr_t)db->x64_addr;
+    uintptr_t armaddr = (uintptr_t)db->block;
+    if (!db->isize) return x64addr;
+    if(native_addr<(uintptr_t)db->block+db->prefixsize)
+        // issue indide the prefix, return as the 1st opcode
+        return x64addr;
+    armaddr += db->prefixsize;
     int i = 0;
     do {
         int x64sz = 0;
@@ -467,6 +471,7 @@ int getX64AddressInst(dynablock_t* db, uintptr_t x64pc)
     int ret = 0;
     if (x64pc < (uintptr_t)db->x64_addr || x64pc > (uintptr_t)db->x64_addr + db->x64_size)
         return -1;
+    armaddr += db->prefixsize;
     int i = 0;
     do {
         int x64sz = 0;
@@ -489,7 +494,7 @@ int getX64AddressInst(dynablock_t* db, uintptr_t x64pc)
 uintptr_t getX64InstAddress(dynablock_t* db, int inst)
 {
     uintptr_t x64addr = (uintptr_t)db->x64_addr;
-    uintptr_t armaddr = (uintptr_t)db->block;
+    uintptr_t armaddr = (uintptr_t)db->block + db->prefixsize;
     if (inst < 0 || inst > db->isize)
         return (uintptr_t)-1LL;
     int i = 0;

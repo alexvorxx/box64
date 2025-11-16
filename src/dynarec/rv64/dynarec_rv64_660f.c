@@ -1202,13 +1202,34 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             }
             break;
         case 0xA4:
-            nextop = F8;
             INST_NAME("SHLD Ew, Gw, Ib");
-            SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
-            GETEW(x1, 0);
+            nextop = F8;
+            u8 = geted_ib(dyn, addr, ninst, nextop) & 0x1f;
+            if (u8) {
+                SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
+                GETEW(x1, 1);
+                GETGW(x2);
+                u8 = F8;
+                emit_shld16c(dyn, ninst, rex, ed, gd, u8, x6, x4, x5);
+                EWBACK;
+            } else {
+                FAKEED;
+                F8;
+            }
+            break;
+        case 0xA5:
+            nextop = F8;
+            INST_NAME("SHLD Ew, Gw, CL");
+            if (BOX64DRENV(dynarec_safeflags) > 1) {
+                READFLAGS(X_ALL);
+                SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_FUSION);
+            } else
+                SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
             GETGW(x2);
-            u8 = F8;
-            emit_shld16c(dyn, ninst, rex, ed, gd, u8, x6, x4, x5);
+            GETEW(x1, 0);
+            ANDI(x4, xRCX, 0x1f);
+            UFLAG_IF { BEQ_NEXT(x4, xZR); }
+            emit_shld16(dyn, ninst, ed, gd, x4, x5, x6, x7);
             EWBACK;
             break;
         case 0xAB:
@@ -1256,15 +1277,36 @@ uintptr_t dynarec64_660F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
         case 0xAC:
             nextop = F8;
             INST_NAME("SHRD Ew, Gw, Ib");
-            SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
-            GETEW(x1, 0);
+            u8 = geted_ib(dyn, addr, ninst, nextop) & 0x1f;
+            if (u8) {
+                SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
+                GETEW(x1, 1);
+                GETGW(x2);
+                u8 = F8;
+                emit_shrd16c(dyn, ninst, rex, ed, gd, u8, x6, x4, x5);
+                EWBACK;
+            } else {
+                FAKEED;
+                F8;
+            }
+            break;
+        case 0xAD:
+            nextop = F8;
+            INST_NAME("SHRD Ew, Gw, CL");
+            if (BOX64DRENV(dynarec_safeflags) > 1) {
+                READFLAGS(X_ALL);
+                SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_FUSION);
+            } else
+                SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
             GETGW(x2);
-            u8 = F8;
-            emit_shrd16c(dyn, ninst, rex, ed, gd, u8, x6, x4, x5);
+            GETEW(x1, 0);
+            ANDI(x4, xRCX, 0x1f);
+            UFLAG_IF { BEQ_NEXT(x4, xZR); }
+            emit_shrd16(dyn, ninst, ed, gd, x4, x5, x6, x7);
             EWBACK;
             break;
         case 0xAF:
-            INST_NAME("IMUL Gw,Ew");
+            INST_NAME("IMUL Gw, Ew");
             SETFLAGS(X_ALL, SF_PENDING, NAT_FLAGS_NOFUSION);
             nextop = F8;
             GETSEW(x1, 0);

@@ -384,7 +384,7 @@ GO(XGetGeometry, iFXLbL_pppppp)
 GO(_XGetHostname, iFpi)
 GO(XGetIconName, iFXLbp_)
 GO(XGetIconSizes, iFXLbp_p)
-GO(XGetICValues, pFpppppppppp)      // use varargs...
+GOM(XGetICValues, pFELV)      // use varargs...
 GOM(XGetImage, pFEXLiiuuLi)     // return an XImage with callbacks that needs wrapping
 GOM(XGetIMValues, pFEpV)
 GO(XGetInputFocus, iFXBL_p)
@@ -745,7 +745,7 @@ GO(XkbLookupKeySym, iFXCupbL_)
 //GO(XkbNoteNameChanges, vFbuCCCCCCCCWLC_biLiXLiiuiiiiiiuuuii_u)
 GO(XkbOpenDisplay, XFpppppp)
 //GO(_XkbPeekAtReadBuffer, 
-GO(XkbQueryExtension, iFXppppp)
+GOM(XkbQueryExtension, iFEXppppp)
 //GO(_XkbReadBufferCopy32, 
 //GO(_XkbReadBufferCopyKeySyms, 
 //GO(_XkbReadCopyData32, 

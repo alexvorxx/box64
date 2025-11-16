@@ -39,6 +39,9 @@
 #ifndef FEMIT
 #define FEMIT(A)    EMIT(A)
 #endif
+#ifndef ENDPREFIX
+#define ENDPREFIX
+#endif
 
 //LOCK_* define
 #define LOCK_LOCK   (int*)1
@@ -1483,6 +1486,9 @@
 #define ymm_get_reg_empty STEPNAME(ymm_get_reg_empty)
 #define ymm_mark_zero     STEPNAME(ymm_mark_zero)
 #define fpu_get_reg_ymm   STEPNAME(fpu_get_reg_ymm)
+#define doPreload         STEPNAME(doPreload)
+#define doEnterBlock      STEPNAME(doEnterBlock)
+#define doLeaveBlock      STEPNAME(doLeaveBlock)
 
 #define fpu_pushcache   STEPNAME(fpu_pushcache)
 #define fpu_popcache    STEPNAME(fpu_popcache)
@@ -1671,8 +1677,10 @@ void arm64_move64(dynarec_arm_t* dyn, int ninst, int reg, uint64_t val);
 
 #if STEP < 2
 #define CHECK_CACHE()   0
+#elif STEP == 2
+#define CHECK_CACHE()   (cacheupd = dyn->insts[ninst].cacheupd = CacheNeedsTransform(dyn, ninst))
 #else
-#define CHECK_CACHE()   (cacheupd = CacheNeedsTransform(dyn, ninst))
+#define CHECK_CACHE()   (cacheupd = dyn->insts[ninst].cacheupd)
 #endif
 
 #define neoncache_st_coherency STEPNAME(neoncache_st_coherency)
@@ -1726,7 +1734,7 @@ void fpu_reset_cache(dynarec_arm_t* dyn, int ninst, int reset_n);
 // propagate stack state
 void fpu_propagate_stack(dynarec_arm_t* dyn, int ninst);
 // purge the FPU cache (needs 3 scratch registers)
-void fpu_purgecache(dynarec_arm_t* dyn, int ninst, int next, int s1, int s2, int s3);
+void fpu_purgecache(dynarec_arm_t* dyn, int ninst, int next, int s1, int s2, int s3, uint32_t unneeded);
 // purge MMX cache
 void mmx_purgecache(dynarec_arm_t* dyn, int ninst, int next, int s1);
 // purge x87 cache
@@ -1749,6 +1757,12 @@ int ymm_get_reg_empty(dynarec_arm_t* dyn, int ninst, int s1, int a, int k1, int 
 void ymm_mark_zero(dynarec_arm_t* dyn, int ninst, int a);
 // Get an YMM upper quad reg, while keeping up to 3 other YMM reg (-1 to no keep)
 int fpu_get_reg_ymm(dynarec_arm_t* dyn, int ninst, int t, int ymm, int k1, int k2, int k3);
+// Preload XMM/YMM regs
+void doPreload(dynarec_arm_t* dyn, int ninst);
+// Enter a block (atomic inrement of hot and in_used)
+void doEnterBlock(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3);
+// Leave a block (atomic decrement of in_used)
+void doLeaveBlock(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3);
 
 uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
 uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);

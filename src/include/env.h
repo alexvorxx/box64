@@ -73,6 +73,7 @@ extern char* ftrace_name;
     INTEGER(BOX64_DYNAREC_WEAKBARRIER, dynarec_weakbarrier, 1, 0, 2, 1)       \
     INTEGER(BOX64_DYNAREC_X87DOUBLE, dynarec_x87double, 0, 0, 2, 1)           \
     BOOLEAN(BOX64_DYNAREC_INTERP_SIGNAL, dynarec_interp_signal, 0, 0)         \
+    BOOLEAN(BOX64_DYNAREC_PURGE, dynarec_purge, 0, 0)                         \
     BOOLEAN(BOX64_NODYNAREC_DELAY, nodynarec_delay, 0, 1)                     \
     STRING(BOX64_EMULATED_LIBS, emulated_libs, 0)                             \
     INTEGER(BOX64_DYNAREC_NOARCH, dynarec_noarch, 0, 0, 2, 1)                 \
@@ -128,6 +129,7 @@ extern char* ftrace_name;
     INTEGER64(BOX64_TRACE_START, start_cnt, 0, 0)                             \
     BOOLEAN(BOX64_TRACE_XMM, trace_xmm, 0, 0)                                 \
     STRING(BOX64_TRACE, trace, 0)                                             \
+    BOOLEAN(BOX64_UNITY, unity, 0, 0)                                         \
     BOOLEAN(BOX64_UNITYPLAYER, unityplayer, 1, 0)                             \
     BOOLEAN(BOX64_WRAP_EGL, wrap_egl, 0, 0)                                   \
     BOOLEAN(BOX64_X11GLX, x11glx, 1, 0)                                       \
