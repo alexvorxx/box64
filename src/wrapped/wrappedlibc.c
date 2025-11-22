@@ -1936,6 +1936,17 @@ EXPORT int32_t my_open(x64emu_t* emu, void* pathname, int32_t flags, uint32_t mo
         return tmp;
     }
 
+    if(!strcmp((const char*)pathname, "/etc/os-release")) {
+        char* pv = getenv("BOX64_PRESSURE_VESSEL_FILES");
+        if(pv) {
+            char tmp[MAX_PATH] = {0};
+            snprintf(tmp, sizeof(tmp)-1, "%s/lib/os-release", pv);
+            if(FileExist(tmp, IS_FILE)) {
+                return open(tmp, flags, mode);
+            }
+        }
+    }
+
     int ret = open(pathname, flags, mode);
     return ret;
 }
@@ -2992,6 +3003,10 @@ extern int have48bits;
 void* last_mmap_addr[2] = {0};
 size_t last_mmap_len[2] = {0};
 int last_mmap_idx = 0;
+#ifdef DYNAREC
+void* last_mmap_0_addr = NULL;
+size_t last_mmap_0_len = 0;
+#endif
 EXPORT void* my_mmap64(x64emu_t* emu, void *addr, size_t length, int prot, int flags, int fd, ssize_t offset)
 {
     (void)emu;
@@ -3050,6 +3065,15 @@ EXPORT void* my_mmap64(x64emu_t* emu, void *addr, size_t length, int prot, int f
             last_mmap_len[last_mmap_idx] = 0;
         }
         last_mmap_idx = 1-last_mmap_idx;
+        #ifdef DYNAREC
+        if(!prot) {
+            last_mmap_0_addr = ret;
+            last_mmap_0_len = length;
+        } else {
+            last_mmap_0_addr = NULL;
+            last_mmap_0_len = 0;
+        }
+        #endif
         if(emu)
             setProtection_mmap((uintptr_t)ret, length, prot);
         else
@@ -3064,6 +3088,10 @@ EXPORT void* my_mmap(x64emu_t* emu, void *addr, size_t length, int prot, int fla
 
 EXPORT void* my_mremap(x64emu_t* emu, void* old_addr, size_t old_size, size_t new_size, int flags, void* new_addr)
 {
+    #ifdef DYNAREC
+    last_mmap_0_addr = NULL;
+    last_mmap_0_len = 0;
+    #endif
     (void)emu;
     if((emu || box64_is32bits) && (BOX64ENV(log)>=LOG_DEBUG || BOX64ENV(dynarec_log)>=LOG_DEBUG)) {printf_log(LOG_NONE, "mremap(%p, %lu, %lu, %d, %p)=>", old_addr, old_size, new_size, flags, new_addr);}
     void* ret = mremap(old_addr, old_size, new_size, flags, new_addr);
@@ -3123,8 +3151,12 @@ EXPORT int my_munmap(x64emu_t* emu, void* addr, size_t length)
         WillRemoveMapping((uintptr_t)addr, length);
     }
     if(!ret && BOX64ENV(dynarec) && length) {
-        cleanDBFromAddressRange((uintptr_t)addr, length, 1);
+        if(last_mmap_0_len && last_mmap_0_addr==addr && last_mmap_0_len==length)
+        {} else // ignore this one
+            cleanDBFromAddressRange((uintptr_t)addr, length, 1);
     }
+    last_mmap_0_addr = NULL;
+    last_mmap_0_len = 0;
     #endif
     if(!ret) {
         last_mmap_addr[1-last_mmap_idx] = NULL;
@@ -3138,6 +3170,10 @@ EXPORT int my_munmap(x64emu_t* emu, void* addr, size_t length)
 
 EXPORT int my_mprotect(x64emu_t* emu, void *addr, unsigned long len, int prot)
 {
+    #ifdef DYNAREC
+    last_mmap_0_addr = NULL;
+    last_mmap_0_len = 0;
+    #endif
     (void)emu;
     if(emu && (BOX64ENV(log)>=LOG_DEBUG || BOX64ENV(dynarec_log)>=LOG_DEBUG)) {printf_log(LOG_NONE, "mprotect(%p, 0x%lx, 0x%x)\n", addr, len, prot);}
     if(prot&PROT_WRITE)

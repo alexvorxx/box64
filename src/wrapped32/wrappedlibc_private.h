@@ -160,7 +160,7 @@ GO(clearerr, vES)
 GO(clock, lEv)
 // clone    // Weak
 // __clone
-GOW(close, iEi)
+GOWM(close, iEEi)   //%%
 // __close  // Weak
 GOW(closedir, iEp)
 GO(closelog, vEv)
@@ -592,6 +592,7 @@ GO(getrlimit64, iEup)
 // getrpcent_r
 // getrpcport
 GOW(getrusage, iEiBLLLLLLLLLLLLLLLLLL_)
+GO2(__getrusage64, iEiBUUUULLLLLLLLLLLLLL_, getrusage)
 //GOW(gets, pEp)
 // __gets_chk
 // getsecretkey
@@ -1237,10 +1238,10 @@ GOWM(obstack_vprintf, iEEpppp)  //%%
 // __obstack_vprintf_chk
 //GOWM(on_exit, iEEpp)  //%%
 //GO2(__on_exit, iEEpp, my_on_exit)   //%%
-GOW2(open, iEEpON, my_open)    //%%
-GOW2(__open, iEEpON, my_open)  //%%
+GOWM(open, iEEpON)    //%%
+GOW2(__open, iEEpON, my32_open)  //%%
 GO(__open_2, iEpO)
-GOW2(open64, iEEpON, my_open64)  //%%
+GOWM(open64, iEEpON)  //%%
 // __open64 // Weak
 GO(__open64_2, iEpO)
 //GOW(openat, iEipON)
@@ -1765,6 +1766,7 @@ GO(strtoll, IEpBp_i)
 //GOW(strtol_l, lEppiip)
 GO(__strtoll_internal, IEpBp_ii)
 GO(__strtoll_l, IEpBp_ia)
+GO2(__isoc23_strtoll_l, IEpBp_ia, __strtoll_l)
 GOW(strtoll_l, IEpBp_ia)
 GOW(strtoq, IEppi)  // is that ok?
 GOM(strtoul, LEpBp_i)   //%%,noE
@@ -1774,6 +1776,7 @@ GO(strtoull, UEpBp_i)
 //GOW(strtoul_l, LEppip)
 GO(__strtoull_internal, UEpBp_ii)
 GO(__strtoull_l, UEpBp_ia)
+GO2(__isoc23_strtoull_l, UEpBp_ia, __strtoull_l)
 GOW(strtoull_l, UEpBp_ia)
 //GO(strtoumax, UEppi)
 GOW(strtouq, UEppi) // ok?
@@ -2093,7 +2096,7 @@ GO(wmemset, pEpiL)
 // __woverflow
 GOM(wprintf, iEEpV) //%%
 //GOM(__wprintf_chk, iEEipV) //%%
-GOW(write, lEipL)
+GOWM(write, lEEipL)
 //GOW(__write, lEipL)
 GOWM(writev, lEEipi)
 // wscanf

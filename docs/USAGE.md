@@ -255,12 +255,12 @@ Add -cef-disable-gpu argument to the guest program.
  * 0: Does nothing. [Default]
  * 1: Add -cef-disable-gpu argument to the guest program. 
 
-### BOX64_CEFDISABLEGPUCOMPOSITOR
+### BOX64_CEFDISABLEGPUCOMPOSITING
 
-Add -cef-disable-gpu-compositor argument to the guest program.
+Add -cef-disable-gpu-compositing argument to the guest program.
 
  * 0: Does nothing. [Default]
- * 1: Add -cef-disable-gpu-compositor argument to the guest program. 
+ * 1: Add -cef-disable-gpu-compositing argument to the guest program. 
 
 ### BOX64_INSERT_ARGS
 
@@ -475,6 +475,13 @@ Expose SSE4.2 capabilities. Available in WowBox64.
 
  * 0: Do not expose SSE4.2 capabilities. 
  * 1: Expose SSE4.2 capabilities. [Default]
+
+### BOX64_STEAM_VULKAN
+
+Force Vulkan for Linux Steam UI.
+
+ * 0: Do nothing. [Default]
+ * 1: Force Vulkan for Linux Steam UI. 
 
 ### BOX64_SYNC_ROUNDING
 

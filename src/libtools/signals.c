@@ -1264,6 +1264,9 @@ void my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigi
             #ifdef RV64
             emu->xSPSave = emu->old_savedsp;
             #endif
+            #ifdef DYNAREC
+            dynablock_leave_runtime((dynablock_t*)cur_db);
+            #endif
             #ifdef ANDROID
             siglongjmp(*emu->jmpbuf, skip);
             #else
@@ -1566,6 +1569,7 @@ void my_box64signalhandler(int32_t sig, siginfo_t* info, void * ucntx)
                         dynarec_log(LOG_INFO, "Dynablock (%p, x64addr=%p) %s, getting out at %s %p (%p)!\n", db, db->x64_addr, is_hotpage?"in HotPage":"dirty", getAddrFunctionName(R_RIP), (void*)R_RIP, type_callret?"self-loop":"ret from callret", (void*)addr);
                         emu->test.clean = 0;
                         // use "3" to regen a dynablock at current pc (else it will first do an interp run)
+                        dynablock_leave_runtime(db);
                         #ifdef ANDROID
                         siglongjmp(*(JUMPBUFF*)emu->jmpbuf, 3);
                         #else
@@ -1637,6 +1641,7 @@ void my_box64signalhandler(int32_t sig, siginfo_t* info, void * ucntx)
                     CancelBlock64(1);
                 emu->test.clean = 0;
                 // will restore unblocked Signal flags too
+                dynablock_leave_runtime(db);
                 #ifdef ANDROID
                 siglongjmp(*(JUMPBUFF*)emu->jmpbuf, 2);
                 #else
@@ -1647,9 +1652,17 @@ void my_box64signalhandler(int32_t sig, siginfo_t* info, void * ucntx)
         }
         // done
         if((prot&PROT_WRITE)/*|| (prot&PROT_DYNAREC)*/) {
-            unlock_signal();
-            dynarec_log(LOG_INFO, "Writting from %04d|%p(%s, native=%s) to %p!\n", GetTID(), (void*)x64pc, getAddrFunctionName(x64pc), db?"Dynablock":GetNativeName(pc),(void*)addr);
+            if(BOX64ENV(dynarec_log)) {
+                char tmp[128] = {0};
+                zydis_dec_t* dec = emu->segs[_CS] == 0x23 ? my_context->dec32 : my_context->dec;
+                if (dec)
+                snprintf(tmp, 127, " %sopcode=%s; native opcode=%08x", (emu->segs[_CS] == 0x23) ? "x86" : "x64", DecodeX64Trace(dec, x64pc, 1), *(uint32_t*)pc);
+                else
+                snprintf(tmp, 127, " %sopcode=%02X %02X %02X %02X %02X %02X %02X %02X (opcode=%08x)", (emu->segs[_CS] == 0x23) ? "x86" : "x64", ((uint8_t*)x64pc)[0], ((uint8_t*)x64pc)[1], ((uint8_t*)x64pc)[2], ((uint8_t*)x64pc)[3], ((uint8_t*)x64pc)[4], ((uint8_t*)x64pc)[5], ((uint8_t*)x64pc)[6], ((uint8_t*)x64pc)[7], *(uint32_t*)pc);
+                dynarec_log(LOG_INFO, "Writting from %04d|%p(%s, native=%s) to %p using %s\n", GetTID(), (void*)x64pc, getAddrFunctionName(x64pc), db?"Dynablock":GetNativeName(pc),(void*)addr, tmp);
+            }
             // if there is no write permission, don't return and continue to program signal handling
+            unlock_signal();
             relockMutex(Locks);
             return;
         }

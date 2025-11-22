@@ -9,6 +9,8 @@
 
 void convertXEvent(my_XEvent_32_t* dst, my_XEvent_t* src);
 void unconvertXEvent(my_XEvent_t* dst, my_XEvent_32_t* src);
+void inplace_XEventData_shring(my_XEvent_t* evt);
+void inplace_XEventData_enlarge(my_XEvent_t* evt);
 void convert_XErrorEvent_to_32(void* d, void* s);
 void convert_XErrorEvent_to_64(void* d, void* s);
 
@@ -122,5 +124,7 @@ void* inplace_XFilters_enlarge(void* a);
 
 void* inplace_XRRMonitorInfo_shrink(void* a, int n);
 void* inplace_XRRMonitorInfo_enlarge(void* a, int n);
+
+void* inplace_XRRCrtcTransformAttributes_shrink(void* a);
 
 #endif//MY_X11_CONV

@@ -445,6 +445,7 @@
 #() uFpbppuiiiiiiiiipp_ -> uFpB
 #() vFbppuuuuup_bppuuuuup_ -> vFBB
 #() iEiBLLLLLLLLLLLLLLLLLL_ -> iEiB
+#() iEiBUUUULLLLLLLLLLLLLL_ -> iEiB
 #() vFbppuiiiiiiiiipp_bppuiiiiiiiiipp_ -> vFBB
 #() uFbppuiiiiiiiiipp_bppuiiiiiiiiipp_ -> uFBB
 #() vEEip -> vEEip
@@ -715,6 +716,7 @@
 #() pFELV -> pFELV
 #() pEEpi -> pEEpi
 #() pFEpi -> pFEpi
+#() pFEpu -> pFEpu
 #() pEEpp -> pEEpp
 #() pFEpp -> pFEpp
 #() pFEpV -> pFEpV
@@ -792,6 +794,7 @@
 #() iFbp_Wp -> iFBWp
 #() iFbp_up -> iFBup
 #() iEBp_LL -> iEBLL
+#() iFBp_LL -> iFBLL
 #() iFbp_pi -> iFBpi
 #() iFbL_pi -> iFBpi
 #() iFbp_pI -> iFBpI
@@ -1129,6 +1132,7 @@
 #() uFpppd -> uFpppd
 #() uFpppp -> uFpppp
 #() lEEipi -> lEEipi
+#() lEEipL -> lEEipL
 #() lEEppL -> lEEppL
 #() lEiipL -> lEiipL
 #() lEipLi -> lEipLi
@@ -1524,10 +1528,10 @@
 #() pFpippi -> pFpippi
 #() pFpippp -> pFpippp
 #() pFpuiii -> pFpuiii
-#() pFpuuip -> pFpuuip
 #() pFpuuuu -> pFpuuuu
 #() pFpuppp -> pFpuppp
 #() pFpdddd -> pFpdddd
+#() pFpLLip -> pFpLLip
 #() pFppipi -> pFppipi
 #() pFppuup -> pFppuup
 #() pFppupp -> pFppupp
@@ -1984,6 +1988,7 @@
 #() uFulpppppp -> uFulpppppp
 #() LFEXLppuuu -> LFEXLppuuu
 #() LFXLpuuLLu -> LFXLpuuLLu
+#() pFEppipipp -> pFEppipipp
 #() pFEXpLLppp -> pFEXpLLppp
 #() iFXLLiippBL_ -> iFXLLiippB
 #() iFXLpppbL_pp -> iFXLpppBpp
@@ -2123,6 +2128,7 @@
 #() iFXLpppppppppp -> iFXLpppppppppp
 #() pFEXLiiuuLipii -> pFEXLiiuuLipii
 #() iFXiLbL_bL_ppppbip_pp -> iFXiLBBppppBpp
+#() iFXiLlliLBL_pBL_BL_bp_ -> iFXiLlliLBpBBB
 #() vFXiLLrLiiwwwwwwwwL_Liiiipi -> vFXiLLBLiiiipi
 #() vFuiiiiiiiiiuup -> vFuiiiiiiiiiuup
 #() vFuuuuuuuuuuuuu -> vFuuuuuuuuuuuuu
@@ -2231,6 +2237,8 @@ wrappedfontconfig:
   - FcFontSetAdd
 - uFpu:
   - FcFreeTypeCharIndex
+- pFpu:
+  - FcConfigGetFonts
 - pFpp:
 - pFpV:
   - FcObjectSetBuild
@@ -2241,6 +2249,8 @@ wrappedfontconfig:
   - FcPatternAdd
 - pFppibp_p:
   - FcFontSort
+- pFppipipp:
+  - FcFontSetSort
 wrappedfreetype:
 - vFp:
   - FT_Done_Glyph
@@ -2500,6 +2510,8 @@ wrappedlibc:
   - localtime_r
 - SEpp:
 - iErLL_BLL_:
+- iEiBUUUULLLLLLLLLLLLLL_:
+  - __getrusage64
 - vEipp:
   - vsyslog
 - vEipV:
@@ -2539,6 +2551,7 @@ wrappedlibc:
   - sendmsg
   - writev
 - lEipL:
+  - write
 - lEppL:
 - pEipi:
   - shmat
@@ -2597,6 +2610,10 @@ wrappedlibc:
 - iESipV:
 - uEippu:
   - regerror
+- IEpBp_ia:
+  - __isoc23_strtoll_l
+- UEpBp_ia:
+  - __isoc23_strtoull_l
 - LEpBp_ii:
 - iEiiipu:
   - __setsockopt64
@@ -2991,6 +3008,8 @@ wrappedlibx11:
   - XRefreshKeyboardMapping
   - XScreenNumberOfScreen
   - _XInitImageFuncPtrs
+- iEp:
+  - XkbRefreshKeyboardMapping
 - iFX:
   - XCloseDisplay
   - XGrabServer
@@ -3300,6 +3319,8 @@ wrappedlibxrandr:
   - XRRGetProviderResources
   - XRRGetScreenResources
   - XRRGetScreenResourcesCurrent
+- iFXLp:
+  - XRRGetCrtcTransform
 - iFXpp:
   - XRRQueryExtension
 - pFXLL:

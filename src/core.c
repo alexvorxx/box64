@@ -414,7 +414,8 @@ static void addLibPaths(box64context_t* context)
     AddPath("libunwind.so.8", &context->box64_emulated_libs, 0);
     AddPath("libpng12.so.0", &context->box64_emulated_libs, 0);
     AddPath("libcurl.so.4", &context->box64_emulated_libs, 0);
-    //AddPath("libgnutls.so.30", &context->box64_emulated_libs, 0);
+    if(getenv("BOX64_PRESSURE_VESSEL_FILES"))   // use emulated gnutls in this case, it's safer
+        AddPath("libgnutls.so.30", &context->box64_emulated_libs, 0);
     AddPath("libtbbmalloc.so.2", &context->box64_emulated_libs, 0);
     AddPath("libtbbmalloc_proxy.so.2", &context->box64_emulated_libs, 0);
 
@@ -1062,9 +1063,9 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
     {
         add_argv("-cef-disable-gpu");
     }
-    if(BOX64ENV(cefdisablegpucompositor))
+    if(BOX64ENV(cefdisablegpucompositing))
     {
-        add_argv("-cef-disable-gpu-compositor");
+        add_argv("-cef-disable-gpu-compositing");
     }
     // add new args only if there is no args already
     if(BOX64ENV(args)) {

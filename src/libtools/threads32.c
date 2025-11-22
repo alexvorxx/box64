@@ -422,28 +422,33 @@ static void* findkey_destructorFct(void* fct)
 
 int EXPORT my32_pthread_once(x64emu_t* emu, int* once, void* cb)
 {
-	if(*once)	// quick test first
+	if(*once==1)	// quick test first
 		return 0;
-	// slow test now
-	#ifdef DYNAREC
-	int old = native_lock_xchg_d(once, 1);
-	#else
-	int old = *once;	// outside of the mutex in case once is badly formed
-	pthread_mutex_lock(&my_context->mutex_lock);
-	old = *once;
-	*once = 1;
-	pthread_mutex_unlock(&my_context->mutex_lock);
-	#endif
-	if(old)
-		return 0;
-    // make some room and align R_RSP before doing the call (maybe it would be simpler to just use Callback functions)
-    Push_32(emu, R_EBP); // push rbp
-    R_EBP = R_ESP;      // mov rbp, rsp
-    R_ESP -= 0x200;
-    R_ESP &= ~63LL;
-	DynaCall(emu, (uintptr_t)cb);
-	R_ESP = R_EBP;          // mov rsp, rbp
-	R_EBP = Pop32(emu);     // pop rbp
+	if(__sync_bool_compare_and_swap(once, 0, 2)) {
+		// make some room and align R_RSP before doing the call (maybe it would be simpler to just use Callback functions)
+		Push_32(emu, R_EBP); // push rbp
+		R_EBP = R_ESP;      // mov rbp, rsp
+		R_ESP -= 0x200;
+		R_ESP &= ~63LL;
+		DynaCall(emu, (uintptr_t)cb);
+		R_ESP = R_EBP;          // mov rsp, rbp
+		R_EBP = Pop32(emu);     // pop rbp
+		*once = 1;
+		__sync_synchronize();
+	} else {
+		// nope, functionis running, wait until it's done
+		// adding the same workaround as in 64bits version, just in case
+		struct timespec ts;
+		clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+		uint64_t t = ts.tv_sec*1000000000LL + ts.tv_nsec;
+		while(*once!=1) {
+			sched_yield();
+			clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+			if((ts.tv_sec*1000000000LL + ts.tv_nsec)-t>10*1000000LL)	// if wait last for more than 10ms, force as completed
+				*once = 1;
+			__sync_synchronize();
+		}
+	}
 	return 0;
 }
 EXPORT int my32___pthread_once(x64emu_t* emu, void* once, void* cb) __attribute__((alias("my32_pthread_once")));

@@ -1652,14 +1652,23 @@ EXPORT int my32_XUnregisterIMInstantiateCallback(x64emu_t* emu, void* d, void* d
 {
     return my->XUnregisterIMInstantiateCallback(d, db, res_name, res_class, reverse_register_imFct(my_lib, cb), data);
 }
+extern int my32_xinput_opcode;
 EXPORT int my32_XQueryExtension(x64emu_t* emu, void* display, char* name, int* major, int* first_event, int* first_error)
 {
-    int ret = my->XQueryExtension(display, name, major, first_event, first_error);
+    int fevent;
+    int ret = my->XQueryExtension(display, name, major, &fevent, first_error);
+    if(first_event) *first_event = fevent;
     if(!ret && name && !strcmp(name, "GLX") && BOX64ENV(x11glx)) {
         // hack to force GLX to be accepted, even if not present
         // left major and first_XXX to default...
         ret = 1;
-    }
+    } else if(!strcmp(name, "XInputExtension") && major) {
+        my32_xinput_opcode = *major;
+    } else if(!strcmp(name, "XFIXES")) {
+        register_XFixes_events(fevent);
+    } /*else if(ret && first_event) {
+        printf_log(LOG_INFO, "X11 Extension \"%s\" first XEvent %d\n", name, *first_event);
+    }*/
     return ret;
 }
 EXPORT int my32_XkbQueryExtension(x64emu_t* emu, void* display, char* opcode, int* event_base, int* error, int* major, int* minor)
@@ -1788,14 +1797,20 @@ EXPORT int my32_XGetEventData(x64emu_t* emu, void* dpy, my_XEvent_32_t* evt)
     my_XEvent_t event = {0};
     if(evt) unconvertXEvent(&event, evt);
     int ret = my->XGetEventData(dpy, &event);
-    if(ret) convertXEvent(evt, &event);
+    if(ret) {
+        inplace_XEventData_shring(&event);
+        convertXEvent(evt, &event);
+    }
     return ret;
 }
 
 EXPORT void my32_XFreeEventData(x64emu_t* emu, void* dpy, my_XEvent_32_t* evt)
 {
     my_XEvent_t event = {0};
-    if(evt) unconvertXEvent(&event, evt);
+    if(evt) {
+        unconvertXEvent(&event, evt);
+        inplace_XEventData_enlarge(&event);
+    }
     my->XFreeEventData(dpy, &event);
     convertXEvent(evt, &event);
 }
@@ -1825,6 +1840,38 @@ EXPORT void* my32_XGetKeyboardMapping(x64emu_t* emu, void* dpy, uint8_t first, i
             ret_s[i] = to_ulong(ret[i]);
     }
     return ret;
+}
+
+EXPORT int my32_XkbRefreshKeyboardMapping(x64emu_t* emu, my_XkbMapNotifyEvent_32_t* evt)
+{
+    my_XkbMapNotifyEvent_t event = {0};
+    event.type = evt->type;
+    event.serial = from_ulong(evt->serial);
+    event.send_event = evt->send_event;
+    event.display = getDisplay(from_ptrv(evt->display));
+    event.time = from_ulong(evt->time);
+    event.xkb_type = evt->xkb_type;
+    event.device = evt->device;
+    event.changed = evt->changed;
+    event.flags = evt->flags;
+    event.first_type = evt->first_type;
+    event.num_types = evt->num_types;
+    event.min_key_code = evt->min_key_code;
+    event.max_key_code = evt->max_key_code;
+    event.first_key_sym = evt->first_key_sym;
+    event.first_key_act = evt->first_key_act;
+    event.first_key_behavior = evt->first_key_behavior;
+    event.first_key_explicit = evt->first_key_explicit;
+    event.first_modmap_key = evt->first_modmap_key;
+    event.first_vmodmap_key = evt->first_vmodmap_key;
+    event.num_key_syms = evt->num_key_syms;
+    event.num_key_acts = evt->num_key_acts;
+    event.num_key_behaviors = evt->num_key_behaviors;
+    event.num_key_explicit = evt->num_key_explicit;
+    event.num_modmap_keys = evt->num_modmap_keys;
+    event.num_vmodmap_keys = evt->num_vmodmap_keys;
+    event.vmods = evt->vmods;
+    return my->XkbRefreshKeyboardMapping(&event);
 }
 
 EXPORT unsigned long my32_XLookupKeysym(x64emu_t* emu, my_XEvent_32_t* evt, int index)

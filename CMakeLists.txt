@@ -15,6 +15,7 @@ option(ODROIDN2 "Set to ON if targeting an Odroid-N2 device" ${ODROIDN2})
 option(TEGRAX1 "Set to ON if targeting an Tegra X1 based device" ${TEGRAX1})
 option(TEGRA_T194 "Set to ON if targeting an Tegra Xavier based device" ${TEGRA_T194})
 option(TEGRA_T234 "Set to ON if targeting an Tegra Orin based device" ${TEGRA_T234})
+option(NVIDIA_GB10 "Set to ON if targeting a DGX Spark(GB10) based device" ${NVIDIA_GB10})
 option(PHYTIUM "Set to ON if targeting an Phytium (D2000 or FT2000/4) based device" ${PHYTIUM})
 option(SD845 "Set to ON if targeting a Snapragon 845 based device" ${SD845})
 option(SD865 "Set to ON if targeting a Snapragon 865 based device" ${SD865})
@@ -38,7 +39,7 @@ option(SAVE_MEM "Set to ON to build dynarec with some slower memory saving optim
 option(NOLOADADDR "Set to ON to avoid fixing the load address of Box64" OFF)
 option(NOGIT "Set to ON if not building from a git clone repo (like when building from a zip download from github)" ${NOGIT})
 option(BAD_SIGNAL "Set to ON to activate the workaround for incoherent si_info on SIGSEGV" ${BAD_SIGNAL})
-option(BAD_PKILL "Set to ON to activate the workaround for incoherent pthread_kill" ${BAD_SIGNAL})
+option(BAD_PKILL "Set to ON to activate the workaround for incoherent pthread_kill" ${BAD_PKILL})
 option(SW64 "Set ON if targeting an SW64 based device" ${SW64})
 option(CI "Set to ON if running in CI" ${CI})
 option(WITH_MOLD "Set to ON to use with mold" ${WITH_MOLD})
@@ -87,7 +88,7 @@ if(PPC64LE)
     set(RV64_DYNAREC OFF CACHE BOOL "")
     set(LARCH64_DYNAREC OFF CACHE BOOL "")
 endif()
-if(RK3399 OR RK3588 OR ODROIDN2 OR RPI3ARM64 OR RPI4ARM64 OR RPI5ARM64 OR RK3326 OR TEGRAX1 OR TEGRA_T194 OR TEGRA_T234 OR PHYTIUM OR SD845 OR SD865 OR SD888 OR SD8G2 OR SDORYON1 OR LX2160A OR M1 OR ARM64 OR ADLINK)
+if(RK3399 OR RK3588 OR ODROIDN2 OR RPI3ARM64 OR RPI4ARM64 OR RPI5ARM64 OR RK3326 OR TEGRAX1 OR TEGRA_T194 OR TEGRA_T234 OR NVIDIA_GB10 OR PHYTIUM OR SD845 OR SD865 OR SD888 OR SD8G2 OR SDORYON1 OR LX2160A OR M1 OR ARM64 OR ADLINK)
     set(LD80BITS OFF CACHE BOOL "")
     set(NOALIGN OFF CACHE BOOL "")
     set(ARM_DYNAREC ON CACHE BOOL "")
@@ -185,6 +186,9 @@ elseif(TEGRA_T194)
 elseif(TEGRA_T234)
     add_definitions(-DTEGRA_T234)
     set(CFLAGS -pipe -march=armv8.2-a+fp16+simd+crypto+predres -mcpu=cortex-a78ae+crypto -mtune=cortex-a78ae)
+elseif(NVIDIA_GB10)
+    add_definitions(-DNVIDIA_GB10)
+    set(CFLAGS -pipe -mcpu=gb10 -mtune=gb10)
 elseif(PHYTIUM)
     add_definitions(-DPHYTIUM)
     set(CFLAGS -pipe -march=armv8.1-a+crc+simd+crypto)
@@ -450,6 +454,7 @@ if(BOX32)
         "${BOX64_ROOT}/src/tools/box32stack.c"
         "${BOX64_ROOT}/src/emu/x86int3.c"
         "${BOX64_ROOT}/src/librarian/globalsymbols32.c"
+        "${BOX64_ROOT}/src/libtools/box32_inputevent.c"
         "${BOX64_ROOT}/src/libtools/myalign32.c"
         "${BOX64_ROOT}/src/libtools/myalign64_32.c"
         "${BOX64_ROOT}/src/libtools/myalignxcb32.c"
@@ -1193,13 +1198,13 @@ if(DYNAREC)
     add_custom_command(
         OUTPUT "${BOX64_ROOT}/src/git_head.h"
         COMMAND sh -c "echo \\\#define GITREV \\\"$(git rev-parse --short HEAD)\\\">\"${BOX64_ROOT}/src/git_head.h\""
-        DEPENDS ${DYNAREC_SRC} ${DYNAREC_ASM} ${DYNAREC_PASS} ${ELFLOADER_SRC} ${INTERPRETER} ${WRAPPEDS} ${WRAPPEDS32}
+        DEPENDS ${DYNAREC_SRC} ${DYNAREC_ASM} ${DYNAREC_PASS} ${ELFLOADER_SRC} ${INTERPRETER} ${WRAPPEDS} ${WRAPPEDS32} ${WRAPPEDS_HEAD} ${WRAPPEDS32_HEAD}
         VERBATIM)
 else()
     add_custom_command(
         OUTPUT "${BOX64_ROOT}/src/git_head.h"
         COMMAND sh -c "echo \\\#define GITREV \\\"$(git rev-parse --short HEAD)\\\">\"${BOX64_ROOT}/src/git_head.h\""
-        DEPENDS ${ELFLOADER_SRC} ${INTERPRETER} ${WRAPPEDS} ${WRAPPEDS32}
+        DEPENDS ${ELFLOADER_SRC} ${INTERPRETER} ${WRAPPEDS} ${WRAPPEDS32} ${WRAPPEDS_HEAD} ${WRAPPEDS32_HEAD}
         VERBATIM)
 endif()
 
