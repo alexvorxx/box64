@@ -21,6 +21,7 @@
 #include <poll.h>
 #include <sys/epoll.h>
 #include <ftw.h>
+#include <fts.h>
 #include <sys/syscall.h>
 #include <sys/utsname.h>
 #include <sys/mman.h>
@@ -1486,6 +1487,11 @@ EXPORT void* my32_lfind(x64emu_t* emu, void* key, void* base, size_t* nmemb, siz
     return lfind(key, base, nmemb, size, findcompareFct(fnc));
 }
 
+EXPORT void* my32_fts_open(x64emu_t* emu, void* path, int options, void* c)
+{
+    return fts_open(path, options, findcompareFct(c));
+}
+
 EXPORT void* my32_readdir(x64emu_t* emu, void* dirp)
 {
     struct dirent64 *dp64 = readdir64((DIR *)dirp);
@@ -1669,14 +1675,16 @@ EXPORT ssize_t my32_read(int fd, void* buf, size_t count)
     return ret;
 }
 
-#if 0
 EXPORT int my32_mkstemps64(x64emu_t* emu, char* template, int suffixlen)
 {
-    library_t* lib = my_lib;
+#if 0
+	// No iFpi_t. Redundant until further notice.
+	library_t* lib = my_lib;
     if(!lib) return 0;
     void* f = dlsym(lib->priv.w.lib, "mkstemps64");
     if(f)
         return ((iFpi_t)f)(template, suffixlen);
+#endif
     // implement own version...
     // TODO: check size of template, and if really XXXXXX is there
     char* fname = strdup(template);
@@ -1690,7 +1698,6 @@ EXPORT int my32_mkstemps64(x64emu_t* emu, char* template, int suffixlen)
     free(fname);
     return ret;
 }
-#endif
 
 EXPORT int32_t my32_ftw(x64emu_t* emu, void* pathname, void* B, int32_t nopenfd)
 {
@@ -1774,32 +1781,28 @@ static void convert_glob_to_64(void* d, void* s, int is64)
 
 EXPORT int32_t my32_glob(x64emu_t *emu, void* pat, int32_t flags, void* errfnc, void* pglob)
 {
-    glob_t glob_l = {0};
+    glob64_t glob_l = {0};
     if(flags & GLOB_ALTDIRFUNC) printf_log(LOG_NONE, "Error: using unsupport GLOB_ALTDIRFUNC in glob\n");
-    convert_glob_to_64(&glob_l, pglob, 0);
-    static iFpipp_t f = NULL;
-    if(!f) {
-        library_t* lib = my_lib;
-        if(!lib) return 0;
-        f = (iFpipp_t)dlsym(NULL, "glob");
-    }
-    int ret = f(pat, flags, findgloberrFct(errfnc), pglob);
+    if(flags&(1<<5))    // GLOB_APPEND is used, so convert also before
+        convert_glob_to_64(&glob_l, pglob, 0);
+    int ret = glob64(pat, flags, findgloberrFct(errfnc), &glob_l);
     convert_glob_to_32(pglob, &glob_l, 0);
     return ret;
 }
 EXPORT void my32_globfree(x64emu_t* emu, void* pglob)
 {
-    glob_t glob_l = {0};
+    glob64_t glob_l = {0};
     convert_glob_to_64(&glob_l, pglob, 0);
-    globfree(&glob_l);
+    globfree64(&glob_l);
 }
 #ifndef ANDROID
 EXPORT int32_t my32_glob64(x64emu_t *emu, void* pat, int32_t flags, void* errfnc, void* pglob)
 {
     glob64_t glob_l = {0};
     if(flags & GLOB_ALTDIRFUNC) printf_log(LOG_NONE, "Error: using unsupport GLOB_ALTDIRFUNC in glob64\n");
-    convert_glob_to_64(&glob_l, pglob, 1);
-    int ret = glob64(pat, flags, findgloberrFct(errfnc), pglob);
+    if(flags&(1<<5))    // GLOB_APPEND is used, so convert also before
+        convert_glob_to_64(&glob_l, pglob, 1);
+    int ret = glob64(pat, flags, findgloberrFct(errfnc), &glob_l);
     convert_glob_to_32(pglob, &glob_l, 1);
     return ret;
 }
@@ -1907,6 +1910,7 @@ EXPORT ptr_t my32___environ = 0;  //char**
 
 EXPORT int32_t my32_execv(x64emu_t* emu, const char* path, ptr_t argv[])
 {
+    int ret;
     int self = isProcSelf(path, "exe");
     int x86 = FileIsX86ELF(path);
     int x64 = FileIsX64ELF(path);
@@ -1934,7 +1938,7 @@ EXPORT int32_t my32_execv(x64emu_t* emu, const char* path, ptr_t argv[])
             newargv[toadd] = skip_first?from_ptrv(argv[skip_first]):path;
         }
         printf_log(LOG_DEBUG, " => execv(\"%s\", %p [\"%s\", \"%s\", \"%s\"...:%d])\n", emu->context->box64path, newargv, newargv[0], n?newargv[1]:"", (n>1)?newargv[2]:"",n);
-        int ret = execv(newargv[0], (char* const*)newargv);
+        ret = execv(newargv[0], (char* const*)newargv);
         box_free(newargv);
         return ret;
     }
@@ -1945,17 +1949,24 @@ EXPORT int32_t my32_execv(x64emu_t* emu, const char* path, ptr_t argv[])
     for(int i=0; i<=n; ++i)
         newargv[i] = from_ptrv(argv[i]);
     if (BOX64ENV(steam_vulkan) && n == 3 && !strcmp(newargv[0], "sh") && !strcmp(newargv[1], "-c") && strstr(newargv[2], "steamwebhelper.sh")) {
-        size_t bufsize = strlen(newargv[2])+strlen(",Vulkan");
+        static const char* vulkanstr = ",Vulkan";
+        static const char* searchstr = "--enable-features=PlatformHEVCDecoderSupport";
+        size_t bufsize = strlen(newargv[2]) + strlen(vulkanstr);
         char* newstr = (char*)box_calloc(bufsize+1, 1);
-        char* pos = strstr(newargv[2], "PlatformHEVCDecoderSupport");
-        size_t insertat = pos - newargv[2] + strlen("PlatformHEVCDecoderSupport");
+        char* pos = strstr(newargv[2], searchstr);
+        if (!pos) {
+            box_free(newstr);
+            goto do_exec;
+        }
+        size_t insertat = pos - newargv[2] + strlen(searchstr);
         strncpy(newstr, newargv[2], insertat);
         newstr[insertat] = '\0';
-        strcat(newstr, ",Vulkan");
+        strcat(newstr, vulkanstr);
         strcat(newstr, newargv[2] + insertat);
         newargv[2] = newstr;
     }
-    int ret = execv(path, (void*)newargv);
+do_exec:
+    ret = execv(path, (void*)newargv);
     box_free(newargv);
     return ret;
 }

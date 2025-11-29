@@ -10,6 +10,7 @@
 #include "box64cpu.h"
 #include "emu/x64emu_private.h"
 #include "la64_emitter.h"
+#include "la64_mapping.h"
 #include "x64emu.h"
 #include "box64stack.h"
 #include "callback.h"
@@ -63,9 +64,11 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
                     if (tmp && ((tmp < -2048) || (tmp > maxval) || !i12)) {
                         MOV64x(scratch, tmp);
                         ALSL_D(ret, TO_NAT(sib_reg), scratch, sib >> 6);
+                        SCRATCH_USAGE(1);
                     } else {
                         if (sib >> 6) {
                             SLLI_D(ret, TO_NAT(sib_reg), (sib >> 6));
+                            if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                         } else {
                             ret = TO_NAT(sib_reg);
                         }
@@ -79,10 +82,12 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
                             break;
                     }
                     MOV64x(ret, tmp);
+                    if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                 }
             } else {
                 if (sib_reg != 4) {
                     ALSL_D(ret, TO_NAT(sib_reg), TO_NAT(sib_reg2), sib >> 6);
+                    if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                 } else {
                     ret = TO_NAT(sib_reg2);
                 }
@@ -97,11 +102,13 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
                 GETIP(addr + delta, scratch);
                 ret = xRIP;
                 *fixaddress = tmp;
+                SCRATCH_USAGE(1);
             } else if (adj && (tmp + adj >= -2048) && (tmp + adj <= maxval)) {
                 ADDI_D(ret, xRIP, tmp + adj);
             } else if ((tmp >= -2048) && (tmp <= maxval)) {
                 GETIP(addr + delta, scratch);
                 ADDI_D(ret, xRIP, tmp);
+                SCRATCH_USAGE(1);
             } else if (tmp + addr + delta < 0x80000000LL && !dyn->need_reloc) {
                 MOV64x(ret, tmp + addr + delta);
             } else {
@@ -110,6 +117,7 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
                 } else {
                     MOV64x(ret, tmp);
                     GETIP(addr + delta, scratch);
+                    SCRATCH_USAGE(1);
                 }
                 ADD_D(ret, ret, xRIP);
             }
@@ -119,6 +127,7 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
                     if (isLockAddress(addr + delta + tmp)) *l = 1;
                     break;
             }
+            if (!IS_GPR(ret)) SCRATCH_USAGE(1);
         } else {
             ret = TO_NAT((nextop & 7) + (rex.b << 3));
         }
@@ -140,6 +149,7 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
             if ((nextop & 7) == 4) {
                 if (sib_reg != 4) {
                     ALSL_D(ret, TO_NAT(sib_reg), TO_NAT(sib_reg2), sib >> 6);
+                    if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                 } else {
                     ret = TO_NAT(sib_reg2);
                 }
@@ -158,8 +168,10 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
                     scratch = TO_NAT((nextop & 0x07) + (rex.b << 3));
                 }
                 ADDI_D(ret, scratch, i64);
+                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
             } else {
                 MOV64x(scratch, i64);
+                SCRATCH_USAGE(1);
                 if ((nextop & 7) == 4) {
                     if (sib_reg != 4) {
                         ADD_D(scratch, scratch, TO_NAT(sib_reg2));
@@ -212,10 +224,12 @@ static uintptr_t geted_32(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_
                             ADD_W(ret, TO_NAT(sib_reg), scratch);
                         }
                         ZEROUP(ret);
+                        SCRATCH_USAGE(1);
                     } else {
                         if (sib >> 6) {
                             SLLI_D(ret, TO_NAT(sib_reg), (sib >> 6));
                             ZEROUP(ret);
+                            if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                         } else {
                             ret = TO_NAT(sib_reg);
                         }
@@ -229,14 +243,17 @@ static uintptr_t geted_32(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_
                             break;
                     }
                     MOV32w(ret, tmp);
+                    if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                 }
             } else {
                 if (sib_reg != 4) {
                     if ((sib >> 6)) {
-                        SLLI_D(ret, TO_NAT(sib_reg), (sib >> 6));
-                        ADD_W(ret, ret, TO_NAT(sib_reg2));
+                        SLLI_D(scratch, TO_NAT(sib_reg), (sib >> 6));
+                        ADD_W(ret, scratch, TO_NAT(sib_reg2));
+                        SCRATCH_USAGE(1);
                     } else {
                         ADD_W(ret, TO_NAT(sib_reg2), TO_NAT(sib_reg));
+                        if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                     }
                     ZEROUP(ret);
                 } else {
@@ -246,6 +263,7 @@ static uintptr_t geted_32(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_
         } else if ((nextop & 7) == 5) {
             uint32_t tmp = F32;
             MOV32w(ret, tmp);
+            if (!IS_GPR(ret)) SCRATCH_USAGE(1);
             switch (lock) {
                 case 1: addLockAddress(tmp); break;
                 case 2:
@@ -276,10 +294,12 @@ static uintptr_t geted_32(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_
             if ((nextop & 7) == 4) {
                 if (sib_reg != 4) {
                     if (sib >> 6) {
-                        SLLI_D(ret, TO_NAT(sib_reg), (sib >> 6));
-                        ADD_W(ret, ret, TO_NAT(sib_reg2));
+                        SLLI_D(scratch, TO_NAT(sib_reg), (sib >> 6));
+                        ADD_W(ret, scratch, TO_NAT(sib_reg2));
+                        SCRATCH_USAGE(1);
                     } else {
                         ADD_W(ret, TO_NAT(sib_reg2), TO_NAT(sib_reg));
+                        if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                     }
                     ZEROUP(ret);
                 } else {
@@ -298,11 +318,14 @@ static uintptr_t geted_32(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_
                         } else {
                             ADD_W(scratch, TO_NAT(sib_reg2), TO_NAT(sib_reg));
                         }
+                        SCRATCH_USAGE(1);
                     } else {
                         scratch = TO_NAT(sib_reg2);
+                        if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                     }
                 } else {
                     scratch = TO_NAT((nextop & 0x07));
+                    if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                 }
                 ADDI_W(ret, scratch, i32);
                 ZEROUP(ret);
@@ -327,6 +350,7 @@ static uintptr_t geted_32(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_
                     ADD_W(ret, tmp, scratch);
                 }
                 ZEROUP(ret);
+                SCRATCH_USAGE(1);
             }
         }
     }
@@ -665,7 +689,7 @@ void iret_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, int is64bits)
 
     ST_H(x2, xEmu, offsetof(x64emu_t, segs[_CS]));
     // clean EFLAGS
-    MOV32w(x1, 0x3F7FD7);
+    MOV32w(x1, 0x3E7FD7);   // also mask RF
     AND(xFlags, xFlags, x1);
     ORI(xFlags, xFlags, 0x2);
     SPILL_EFLAGS();
@@ -759,6 +783,43 @@ void call_c(dynarec_la64_t* dyn, int ninst, la64_consts_t fnc, int reg, int ret,
         NATIVE_RESTORE_X87PC();
     // SET_NODF();
     dyn->last_ip = 0;
+}
+
+void call_n(dynarec_la64_t* dyn, int ninst, void* fnc, int w)
+{
+    MAYUSE(fnc);
+    fpu_pushcache(dyn, ninst, x3, 1);
+    ST_D(xRSP, xEmu, offsetof(x64emu_t, regs[_SP]));
+    ST_D(xRBP, xEmu, offsetof(x64emu_t, regs[_BP]));
+    ST_D(xRBX, xEmu, offsetof(x64emu_t, regs[_BX]));
+    // check if additional sextw needed
+    int sextw_mask = ((w > 0 ? w : -w) >> 4) & 0b111111;
+    for (int i = 0; i < 6; i++) {
+        if (sextw_mask & (1 << i)) {
+            SEXT_W(A0 + i, A0 + i);
+        }
+    }
+    // native call
+    if (dyn->need_reloc) {
+        // fnc is indirect, to help with relocation (but PltResolver might be an issue here)
+        TABLE64(x3, (uintptr_t)fnc);
+        LD_D(x3, x3, 0);
+    } else {
+        TABLE64_(x3, *(uintptr_t*)fnc); // using x16 as scratch regs for call address
+    }
+    JIRL(xRA, x3, 0x0);
+    // put return value in x64 regs
+    if (w > 0) {
+        MV(xRAX, A0);
+        MV(xRDX, A1);
+    }
+    // all done, restore all regs
+    LD_D(xRSP, xEmu, offsetof(x64emu_t, regs[_SP]));
+    LD_D(xRBP, xEmu, offsetof(x64emu_t, regs[_BP]));
+    LD_D(xRBX, xEmu, offsetof(x64emu_t, regs[_BX]));
+    fpu_popcache(dyn, ninst, x3, 1);
+    NATIVE_RESTORE_X87PC();
+    // SET_NODF();
 }
 
 void grab_segdata(dynarec_la64_t* dyn, uintptr_t addr, int ninst, int reg, int segment, int modreg)

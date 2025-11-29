@@ -1803,7 +1803,7 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             INST_NAME("POPF");
             SETFLAGS(X_ALL, SF_SET);
             POP1z(xFlags);
-            MOV32w(x1, 0x3F7FD7);
+            MOV32w(x1, 0x3E7FD7);
             ANDw_REG(xFlags, xFlags, x1);
             MOV32w(x1, 0x202);
             ORRw_REG(xFlags, xFlags, x1);
@@ -3733,7 +3733,6 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 JUMP(j64, 0);
                 if(dyn->insts[ninst].x64.jmp_insts==-1) {
                     // out of the block
-                    SET_NODF();
                     BARRIER(BARRIER_FLOAT);
                     jump_to_next(dyn, j64, 0, ninst, rex.is32bits);
                 } else {
@@ -4417,7 +4416,6 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 case 4: // JMP Ed
                     INST_NAME("JMP Ed");
                     READFLAGS(X_PEND);
-                    SET_NODF();
                     BARRIER(BARRIER_FLOAT);
                     GETEDz(0);
                     jump_to_next(dyn, 0, ed, ninst, rex.is32bits);
@@ -4430,7 +4428,6 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     } else {
                         INST_NAME("JMP FAR Ed");
                         READFLAGS(X_PEND);
-                        SET_NODF();
                         BARRIER(BARRIER_FLOAT);
                         SMREAD();
                         addr = geted(dyn, addr, ninst, nextop, &wback, x2, &fixedaddress, &unscaled, 0, 0, rex, NULL, 0, 0);

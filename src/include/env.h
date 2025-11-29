@@ -37,8 +37,9 @@ extern char* ftrace_name;
     STRING(BOX64_ARCH, arch, 0)                                               \
     STRING(BOX64_ARGS, args, 0)                                               \
     STRING(BOX64_BASH, bash, 0)                                               \
+    STRING(BOX64_PYTHON3, python3, 0)                                         \
     BOOLEAN(BOX64_CEFDISABLEGPU, cefdisablegpu, 0, 0)                         \
-    BOOLEAN(BOX64_CEFDISABLEGPUCOMPOSITING, cefdisablegpucompositing, 0, 0)     \
+    BOOLEAN(BOX64_CEFDISABLEGPUCOMPOSITING, cefdisablegpucompositing, 0, 0)   \
     INTEGER(BOX64_CPUTYPE, cputype, 0, 0, 1, 1)                               \
     BOOLEAN(BOX64_CRASHHANDLER, dummy_crashhandler, 1, 0)                     \
     BOOLEAN(BOX64_DLSYM_ERROR, dlsym_error, 0, 0)                             \
@@ -67,6 +68,7 @@ extern char* ftrace_name;
     INTEGER(BOX64_DYNAREC_STRONGMEM, dynarec_strongmem, 0, 0, 3, 1)           \
     BOOLEAN(BOX64_DYNAREC_TBB, dynarec_tbb, 1, 0)                             \
     STRING(BOX64_DYNAREC_TEST, dynarec_test_str, 1)                           \
+    BOOLEAN(BOX64_DYNAREC_TEST_NODUP, dynarec_test_nodup, 0, 1)               \
     BOOLEAN(BOX64_DYNAREC_TRACE, dynarec_trace, 0, 0)                         \
     BOOLEAN(BOX64_DYNAREC_VOLATILE_METADATA, dynarec_volatile_metadata, 1, 0) \
     BOOLEAN(BOX64_DYNAREC_WAIT, dynarec_wait, 1, 1)                           \
@@ -91,7 +93,7 @@ extern char* ftrace_name;
     INTEGER(BOX64_JITGDB, jitgdb, 0, 0, 3, 0)                                 \
     BOOLEAN(BOX64_JVM, jvm, 1, 0)                                             \
     STRING(BOX64_LD_LIBRARY_PATH, ld_library_path, 0)                         \
-    BOOLEAN(BOX64_LIBCEF, libcef, 1, 0)                                       \
+    BOOLEAN(BOX64_LIBCEF, libcef, 0, 0)                                       \
     STRING(BOX64_LIBGL, libgl, 0)                                             \
     ADDRESS(BOX64_LOAD_ADDR, load_addr, 0)                                    \
     INTEGER(BOX64_LOG, log, DEFAULT_LOG_LEVEL, 0, 3, 1)                       \

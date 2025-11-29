@@ -1037,10 +1037,18 @@
     READFLAGS(A)
 #endif
 
-#define NAT_FLAGS_OPS(op1, op2)                    \
-    do {                                           \
-        dyn->insts[ninst + 1].nat_flags_op1 = op1; \
-        dyn->insts[ninst + 1].nat_flags_op2 = op2; \
+#define NAT_FLAGS_OPS(op1, op2, s1, s2)                                     \
+    do {                                                                    \
+        dyn->insts[dyn->insts[ninst].nat_next_inst].nat_flags_op1 = op1;    \
+        dyn->insts[dyn->insts[ninst].nat_next_inst].nat_flags_op2 = op2;    \
+        if (dyn->insts[ninst + 1].no_scratch_usage && IS_GPR(op1)) {        \
+            MV(s1, op1);                                                    \
+            dyn->insts[dyn->insts[ninst].nat_next_inst].nat_flags_op1 = s1; \
+        }                                                                   \
+        if (dyn->insts[ninst + 1].no_scratch_usage && IS_GPR(op2)) {        \
+            MV(s2, op2);                                                    \
+            dyn->insts[dyn->insts[ninst].nat_next_inst].nat_flags_op2 = s2; \
+        }                                                                   \
     } while (0)
 
 #define NAT_FLAGS_ENABLE_CARRY() dyn->insts[ninst].nat_flags_carry = 1
@@ -1223,6 +1231,7 @@
 #define retn_to_epilog      STEPNAME(retn_to_epilog)
 #define iret_to_epilog      STEPNAME(iret_to_epilog)
 #define call_c              STEPNAME(call_c)
+#define call_n              STEPNAME(call_n)
 #define grab_segdata        STEPNAME(grab_segdata)
 #define emit_cmp16          STEPNAME(emit_cmp16)
 #define emit_cmp16_0        STEPNAME(emit_cmp16_0)
@@ -1378,6 +1387,7 @@ void ret_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, rex_t rex);
 void retn_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, rex_t rex, int n);
 void iret_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, int is64bits);
 void call_c(dynarec_la64_t* dyn, int ninst, la64_consts_t fnc, int reg, int ret, int saveflags, int save_reg, int arg1, int arg2, int arg3, int arg4, int arg5, int arg6);
+void call_n(dynarec_la64_t* dyn, int ninst, void* fnc, int w);
 void grab_segdata(dynarec_la64_t* dyn, uintptr_t addr, int ninst, int reg, int segment, int modreg);
 void emit_cmp8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5, int s6);
 void emit_cmp16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5, int s6);
@@ -1720,12 +1730,20 @@ uintptr_t dynarec64_DF(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
 // Dummy macros
 #define B__safe(a, b, c) XOR(xZR, xZR, xZR)
 #define B_(a, b, c)      XOR(xZR, xZR, xZR)
+#define S_(a, b, c)      XOR(xZR, xZR, xZR)
+#define MV_(a, b, c, d)  XOR(xZR, xZR, xZR)
 
 #define NATIVEJUMP_safe(COND, val) \
     B##COND##_safe(dyn->insts[ninst].nat_flags_op1, dyn->insts[ninst].nat_flags_op2, val);
 
 #define NATIVEJUMP(COND, val) \
     B##COND(dyn->insts[ninst].nat_flags_op1, dyn->insts[ninst].nat_flags_op2, val);
+
+#define NATIVESET(COND, rd) \
+    S##COND(rd, dyn->insts[ninst].nat_flags_op1, dyn->insts[ninst].nat_flags_op2);
+
+#define NATIVEMV(COND, rd, rs) \
+    MV##COND(rd, rs, dyn->insts[ninst].nat_flags_op1, dyn->insts[ninst].nat_flags_op2);
 
 #define NOTEST(s1)                                       \
     if (BOX64ENV(dynarec_test)) {                        \
@@ -1909,13 +1927,14 @@ uintptr_t dynarec64_DF(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
 */
 #define LOCK_8_OP(op, s1, wback, s3, s4, s5, s6)    \
     if (cpuext.lamcas) {                            \
-        LD_BU(s1, wback, 0);                        \
+        LD_BU(s5, wback, 0);                        \
+        MV(s1, s5);                                 \
         MARKLOCK2;                                  \
-        MV(s6, s1);                                 \
+        MV(s6, s5);                                 \
         op;                                         \
-        AMCAS_DB_B(s1, s4, wback);                  \
-        BSTRPICK_D(s1, s1, 7, 0);                   \
-        BNE_MARKLOCK2(s1, s6);                      \
+        AMCAS_DB_B(s5, s4, wback);                  \
+        BSTRPICK_D(s5, s5, 7, 0);                   \
+        BNE_MARKLOCK2(s5, s6);                      \
     } else {                                        \
         ANDI(s3, wback, 0b11);                      \
         if (wback != x2) {                          \
@@ -1941,5 +1960,8 @@ uintptr_t dynarec64_DF(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         BEQZ_MARKLOCK2(s4);                         \
     }
 
+#ifndef SCRATCH_USAGE
+#define SCRATCH_USAGE(usage)
+#endif
 
 #endif //__DYNAREC_LA64_HELPER_H__

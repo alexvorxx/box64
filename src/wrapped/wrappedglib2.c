@@ -1120,24 +1120,24 @@ EXPORT uint32_t my_g_idle_add(x64emu_t* emu, void* func, void* data)
 
 EXPORT void* my_g_variant_new_va(x64emu_t* emu, char* fmt, void* endptr, x64_va_list_t* b)
 {
-    #ifdef CONVERT_VALIST
+#ifdef CONVERT_VALIST
     CONVERT_VALIST(*b);
-    #else
-      #if defined(__loongarch64) || defined(__riscv)
-        va_list sysv_varargs;
-        myStackAlignGVariantNewVa(emu, fmt, emu->scratch, b);
-        sysv_varargs = (va_list)emu->scratch;
-      #else
-        CREATE_VALIST_FROM_VALIST(*b, emu->scratch);
-      #endif
-    #endif
+#else
+#if defined(__loongarch64) || defined(__riscv)
+    va_list sysv_varargs;
+    myStackAlignGVariantNewVa(emu, fmt, emu->scratch, b);
+    sysv_varargs = (va_list)emu->scratch;
+#else
+    CREATE_VALIST_FROM_VALIST(*b, emu->scratch);
+#endif
+#endif
     return my->g_variant_new_va(fmt, endptr, &sysv_varargs);
 }
 
 EXPORT void* my_g_variant_new(x64emu_t* emu, char* fmt, uint64_t* V)
 {
 #if defined(__loongarch64) || defined(__riscv)
-    myStackAlignGVariantNew(emu, fmt, V, emu->scratch, R_EAX);
+    myStackAlignGVariantNew(emu, fmt, V, emu->scratch, 1);
     PREPARE_VALIST;
 #else
     CREATE_VALIST_FROM_VAARG(V, emu->scratch, 1);
@@ -1571,8 +1571,7 @@ EXPORT void my_g_thread_pool_set_sort_function(x64emu_t* emu, void* pool, void* 
     my->g_thread_pool_set_sort_function(pool, findGCompareDataFuncFct(func), user_data);
 }
 
-#define PRE_INIT    \
-    if(BOX64ENV(nogtk)) \
-        return -1;
+#define PRE_INIT \
+    if (BOX64ENV(nogtk)) return -2;
 
 #include "wrappedlib_init.h"

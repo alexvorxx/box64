@@ -1153,6 +1153,7 @@
 #() pFEupi -> pFEupi
 #() pFEupp -> pFEupp
 #() pEEpii -> pEEpii
+#() pEEpip -> pEEpip
 #() pFEpip -> pFEpip
 #() pFEpui -> pFEpui
 #() pEEppi -> pEEppi
@@ -2313,6 +2314,7 @@ wrappedfreetype:
 - iFpup:
   - FT_Get_Var_Blend_Coordinates
   - FT_Set_Var_Blend_Coordinates
+  - FT_Set_Var_Design_Coordinates
 - iFpll:
   - FT_Outline_EmboldenXY
 - iFpLi:
@@ -2556,6 +2558,8 @@ wrappedlibc:
 - pEipi:
   - shmat
 - pEpii:
+- pEpip:
+  - fts_open
 - pEpII:
 - pFpui:
   - gethostbyaddr
