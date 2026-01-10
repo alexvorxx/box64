@@ -254,9 +254,10 @@ void emit_add8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4)
             X64_ADD_B(s1, s2);
         }
         ADD_D(s1, s1, s2);
-        ANDI(s1, s1, 0xff);
+        // d_add8 will use 16bits result to check for CF, so save 16bits and truncate after
         IFX (X_PEND)
             ST_H(s1, xEmu, offsetof(x64emu_t, res));
+        ANDI(s1, s1, 0xff);
         if (dyn->insts[ninst].nat_flags_fusion) NAT_FLAGS_OPS(s1, xZR, s3, xZR);
         return;
     }
@@ -290,6 +291,7 @@ void emit_add8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4)
         BEQZ(s3, 8);
         ORI(xFlags, xFlags, 1 << F_CF);
     }
+    // d_add8 will use 16bits result to check for CF, so save 16bits and truncate after
     IFX (X_PEND) {
         ST_H(s1, xEmu, offsetof(x64emu_t, res));
     }
@@ -330,9 +332,10 @@ void emit_add8c(dynarec_la64_t* dyn, int ninst, int s1, int c, int s2, int s3, i
             X64_ADD_B(s1, s4);
         }
         ADDI_D(s1, s1, c & 0xff);
-        ANDI(s1, s1, 0xff);
+        // d_add8 will use 16bits result to check for CF, so save 16bits and truncate after
         IFX (X_PEND)
             ST_H(s1, xEmu, offsetof(x64emu_t, res));
+        ANDI(s1, s1, 0xff);
         if (dyn->insts[ninst].nat_flags_fusion) NAT_FLAGS_OPS(s1, xZR, s3, xZR);
         return;
     }
@@ -370,6 +373,7 @@ void emit_add8c(dynarec_la64_t* dyn, int ninst, int s1, int c, int s2, int s3, i
         BEQZ(s3, 8);
         ORI(xFlags, xFlags, 1 << F_CF);
     }
+    // d_add8 will use 16bits result to check for CF, so save 16bits and truncate after
     IFX (X_PEND) {
         ST_H(s1, xEmu, offsetof(x64emu_t, res));
     }
@@ -410,6 +414,7 @@ void emit_add16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, 
 
     ADD_D(s1, s1, s2);
 
+    // d_add16 will use 32bits result to check for CF
     IFX (X_PEND) {
         ST_W(s1, xEmu, offsetof(x64emu_t, res));
     }
@@ -643,7 +648,7 @@ void emit_sub32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, i
         MOV64xw(s2, c);
     } else IFXA (X_ALL, cpuext.lbt) {
         MOV64xw(s2, c);
-    } else if (c < -2048 || c >= 2048) {
+    } else if (c <= -2048 || c > 2048) {
         MOV64xw(s2, c);
     }
     IFX (X_PEND) {
@@ -1054,9 +1059,9 @@ void emit_neg32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s
 void emit_adc8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5)
 {
     IFX (X_PEND) {
-        ST_H(s1, xEmu, offsetof(x64emu_t, op1));
-        ST_H(s2, xEmu, offsetof(x64emu_t, op2));
-        SET_DF(s3, d_adc8);
+        ST_B(s1, xEmu, offsetof(x64emu_t, op1));
+        ST_B(s2, xEmu, offsetof(x64emu_t, op2));
+        SET_DF(s3, d_adc8b);
     } else IFXORNAT (X_ALL) {
         SET_DFNONE();
     }
@@ -1067,9 +1072,9 @@ void emit_adc8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, i
         IFX (X_ALL) {
             X64_ADC_B(s1, s2);
         }
-        ANDI(s1, s3, 0xff);
+        ANDI(s1, s3, 0xff); // that's probably unneeded as ADC_B should restrain the result to 8bits already
         IFX (X_PEND) {
-            ST_W(s1, xEmu, offsetof(x64emu_t, res));
+            ST_B(s3, xEmu, offsetof(x64emu_t, res));
         }
         if (dyn->insts[ninst].nat_flags_fusion) NAT_FLAGS_OPS(s1, xZR, s3, xZR);
         return;
@@ -1086,7 +1091,8 @@ void emit_adc8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, i
 
     CLEAR_FLAGS(s3);
     IFX (X_PEND) {
-        ST_W(s1, xEmu, offsetof(x64emu_t, res));
+        // d_adc8 will use 16bits result to check for CF
+        ST_B(s1, xEmu, offsetof(x64emu_t, res));
     }
     IFX (X_AF | X_OF) {
         ANDN(s3, s4, s1); // s3 = ~res & (op1 | op2)
@@ -1111,7 +1117,7 @@ void emit_adc8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, i
         ORI(xFlags, xFlags, 1 << F_CF);
     }
 
-    ANDI(s1, s1, 0xff);
+    ANDI(s1, s1, 0xff); // unneeded?
 
     IFX (X_ZF) {
         BNEZ(s1, 8);
@@ -1141,7 +1147,7 @@ void emit_adc16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, 
     IFX (X_PEND) {
         ST_H(s1, xEmu, offsetof(x64emu_t, op1));
         ST_H(s2, xEmu, offsetof(x64emu_t, op2));
-        SET_DF(s3, d_adc16);
+        SET_DF(s3, d_adc16b);
     } else IFXORNAT (X_ALL) {
         SET_DFNONE();
     }
@@ -1154,7 +1160,7 @@ void emit_adc16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, 
         }
         BSTRPICK_D(s1, s3, 15, 0);
         IFX (X_PEND) {
-            ST_W(s1, xEmu, offsetof(x64emu_t, res));
+            ST_H(s1, xEmu, offsetof(x64emu_t, res));
         }
         if (dyn->insts[ninst].nat_flags_fusion) NAT_FLAGS_OPS(s1, xZR, s3, xZR);
         return;
@@ -1171,7 +1177,8 @@ void emit_adc16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, 
 
     CLEAR_FLAGS(s3);
     IFX (X_PEND) {
-        ST_W(s1, xEmu, offsetof(x64emu_t, res));
+        // d_adc16 will use 32bits result to check for CF
+        ST_H(s1, xEmu, offsetof(x64emu_t, res));
     }
     IFX (X_AF | X_OF) {
         ANDN(s3, s4, s1); // s3 = ~res & (op1 | op2)
@@ -1196,7 +1203,7 @@ void emit_adc16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, 
         ORI(xFlags, xFlags, 1 << F_CF);
     }
 
-    BSTRPICK_D(s1, s1, 15, 0);
+    BSTRPICK_D(s1, s1, 15, 0);  // unneeded?
 
     IFX (X_ZF) {
         BNEZ(s1, 8);
@@ -1763,6 +1770,7 @@ void emit_neg16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3)
     } else IFXORNAT (X_ALL) {
         SET_DFNONE();
     }
+    CLEAR_FLAGS(s3);
     IFX (X_AF | X_OF) {
         MV(s3, s1); // s3 = op1
     }
@@ -1773,7 +1781,6 @@ void emit_neg16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3)
         ST_H(s1, xEmu, offsetof(x64emu_t, res));
     }
 
-    CLEAR_FLAGS(s3);
     IFX (X_CF) {
         BEQZ(s1, 8);
         ORI(xFlags, xFlags, 1 << F_CF);

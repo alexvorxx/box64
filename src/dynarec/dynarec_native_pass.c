@@ -44,8 +44,12 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
     int rep = 0;    // 0 none, 1=F2 prefix, 2=F3 prefix
     int need_epilog = 1;
     // Clean up (because there are multiple passes)
+    #ifdef ARM64
+    dyn->f = status_unk;
+    #else
     dyn->f.pending = 0;
     dyn->f.dfnone = 0;
+    #endif
     dyn->forward = 0;
     dyn->forward_to = 0;
     dyn->forward_size = 0;
@@ -107,8 +111,12 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             dyn->last_ip = 0;
             if(reset_n==-2) {
                 MESSAGE(LOG_DEBUG, "Reset Caches to zero\n");
+                #ifdef ARM64
+                dyn->f = status_unk;
+                #else
                 dyn->f.dfnone = 0;
                 dyn->f.pending = 0;
+                #endif
                 fpu_reset(dyn);
                 ARCH_RESET();
             } else {
@@ -120,8 +128,12 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
                 }
                 if(dyn->insts[ninst].x64.barrier&BARRIER_FLAGS) {
                     MESSAGE(LOG_DEBUG, "Apply Barrier Flags\n");
+                    #ifdef ARM64
+                    dyn->f = status_unk;
+                    #else
                     dyn->f.dfnone = 0;
                     dyn->f.pending = 0;
+                    #endif
                 }
             }
             reset_n = -1;
@@ -180,7 +192,6 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
         }
         #endif
 
-        #ifdef ARM64
         uint8_t pk = PK(0);
         
         rex.rex = 0;
@@ -222,34 +233,6 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             addr = dynarec64_66(dyn, addr, ip, ninst, rex, &ok, &need_epilog);
         else
             addr = dynarec64_00(dyn, addr, ip, ninst, rex, &ok, &need_epilog);
-        #else
-        rep = 0;
-        rex.is32bits = is32bits;
-        uint8_t pk = PK(0);
-        while((pk==0xF2) || (pk==0xF3) || (pk==0x3E) || (pk==0x26)
-            || (is32bits && ((pk==0x2E) || (pk==0x36)))
-        ) {
-            switch(pk) {
-                case 0xF2: rep = 1; break;
-                case 0xF3: rep = 2; break;
-                case 0x2E:
-                case 0x36:
-                case 0x3E:
-                case 0x26: /* ignored */ break;
-            }
-            ++addr;
-            pk = PK(0);
-        }
-        rex.rex = 0;
-        if(!rex.is32bits)
-            while(pk>=0x40 && pk<=0x4f) {
-                rex.rex = pk;
-                ++addr;
-                pk = PK(0);
-            }
-
-        addr = dynarec64_00(dyn, addr, ip, ninst, rex, rep, &ok, &need_epilog);
-        #endif
         if(dyn->abort)
             return ip;
         INST_EPILOG;
@@ -279,8 +262,12 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
                 #endif
             }
             if(dyn->insts[next].x64.barrier&BARRIER_FLAGS) {
+                #ifdef ARM64
+                dyn->f = status_unk;
+                #else
                 dyn->f.pending = 0;
                 dyn->f.dfnone = 0;
+                #endif
                 dyn->last_ip = 0;
             }
         }
@@ -301,8 +288,12 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             // we use the 1st predecessor here
             if((ninst+1)<dyn->size && !dyn->insts[ninst+1].x64.alive) {
                 // reset fpu value...
+                #ifdef ARM64
+                dyn->f = status_unk;
+                #else
                 dyn->f.dfnone = 0;
                 dyn->f.pending = 0;
+                #endif
                 fpu_reset(dyn);
                 while((ninst+1)<dyn->size && !dyn->insts[ninst+1].x64.alive) {
                     // may need to skip opcodes to advance

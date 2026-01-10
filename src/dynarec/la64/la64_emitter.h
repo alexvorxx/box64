@@ -99,6 +99,14 @@
             ADD_D(rd, rj, rk);                                           \
     } while (0)
 
+#define ALSLy(rd, rj, rk, imm)        \
+    do {                              \
+        if (rex.is32bits || rex.is67) \
+            ALSL_WU(rd, rj, rk, imm); \
+        else                          \
+            ALSL_D(rd, rj, rk, imm);  \
+    } while (0)
+
 // GR[rd] = SignExtend({imm20, 12'b0}, GRLEN)
 #define LU12I_W(rd, imm20) EMIT(type_1RI20(0b0001010, imm20, rd))
 // GR[rd] = {SignExtend(imm20, 32), GR[rd][31:0]}
@@ -262,6 +270,15 @@
             ZEROUP(rd);          \
         }                        \
     } while (0)
+#define SLLIy(rd, rj, imm)              \
+    do {                                \
+        if (rex.is32bits || rex.is67) { \
+            SLLI_W(rd, rj, imm);        \
+            ZEROUP(rd);                 \
+        } else                          \
+            SLLI_D(rd, rj, imm);        \
+    } while (0)
+
 // Shift Right Logical Immediate
 #define SRLIxw(rd, rj, imm)             \
     do {                                \
@@ -737,6 +754,20 @@
 // paddr = AddressTranslation(vaddr)
 // MemoryStore(GR[rd][63:0], paddr, DOUBLEWORD)
 #define ST_D(rd, rj, imm12) EMIT(type_2RI12(0b0010100111, imm12, rj, rd))
+
+#define PRELD(hint, rj, imm12) EMIT(type_2RI12(0b0010101011, imm12, rj, hint))
+
+#define PRELDX(hint, rj, rk) EMIT(type_3R(0b00111000001011000, rk, rj, hint))
+
+#define PRELDX_LOAD_L3_1CACHELINE(rj, s1)                      \
+    do {                                                       \
+        MOV64x(s1, (0b0000000000000000ULL << 44) /* stride */  \
+                | (0b00000000ULL << 32)          /* 1 block */ \
+                | (0b000000ULL << 20)            /* 16-byte */ \
+                | (0b0ULL << 16)                 /* asc */     \
+                | 0x0000ULL);                    /* offset */  \
+        PRELDX(2 /* L3 load */, rj, s1);                       \
+    } while (0)
 
 #define LDX_B(rd, rj, rk)  EMIT(type_3R(0b00111000000000000, rk, rj, rd))
 #define LDX_H(rd, rj, rk)  EMIT(type_3R(0b00111000000001000, rk, rj, rd))
@@ -2456,6 +2487,14 @@ LSX instruction starts with V, LASX instruction starts with XV.
     } else {            \
         MOV64x(A, B);   \
     }
+#define MOV64y(A, B)                    \
+    do {                                \
+        if (rex.is32bits || rex.is67) { \
+            MOV32w(A, B);               \
+        } else {                        \
+            MOV64x(A, B);               \
+        }                               \
+    } while (0)
 
 // rd[63:0] = rj[63:0] (pseudo instruction)
 #define MV(rd, rj) ADDI_D(rd, rj, 0)
@@ -2496,6 +2535,15 @@ LSX instruction starts with V, LASX instruction starts with XV.
             ADDI_D(rd, rj, imm12); \
     } while (0)
 
+#define ADDIy(rd, rj, imm12)            \
+    do {                                \
+        if (rex.is32bits || rex.is67) { \
+            ADDI_W(rd, rj, imm12);      \
+            ZEROUP(rd);                 \
+        } else                          \
+            ADDI_D(rd, rj, imm12);      \
+    } while (0)
+
 #define ADDxw(rd, rj, rk)      \
     do {                       \
         if (rex.w)             \
@@ -2506,12 +2554,29 @@ LSX instruction starts with V, LASX instruction starts with XV.
 
 #define ADDz(rd, rj, rk)       \
     do {                       \
-        if (!rex.is32bits)     \
-            ADD_D(rd, rj, rk); \
-        else {                 \
+        if (rex.is32bits) {    \
             ADD_W(rd, rj, rk); \
             ZEROUP(rd);        \
-        }                      \
+        } else                 \
+            ADD_D(rd, rj, rk); \
+    } while (0)
+
+#define ADDy(rd, rj, rk)                \
+    do {                                \
+        if (rex.is32bits || rex.is67) { \
+            ADD_W(rd, rj, rk);          \
+            ZEROUP(rd);                 \
+        } else                          \
+            ADD_D(rd, rj, rk);          \
+    } while (0)
+
+#define ADDxREGy(rd, rj, rk, s1)        \
+    do {                                \
+        if (rex.is32bits || rex.is67) { \
+            ADDI_W(s1, rk, 0);          \
+            ADD_D(rd, rj, s1);          \
+        } else                          \
+            ADD_D(rd, rj, rk);          \
     } while (0)
 
 #define LDxw(rd, rj, imm12)       \

@@ -1038,6 +1038,7 @@ GO2(__isoc23_strtoul, LFppi, strtoul)
 GO2(__isoc23_strtoull, UFppi, strtoull)
 GO2(__isoc23_wcstol, lFppi, wcstol)
 GOM(__isoc99_fscanf, iFEppV)
+GOM(__isoc23_swscanf, iFEppV)
 //GO(__isoc99_fwscanf, iFppV)
 GOM(__isoc99_scanf, iFEpV)
 GOM(__isoc99_sscanf, iFEppV)
@@ -1986,6 +1987,7 @@ GO(strftime, LFpLpp)
 GO(__strftime_l, LFpLppL)
 GOW(strftime_l, LFpLppp)
 GO(strlen, LFp)
+GO(__strlcpy_chk, LFppLL)
 GO(strncasecmp, iFppL)
 //GO(__strncasecmp_l, 
 GO(strncasecmp_l, iFppLp)
@@ -2420,6 +2422,7 @@ GOWD(wcstold_l, DFppp, wcstod_l)
 //GO(__wcstol_internal, 
 //GO(__wcstol_l, 
 GOW(wcstol_l, lFppip)
+GO2(__isoc23_wcstol_l, lFppip, wcstol_l)
 GOW(wcstoll, IFppi)
 //GO(__wcstoll_internal, 
 //GOW(__wcstoll_l, 
@@ -2435,6 +2438,7 @@ GO(wcstoul, LFppi)
 //GO(__wcstoul_internal, 
 //GO(__wcstoul_l, 
 GOW(wcstoul_l, LFppip)
+GO2(__isoc23_wcstoul_l, LFppip, wcstoul_l)
 GOW(wcstoull, UFppi)
 //GO(__wcstoull_internal, 
 //GOW(__wcstoull_l, 

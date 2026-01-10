@@ -194,7 +194,7 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
         case 0x09:                      /* WBINVD */
             // this is a privilege opcode...
             #ifndef TEST_INTERPRETER
-            EmitSignal(emu, X64_SIGSEGV, (void*)R_RIP, 0);
+            EmitSignal(emu, X64_SIGSEGV, (void*)R_RIP, 0xbad0);
             #endif
             break;
 
@@ -320,7 +320,7 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             nextop = F8;
             #ifndef TEST_INTERPRETER
             tmp8u = (rex.r*8)+(nextop>>3&7);
-            if((((opcode==20) || (opcode==22)) && ((tmp8u==1) || (tmp8u==5) || (tmp8u==6) || (tmp8u==7) || (tmp8u>8))) || (((opcode==0x21) || (opcode==0x23) && rex.r))) {
+            if((((opcode==20) || (opcode==22)) && ((tmp8u==1) || (tmp8u==5) || (tmp8u==6) || (tmp8u==7) || (tmp8u>8))) || (((opcode==0x21) || (opcode==0x23)) && rex.r)) {
                 EmitSignal(emu, X64_SIGILL, (void*)R_RIP, 0);
             } else
                 EmitSignal(emu, X64_SIGSEGV, (void*)R_RIP, 0);
@@ -1298,12 +1298,6 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                 if(MODREG)
                     ED->dword[1] = 0;
             }
-            if (BOX64ENV(dynarec_test)) {
-                CLEAR_FLAG(F_OF);
-                CLEAR_FLAG(F_SF);
-                CLEAR_FLAG(F_AF);
-                CLEAR_FLAG(F_PF);
-            }
             break;
         case 0xAC:                      /* SHRD Ed,Gd,Ib */
         case 0xAD:                      /* SHRD Ed,Gd,CL */
@@ -1379,10 +1373,7 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                     break;
                 case 7:                 /* CLFLUSH Ed */
                     _GETED(0);
-                    #if defined(DYNAREC) && !defined(TEST_INTERPRETER)
-                    if(BOX64ENV(dynarec))
-                        cleanDBFromAddressRange((uintptr_t)ED, 8, 0);
-                    #endif
+                    __sync_synchronize();
                     break;
                 default:
                     return 0;
@@ -1465,12 +1456,6 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                     CLEAR_FLAG(F_CF);
                 if(MODREG)
                     ED->dword[1] = 0;
-            }
-            if (BOX64ENV(dynarec_test)) {
-                CLEAR_FLAG(F_OF);
-                CLEAR_FLAG(F_SF);
-                CLEAR_FLAG(F_AF);
-                CLEAR_FLAG(F_PF);
             }
             break;
 
@@ -1796,10 +1781,16 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
         case 0xC7:
             CHECK_FLAGS(emu);
             nextop = F8;
+            if(MODREG) {
+                return 0;   // register mode is Undefined Instruction
+            }
             GETE8xw(0);
             switch((nextop>>3)&7) {
-                case 1:     /* CMPXCHG8B Eq */
+                case 1:     /* CMPXCHG8B Eq / CMPXCHG16B Eq */
                     if(rex.w) {
+                        if(((uintptr_t)ED)&0xf) {
+                            EmitSignal(emu, X64_SIGSEGV, (void*)R_RIP, 0xbad0); // GPF
+                        }
                         tmp64u = ED->q[0];
                         tmp64u2= ED->q[1];
                         if(R_RAX == tmp64u && R_RDX == tmp64u2) {

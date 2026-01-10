@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <inttypes.h>
+#include <strings.h>
 #if defined(DYNAREC) && !defined(WIN32)
 #include <sys/types.h>
 #include <dirent.h>
@@ -143,6 +144,8 @@ static void parseRange(const char* s, uintptr_t* start, uintptr_t* end)
 void AddNewLibs(const char* list);
 int canNCpuBeChanged();
 
+extern int box64_cycle_log_initialized;
+
 static void applyCustomRules()
 {
     if (BOX64ENV(log) == LOG_NEVER) {
@@ -151,8 +154,7 @@ static void applyCustomRules()
     }
 
 #ifndef _WIN32
-    if(box64env.is_cycle_log_overridden) {
-        freeCycleLog(my_context);
+    if (box64env.is_cycle_log_overridden) {
         box64env.rolling_log = BOX64ENV(cycle_log);
 
         if (BOX64ENV(rolling_log) == 1) {
@@ -161,7 +163,7 @@ static void applyCustomRules()
         if (BOX64ENV(rolling_log) && BOX64ENV(log) > LOG_INFO) {
             box64env.rolling_log = 0;
         }
-        initCycleLog(my_context);
+        if (!box64_cycle_log_initialized) initCycleLog(my_context);
     }
 
     if (box64env.is_dynarec_gdbjit_str_overridden) {
@@ -215,6 +217,41 @@ static void applyCustomRules()
 #if defined(RV64) || defined(LA64)
         SET_BOX64ENV(dynarec_nativeflags, 0);
 #endif
+    }
+
+    if (box64env.is_profile_overridden) {
+        if (!strcasecmp(box64env.profile, "safest")) {
+            SET_BOX64ENV_IF_EMPTY(dynarec_fastnan, 0);
+            SET_BOX64ENV_IF_EMPTY(dynarec_fastround, 0);
+            SET_BOX64ENV_IF_EMPTY(dynarec_bigblock, 0);
+            SET_BOX64ENV_IF_EMPTY(dynarec_safeflags, 2);
+            SET_BOX64ENV_IF_EMPTY(dynarec_strongmem, 2);
+        } else if (!strcasecmp(box64env.profile, "safe")) {
+            SET_BOX64ENV_IF_EMPTY(dynarec_bigblock, 0);
+            SET_BOX64ENV_IF_EMPTY(dynarec_safeflags, 2);
+            SET_BOX64ENV_IF_EMPTY(dynarec_strongmem, 1);
+        } else if (!strcasecmp(box64env.profile, "default")) {
+        } else if (!strcasecmp(box64env.profile, "fast")) {
+            SET_BOX64ENV_IF_EMPTY(dynarec_callret, 1);
+            SET_BOX64ENV_IF_EMPTY(dynarec_bigblock, 3);
+            SET_BOX64ENV_IF_EMPTY(dynarec_safeflags, 0);
+            SET_BOX64ENV_IF_EMPTY(dynarec_strongmem, 1);
+            SET_BOX64ENV_IF_EMPTY(dynarec_dirty, 1);
+            SET_BOX64ENV_IF_EMPTY(dynarec_forward, 1024);
+        } else if (!strcasecmp(box64env.profile, "fastest")) {
+            SET_BOX64ENV_IF_EMPTY(dynarec_callret, 1);
+            SET_BOX64ENV_IF_EMPTY(dynarec_bigblock, 3);
+            SET_BOX64ENV_IF_EMPTY(dynarec_safeflags, 0);
+            SET_BOX64ENV_IF_EMPTY(dynarec_strongmem, 0);
+            SET_BOX64ENV_IF_EMPTY(dynarec_dirty, 1);
+            SET_BOX64ENV_IF_EMPTY(dynarec_forward, 1024);
+        } else {
+            static int warned = 0;
+            if (!warned) {
+                printf_log(LOG_INFO, "Warning, unknown choice for BOX64_PROFILE: %s, choices are: safest,safe,default,fast,fastest.\n", box64env.profile);
+                warned = 1;
+            }
+        }
     }
 
     if (box64env.maxcpu == 0 || (box64env.new_maxcpu < box64env.maxcpu)) {
@@ -291,6 +328,8 @@ static void freeEnv(box64env_t* env)
 #define ENV_ARCH "rv64"
 #elif defined(LA64)
 #define ENV_ARCH "la64"
+#elif defined(X86_64)
+#define ENV_ARCH "x86_64"
 #else
 #warning "Unknown architecture for ENV_ARCH"
 #define ENV_ARCH "unknown"
@@ -835,15 +874,15 @@ done:
 #define HEADER_SIGN "DynaCache"
 #define SET_VERSION(MAJ, MIN, REV) (((MAJ)<<24)|((MIN)<<16)|(REV))
 #ifdef ARM64
-#define ARCH_VERSION SET_VERSION(0, 0, 9)
+#define ARCH_VERSION SET_VERSION(0, 0, 11)
 #elif defined(RV64)
-#define ARCH_VERSION SET_VERSION(0, 0, 3)
+#define ARCH_VERSION SET_VERSION(0, 0, 4)
 #elif defined(LA64)
-#define ARCH_VERSION SET_VERSION(0, 0, 3)
+#define ARCH_VERSION SET_VERSION(0, 0, 4)
 #else
 #error meh!
 #endif
-#define DYNAREC_VERSION SET_VERSION(0, 0, 9)
+#define DYNAREC_VERSION SET_VERSION(0, 1, 0)
 
 typedef struct DynaCacheHeader_s {
     char sign[10];  //"DynaCache\0"
@@ -1116,11 +1155,6 @@ int ReadDynaCache(const char* folder, const char* name, mapping_t* mapping, int 
         fclose(f);
         return DCERR_DYNARCHVER;
     }
-    if(header.arch_version!=ARCH_VERSION) {
-        if(verbose) printf_log_prefix(0, LOG_NONE, "Incompatible Dynarec Arch Version\n");
-        fclose(f);
-        return DCERR_DYNVER;
-    }
     if(header.pagesize!=box64_pagesize) {
         if(verbose) printf_log_prefix(0, LOG_NONE, "Bad pagesize\n");
         fclose(f);
@@ -1224,7 +1258,7 @@ int ReadDynaCache(const char* folder, const char* name, mapping_t* mapping, int 
         for(size_t i=0; i<header.nLockAddresses; ++i)
             addLockAddress(lockAddresses[i]+delta_map);
         for(size_t i=0; i<header.nUnalignedAddresses; ++i)
-            add_unaligned_address(lockAddresses[i]+delta_map);
+            add_unaligned_address(unalignedAddresses[i]+delta_map);
         dynarec_log(LOG_INFO, "Loaded DynaCache for %s, with %d blocks\n", mapping->fullname, header.nblocks);
     }
     fclose(f);

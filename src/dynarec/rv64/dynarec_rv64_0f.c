@@ -960,6 +960,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             B##NO(tmp1, 8);                                                                      \
         }                                                                                        \
         LDxw(gd, ed, fixedaddress);                                                              \
+        if (!rex.w) ZEROUP(gd);                                                                  \
     }
 
             GOCOND(0x40, "CMOV", "Gd, Ed");
@@ -1870,7 +1871,8 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     SRAI(x1, gd, 6);
                 else
                     SRAIW(x1, gd, 5);
-                ADDSL(x3, wback, x1, 2 + rex.w, x1);
+                if (!rex.w && !rex.is32bits) { ADDIW(x1, x1, 0); }
+                ADDSLy(x3, wback, x1, 2 + rex.w, x1);
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
             }
@@ -1926,7 +1928,8 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     SRAI(x1, gd, 6);
                 else
                     SRAIW(x1, gd, 5);
-                ADDSL(x3, wback, x1, 2 + rex.w, x1);
+                if (!rex.w && !rex.is32bits) { ADDIW(x1, x1, 0); }
+                ADDSLy(x3, wback, x1, 2 + rex.w, x1);
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
                 wback = x3;
@@ -2097,9 +2100,9 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         break;
                     case 7:
                         INST_NAME("CLFLUSH Ed");
-                        MESSAGE(LOG_DUMP, "Need Optimization?\n");
-                        addr = geted(dyn, addr, ninst, nextop, &ed, x1, x2, &fixedaddress, rex, NULL, 0, 0);
-                        CALL_(const_native_clflush, -1, 0, ed, 0);
+                        FAKEED;
+                        // Placebo, TODO: we need Zicbom
+                        SMDMB();
                         break;
                     default:
                         DEFAULT;
@@ -2156,7 +2159,8 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     SRAI(x1, gd, 6);
                 else
                     SRAIW(x1, gd, 5);
-                ADDSL(x3, wback, x1, 2 + rex.w, x1);
+                if (!rex.w && !rex.is32bits) { ADDIW(x1, x1, 0); }
+                ADDSLy(x3, wback, x1, 2 + rex.w, x1);
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
                 wback = x3;
@@ -2329,7 +2333,8 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     SRAI(x1, gd, 6);
                 else
                     SRAIW(x1, gd, 5);
-                ADDSL(x3, wback, x1, 2 + rex.w, x1);
+                if (!rex.w && !rex.is32bits) { ADDIW(x1, x1, 0); }
+                ADDSLy(x3, wback, x1, 2 + rex.w, x1);
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
                 wback = x3;

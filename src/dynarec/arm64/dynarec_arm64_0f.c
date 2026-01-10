@@ -194,9 +194,10 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             } else {
                 SETFLAGS(X_ALL, SF_SET_NODF);    // Hack to set flags in "don't care" state
             }
-            BARRIER(BARRIER_FLOAT);
             GETIP(ip);
-            UDF(0);
+            STORE_XEMU_CALL(xRIP);
+            CALL_S(const_native_priv, -1);
+            LOAD_XEMU_CALL(xRIP);
             jump_to_epilog(dyn, 0, xRIP, ninst);
             *need_epilog = 0;
             *ok = 0;
@@ -377,22 +378,22 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             } else
             switch((nextop>>3)&7) {
                 case 0:
-                    INST_NAME("PREFETCHh Ed");
+                    INST_NAME("PREFETCHNTA Ed");
                     addr = geted(dyn, addr, ninst, nextop, &ed, x1, &fixedaddress, NULL, 0xfff, 7, rex, NULL, 0, 0);
                     PLD_L1_STREAM_U12(ed, fixedaddress);
                     break;
                 case 1:
-                    INST_NAME("PREFETCHh Ed");
+                    INST_NAME("PREFETCHT0 Ed");
                     addr = geted(dyn, addr, ninst, nextop, &ed, x1, &fixedaddress, NULL, 0xfff, 7, rex, NULL, 0, 0);
                     PLD_L1_KEEP_U12(ed, fixedaddress);
                     break;
                 case 2:
-                    INST_NAME("PREFETCHh Ed");
+                    INST_NAME("PREFETCHT1 Ed");
                     addr = geted(dyn, addr, ninst, nextop, &ed, x1, &fixedaddress, NULL, 0xfff, 7, rex, NULL, 0, 0);
                     PLD_L2_KEEP_U12(ed, fixedaddress);
                     break;
                 case 3:
-                    INST_NAME("PREFETCHh Ed");
+                    INST_NAME("PREFETCHT2 Ed");
                     addr = geted(dyn, addr, ninst, nextop, &ed, x1, &fixedaddress, NULL, 0xfff, 7, rex, NULL, 0, 0);
                     PLD_L3_KEEP_U12(ed, fixedaddress);
                     break;
@@ -570,7 +571,7 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             // no special check...
         case 0x2F:
             if(opcode==0x2F) {INST_NAME("COMISS Gx, Ex");} else {INST_NAME("UCOMISS Gx, Ex");}
-            SETFLAGS(X_ALL, SF_SET_NODF);
+            SETFLAGS(X_ALL, SF_SET_DF);
             nextop = F8;
             GETGX(v0, 0);
             GETEXSS(s0, 0, 0);
@@ -1791,6 +1792,8 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
         case 0xA2:
             INST_NAME("CPUID");
             NOTEST(x1);
+            GETIP(ip);  // sync RIP for easier debugging
+            STRx_U12(xRIP, xEmu, offsetof(x64emu_t, ip));
             MOVx_REG(x1, xRAX);
             CALL_(const_cpuid, -1, 0);
             break;
@@ -2060,12 +2063,9 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         break;
                     case 7:
                         INST_NAME("CLFLUSH Ed");
-                        MESSAGE(LOG_DUMP, "Need Optimization (CLFLUSH)?\n");
                         addr = geted(dyn, addr, ninst, nextop, &ed, x1, &fixedaddress, NULL, 0, 0, rex, NULL, 0, 0);
-                        if(ed!=x1) {
-                            MOVx_REG(x1, ed);
-                        }
-                        CALL_(const_native_clflush, -1, 0);
+                        DC_CIVAC(ed);
+                        SMDMB();
                         break;
                     default:
                         DEFAULT;
@@ -2656,32 +2656,52 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 DEFAULT;
             } else switch((nextop>>3)&7) {
             case 1:
-                INST_NAME("CMPXCHG8B Gq, Eq");
-                SETFLAGS(X_ZF, SF_SUBSET);
-                SMREAD();
-                addr = geted(dyn, addr, ninst, nextop, &wback, x1, &fixedaddress, NULL, 0, 0, rex, NULL, 0, 0);
-                LDPxw_S7_offset(x2, x3, wback, 0);
-                CMPSxw_REG(xRAX, x2);
-                CCMPxw(xRDX, x3, 0, cEQ);
-                B_MARK(cNE);    // EAX!=ED[0] || EDX!=Ed[1]
-                STPxw_S7_offset(xRBX, xRCX, wback, 0);
-                UFLAG_IF {
-                    IFNATIVE(NF_EQ) {} else {MOV32w(x1, 1);}
-                }
-                B_MARK3_nocond;
-                MARK;
-                MOVxw_REG(xRAX, x2);
-                MOVxw_REG(xRDX, x3);
-                UFLAG_IF {
-                    IFNATIVE(NF_EQ) {} else {MOV32w(x1, 0);}
-                }
-                MARK3;
-                UFLAG_IF {
-                    IFNATIVE(NF_EQ) {} else {
-                        BFIw(xFlags, x1, F_ZF, 1);
+                if(MODREG) {
+                    INST_NAME("Invalid LOCK");
+                    UDF(0);
+                    *need_epilog = 1;
+                    *ok = 0;
+                } else {
+                    if (rex.w) {
+                        INST_NAME("CMPXCHG16B Gq, Eq");
+                    } else {
+                        INST_NAME("CMPXCHG8B Gq, Eq");
                     }
+                    SETFLAGS(X_ZF, SF_SUBSET);
+                    SMREAD();
+                    addr = geted(dyn, addr, ninst, nextop, &wback, x1, &fixedaddress, NULL, 0, 0, rex, NULL, 0, 0);
+                    if(rex.w && BOX64DRENV(dynarec_safeflags)>1) {
+                        // unaligned memory cause a GPF
+                        TSTx_mask(wback, 1, 0, 3);
+                        B_MARK2(cEQ);   // alligned, continue...
+                        STORE_XEMU_CALL(xRIP);
+                        CALL_S(const_native_gpf, -1);
+                        LOAD_XEMU_CALL(xRIP);
+                        MARK2;
+                    }
+                    LDPxw_S7_offset(x2, x3, wback, 0);
+                    CMPSxw_REG(xRAX, x2);
+                    CCMPxw(xRDX, x3, 0, cEQ);
+                    B_MARK(cNE);    // EAX!=ED[0] || EDX!=Ed[1]
+                    STPxw_S7_offset(xRBX, xRCX, wback, 0);
+                    UFLAG_IF {
+                        IFNATIVE(NF_EQ) {} else {MOV32w(x1, 1);}
+                    }
+                    B_MARK3_nocond;
+                    MARK;
+                    MOVxw_REG(xRAX, x2);
+                    MOVxw_REG(xRDX, x3);
+                    UFLAG_IF {
+                        IFNATIVE(NF_EQ) {} else {MOV32w(x1, 0);}
+                    }
+                    MARK3;
+                    UFLAG_IF {
+                        IFNATIVE(NF_EQ) {} else {
+                            BFIw(xFlags, x1, F_ZF, 1);
+                        }
+                    }
+                    SMWRITE();
                 }
-                SMWRITE();
                 break;
             case 4:
                 INST_NAME("Unsupported XSAVEC Ed");

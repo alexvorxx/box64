@@ -716,25 +716,33 @@ void native_pclmul_y(x64emu_t* emu, int gy, int vy, void* p, uint32_t u8)
     GY->u128 = result;
 }
 
-void native_clflush(x64emu_t* emu, void* p)
-{
-    cleanDBFromAddressRange((uintptr_t)p, 8, 0);
-}
-
 static int flagsCacheNeedsTransform(dynarec_native_t* dyn, int ninst) {
     int jmp = dyn->insts[ninst].x64.jmp_insts;
     if(jmp<0)
         return 0;
     #ifdef ARM64
     // df_none is now a defered information
-    if(dyn->insts[ninst].f_exit.dfnone!=dyn->insts[jmp].f_entry.dfnone && !dyn->insts[jmp].df_notneeded)
+    if(dyn->insts[ninst].f_exit==dyn->insts[jmp].f_entry)
+        return 0;
+    if(dyn->insts[jmp].df_notneeded)
+        return 0;
+    if((dyn->insts[jmp].f_entry==status_none_pending) && (dyn->insts[ninst].f_exit!=status_none_pending))
         return 1;
+    switch (dyn->insts[jmp].f_entry) {
+        case status_unk:
+            return (dyn->insts[ninst].f_exit==status_none_pending)?1:0;
+        case status_none:
+            return 1;
+        case status_set:
+            return (dyn->insts[ninst].f_exit==status_none)?0:1;
+        case status_none_pending:
+            return 1;
+    }
     #else
     if(dyn->insts[ninst].f_exit.dfnone)  // flags are fully known, nothing we can do more
         return 0;
     if(dyn->insts[jmp].f_entry.dfnone && !dyn->insts[ninst].f_exit.dfnone && !dyn->insts[jmp].df_notneeded)
         return 1;
-    #endif
     switch (dyn->insts[jmp].f_entry.pending) {
         case SF_UNKNOWN: return 0;
         case SF_SET:
@@ -751,6 +759,7 @@ static int flagsCacheNeedsTransform(dynarec_native_t* dyn, int ninst) {
                 return 0;
             return (dyn->insts[jmp].f_entry.dfnone  == dyn->insts[ninst].f_exit.dfnone)?0:1;
     }
+    #endif
     return 0;
 }
 
@@ -819,10 +828,6 @@ void propagate_nodf(dynarec_native_t* dyn, int ninst)
             return; // already flagged
         if(dyn->insts[ninst].x64.gen_flags || dyn->insts[ninst].x64.use_flags)
             return; // flags are use, so maybe it's needed
-        #ifdef ARM64
-        if(dyn->insts[ninst].f_exit.dfnone)
-            return;
-        #endif
         dyn->insts[ninst].df_notneeded = 1;
         if(!dyn->insts[ninst].pred_sz)
             return;
@@ -859,4 +864,22 @@ void x64disas_add_register_mapping_annotations(char* buf, const char* disas, con
         }
     if (tmp[0]) tmp[strlen(tmp) - 1] = '\0';
     sprintf(buf, "%-35s ;%s", disas, tmp);
+}
+
+void dynarec_stopped(uintptr_t ip, int is32bits)
+{
+    #define PKip(A) (((uint8_t*)ip)[A])
+    dynarec_log(LOG_NONE, "%p: Dynarec stopped because of %s Opcode ", (void*)ip, is32bits ? "x86" : "x64");
+    zydis_dec_t* dec = is32bits ? my_context->dec32 : my_context->dec;
+    if(getProtection(ip+14)&PROT_READ) {
+        if (dec) {
+            dynarec_log_prefix(0, LOG_NONE, "%s", DecodeX64Trace(dec, ip, 1));
+        } else {
+            dynarec_log_prefix(0, LOG_NONE, "%02hhX %02hhX %02hhX %02hhX %02hhX %02hhX %02hhX %02hhX %02hhX %02hhX %02hhX %02hhX %02hhX %02hhX %02hhX",
+                PKip(0), PKip(1), PKip(2), PKip(3), PKip(4), PKip(5), PKip(6), PKip(7), PKip(8), PKip(9),
+                PKip(10), PKip(11), PKip(12), PKip(13), PKip(14));
+        }
+    } else dynarec_log_prefix(0, LOG_NONE, "%02hhX", PKip(0));
+    PrintFunctionAddr(ip, " => ");
+    dynarec_log_prefix(0, LOG_NONE, "\n");
 }

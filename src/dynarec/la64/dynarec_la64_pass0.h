@@ -4,8 +4,9 @@
     dyn->insts[ninst].x64.addr = addr; \
     if (ninst) dyn->insts[ninst - 1].x64.size = dyn->insts[ninst].x64.addr - dyn->insts[ninst - 1].x64.addr
 
-#define MESSAGE(A, ...) do {} while (0)
-#define MAYSETFLAGS() dyn->insts[ninst].x64.may_set = 1
+#define MESSAGE(A, ...) \
+    do {                \
+    } while (0)
 #define READFLAGS(A)                     \
     dyn->insts[ninst].x64.use_flags = A; \
     dyn->f.dfnone = 1;                   \
@@ -22,6 +23,8 @@
             else if (dyn->insts[prev].nat_flags_carry && ((A) == (X_CF) || (A) == (X_CF | X_ZF)))              \
                 dyn->insts[ninst].nat_flags_fusion = 1;                                                        \
             else if (dyn->insts[prev].nat_flags_sign && ((A) == (X_SF | X_OF) || (A) == (X_SF | X_OF | X_ZF))) \
+                dyn->insts[ninst].nat_flags_fusion = 1;                                                        \
+            else if (dyn->insts[prev].nat_flags_sf && dyn->insts[prev].nat_flags_sign && (A) == X_SF)          \
                 dyn->insts[ninst].nat_flags_fusion = 1;                                                        \
         }                                                                                                      \
     }                                                                                                          \
@@ -60,18 +63,8 @@
     --dyn->size;                                                                                                          \
     *ok = -1;                                                                                                             \
     if (ninst) { dyn->insts[ninst - 1].x64.size = ip - dyn->insts[ninst - 1].x64.addr; }                                  \
-    if (BOX64ENV(dynarec_log) >= LOG_INFO || dyn->need_dump || BOX64ENV(dynarec_missing) == 1) {                \
-        dynarec_log(LOG_NONE, "%p: Dynarec stopped because of %s Opcode ", (void*)ip, rex.is32bits ? "x86" : "x64");      \
-        zydis_dec_t* dec = rex.is32bits ? my_context->dec32 : my_context->dec;                                            \
-        if (dec) {                                                                                                        \
-            dynarec_log_prefix(0, LOG_NONE, "%s", DecodeX64Trace(dec, dyn->insts[ninst].x64.addr, 1));                    \
-        } else {                                                                                                          \
-            dynarec_log_prefix(0, LOG_NONE, "%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", \
-                PKip(0), PKip(1), PKip(2), PKip(3), PKip(4), PKip(5), PKip(6), PKip(7), PKip(8), PKip(9),                 \
-                PKip(10), PKip(11), PKip(12), PKip(13), PKip(14));                                                        \
-        }                                                                                                                 \
-        PrintFunctionAddr(ip, " => ");                                                                                    \
-        dynarec_log_prefix(0, LOG_NONE, "\n");                                                                            \
+    if (BOX64ENV(dynarec_log) >= LOG_INFO || dyn->need_dump || BOX64ENV(dynarec_missing) == 1) {                          \
+            dynarec_stopped(dyn->insts[ninst].x64.addr, rex.is32bits);                                                    \
     }
 
 

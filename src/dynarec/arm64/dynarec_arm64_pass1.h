@@ -6,9 +6,8 @@
 #define SETFLAGS(A,B)                                                   \
         dyn->insts[ninst].x64.set_flags = A;                            \
         dyn->insts[ninst].x64.state_flags = (B)&~SF_DF;                 \
-        dyn->f.pending=(B)&SF_SET_PENDING;                              \
-        dyn->f.dfnone=((B)&SF_SET)?(((B)==SF_SET_NODF)?0:1):0;          \
-        if(!BOX64ENV(dynarec_df)) {dyn->f.dfnone=1; dyn->f.pending=0; }
+        dyn->f=((B)&SF_SET)?(((B)==SF_SET_NODF)?dyn->f:status_none_pending):(((B)&SF_SET_PENDING)?status_set:status_none_pending);  \
+        if(!BOX64ENV(dynarec_df)) {dyn->f = status_none; }
 #define NEW_INST                                \
         dyn->insts[ninst].f_entry = dyn->f;     \
         dyn->n.combined1 = dyn->n.combined2 = 0;\

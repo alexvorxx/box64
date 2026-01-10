@@ -12,10 +12,14 @@
 #endif
 
 typedef void (*vFpp_t)(void*, void*);
+typedef void* (*pFppu_t)(void*, void*, uint32_t);
+typedef int32_t (*iFppipp_t)(void*, void*, int32_t, void*, void*);
 typedef int32_t (*iFuipuupp_t)(uint32_t, int32_t, void*, uint32_t, uint32_t, void*, void*);
 
 #define SUPER() ADDED_FUNCTIONS() \
 	GO(cupsSetPasswordCB2, vFpp_t) \
+	GO(_cupsRasterNew, pFppu_t) \
+	GO(_cupsRasterInterpretPPD, iFppipp_t) \
 	GO(cupsEnumDests, iFuipuupp_t)
 
 #endif // __wrappedlibcupsTYPES_H_

@@ -848,6 +848,7 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
     // pre-check for pressure-vessel-wrap
     if(!strcmp(prog_, "pressure-vessel-wrap")) {
         printf_log(LOG_INFO, "pressure-vessel-wrap detected\n");
+        unsetenv("BOX64_ARG0");
         pressure_vessel(argc, argv, nextarg+1, prog);
     }
     #endif
@@ -1054,7 +1055,7 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
         box64_wine_guest_name = NULL;
     }
     // Try to open ftrace again after applying rcfile.
-    openFTrace();
+    displayMiscInfo();
     setupZydis(my_context);
     PrintEnvVariables(&box64env, LOG_INFO);
 
@@ -1076,14 +1077,6 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
     if(BOX64ENV(inprocessgpu))
     {
         add_argv("--in-process-gpu");
-    }
-    if(BOX64ENV(cefdisablegpu))
-    {
-        add_argv("-cef-disable-gpu");
-    }
-    if(BOX64ENV(cefdisablegpucompositing))
-    {
-        add_argv("-cef-disable-gpu-compositing");
     }
     // add new args only if there is no args already
     if(BOX64ENV(args)) {
@@ -1152,8 +1145,10 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
     }
     if(!(my_context->fullpath = box_realpath(my_context->argv[0], NULL)))
         my_context->fullpath = box_strdup(my_context->argv[0]);
-    if(getenv("BOX64_ARG0"))
+    if (getenv("BOX64_ARG0")) {
         my_context->argv[0] = box_strdup(getenv("BOX64_ARG0"));
+        unsetenv("BOX64_ARG0");
+    }
     FILE *f = fopen(my_context->fullpath, "rb");
     if(!f) {
         printf_log(LOG_NONE, "Error: Cannot open %s\n", my_context->fullpath);
@@ -1165,7 +1160,7 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
     #ifdef BOX32
     box64_is32bits = FileIsX86ELF(my_context->fullpath);
     // try to switch personality, but only if not already tried
-    if(box64_is32bits) {
+    if(box64_is32bits && !box64env.nopersona32bits) {
         int tried = getenv("BOX32_PERSONA32BITS")?1:0;
         if(tried) {
             unsetenv("BOX32_PERSONA32BITS");

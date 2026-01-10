@@ -96,23 +96,7 @@ static void addGObject2Alternate(library_t* lib)
     #undef GO
 }
 
-#define SUPER() \
-GO(0)   \
-GO(1)   \
-GO(2)   \
-GO(3)   \
-GO(4)   \
-GO(5)   \
-GO(6)   \
-GO(7)   \
-GO(8)   \
-GO(9)   \
-GO(10)  \
-GO(11)  \
-GO(12)  \
-GO(13)  \
-GO(14)  \
-GO(15)  \
+#include "super80.h"
 
 #define GO(A)   \
 static uintptr_t my_copy_fct_##A = 0;                                     \
@@ -637,6 +621,8 @@ EXPORT uint32_t my_g_signal_new(x64emu_t* emu, void* name, size_t itype, uint32_
         case 4: return my->g_signal_new(name, itype, flags, offset, cb_acc, accu_data, cb_marsh, rtype, n, b[0], b[1], b[2], b[3]);
         case 5: return my->g_signal_new(name, itype, flags, offset, cb_acc, accu_data, cb_marsh, rtype, n, b[0], b[1], b[2], b[3], b[4]);
         case 6: return my->g_signal_new(name, itype, flags, offset, cb_acc, accu_data, cb_marsh, rtype, n, b[0], b[1], b[2], b[3], b[4], b[5]);
+        case 7: return my->g_signal_new(name, itype, flags, offset, cb_acc, accu_data, cb_marsh, rtype, n, b[0], b[1], b[2], b[3], b[4], b[5], b[6]);
+        case 8: return my->g_signal_new(name, itype, flags, offset, cb_acc, accu_data, cb_marsh, rtype, n, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
         case 15:return my->g_signal_new(name, itype, flags, offset, cb_acc, accu_data, cb_marsh, rtype, n, b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14]);
     }
     printf_log(LOG_NONE, "Warning, gobject g_signal_new called with too many parameters (%d)\n", n);
@@ -802,6 +788,12 @@ EXPORT void* my_g_type_class_peek_parent(x64emu_t* emu, void* object)
     void* klass = my->g_type_class_peek_parent(object);
     size_t type = klass?*(size_t*)klass:0;
     return wrapCopyGTKClass(klass, type);
+}
+
+EXPORT void* my_g_type_check_class_cast(x64emu_t* emu, void* object, size_t kast)
+{
+    void* klass = my->g_type_check_class_cast(object, kast);
+    return wrapCopyGTKClass(klass, kast);
 }
 
 EXPORT void my_g_signal_emit_valist(x64emu_t* emu, void* inst, uint32_t id, uint32_t quark, x64_va_list_t b)

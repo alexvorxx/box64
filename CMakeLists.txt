@@ -606,6 +606,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibcmusl.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibcrypt.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibcups.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibcupsimage.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibdl.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibdrm.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibdrmamdgpu.c"
@@ -617,6 +618,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibgl.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibglu.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibglx.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibglxnvidia.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibharfbuzz.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibibus.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibice.c"
@@ -699,6 +701,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappednspr4.c"
     "${BOX64_ROOT}/src/wrapped/wrappednss3.c"
     "${BOX64_ROOT}/src/wrapped/wrappednssutil3.c"
+    "${BOX64_ROOT}/src/wrapped/wrappednvml.c"
     "${BOX64_ROOT}/src/wrapped/wrappedopenal.c"
     "${BOX64_ROOT}/src/wrapped/wrappedopencl.c"
     "${BOX64_ROOT}/src/wrapped/wrappedpango.c"
@@ -856,6 +859,7 @@ if(BOX32)
         "${BOX64_ROOT}/src/wrapped32/wrappedcrashhandler.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedlibgl.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedlibglu.c"
+        "${BOX64_ROOT}/src/wrapped32/wrappedlibglxnvidia.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedsdl1.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedsdl2.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedsdl2image.c"
@@ -1030,12 +1034,7 @@ if(RV64_DYNAREC)
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_00_3.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_0f.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_0f_vector.c"
-    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_64.c"
-    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_64_vector.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_66.c"
-    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_67.c"
-    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_67_vector.c"
-    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_67_32.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_d8.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_d9.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_da.c"
@@ -1050,7 +1049,6 @@ if(RV64_DYNAREC)
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_660f_vector.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_66f20f.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_66f30f.c"
-    "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_6664.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_66f0.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_f20f.c"
     "${BOX64_ROOT}/src/dynarec/rv64/dynarec_rv64_f20f_vector.c"
@@ -1091,15 +1089,11 @@ if(LARCH64_DYNAREC)
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_emit_logic.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_00.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_0f.c"
-    "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_64.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_66.c"
-    "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_6664.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_660f.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_66f0.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_66f20f.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_66f30f.c"
-    "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_67.c"
-    "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_6764.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_f0.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_f20f.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_f30f.c"
@@ -1559,7 +1553,7 @@ add_test(irelative_reloc ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${
     -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref20.txt
     -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
 
-add_test(longjumpInSignals ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
+add_test(longjumpInSignals_nocosim ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
     -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test21 -D TEST_OUTPUT=tmpfile21.txt
     -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref21.txt
     -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
@@ -1627,6 +1621,11 @@ add_test(x87pc ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
     -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
 
 set_tests_properties(x87pc PROPERTIES ENVIRONMENT "BOX64_DYNAREC_X87DOUBLE=2")
+
+add_test(Boundary ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
+    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test33 -D TEST_OUTPUT=tmpfile33.txt
+    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref33.txt
+    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
 
 else()
 
@@ -1715,7 +1714,7 @@ add_test(irelative_reloc ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${
     -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref20.txt
     -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
 
-# add_test(longjumpInSignals ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
+# add_test(longjumpInSignals_nocosim ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
 #     -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test21_android -D TEST_OUTPUT=tmpfile21.txt
 #     -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref21.txt
 #     -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
@@ -1887,7 +1886,7 @@ if(BOX32)
 
     set_tests_properties(sse_32bits PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTNAN=0;BOX64_DYNAREC_FASTROUND=0")
 
-    add_test(NAME longjumpInSignals_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
+    add_test(NAME longjumpInSignals_32bits_nocosim COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
         -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test18 -D TEST_OUTPUT=tmpfile32_18.txt
         -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref18.txt
         -P ${CMAKE_SOURCE_DIR}/runTest.cmake )

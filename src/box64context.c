@@ -135,20 +135,25 @@ static void atfork_child_box64context(void)
     init_mutexes(my_context);
 }
 
+int box64_cycle_log_initialized = 0;
+
 void freeCycleLog(box64context_t* ctx)
 {
-    if(BOX64ENV(rolling_log)) {
+    if (BOX64ENV(rolling_log) && box64_cycle_log_initialized) {
         box_free(ctx->log_call);
         box_free(ctx->log_ret);
         ctx->log_call = NULL;
         ctx->log_ret = NULL;
+        box64_cycle_log_initialized = 0;
     }
 }
+
 void initCycleLog(box64context_t* context)
 {
     if(context && BOX64ENV(rolling_log)) {
         context->log_call = (char*)box_calloc(BOX64ENV(rolling_log), 256*sizeof(char));
         context->log_ret = (char*)box_calloc(BOX64ENV(rolling_log), 128*sizeof(char));
+        box64_cycle_log_initialized = 1;
     }
 }
 
@@ -238,6 +243,7 @@ box64context_t *NewBox64Context(int argc)
 }
 
 void freeALProcWrapper(box64context_t* context);
+void freeCUDAProcWrapper(box64context_t* context);
 EXPORTDYN
 void FreeBox64Context(box64context_t** context)
 {
@@ -308,6 +314,7 @@ void FreeBox64Context(box64context_t** context)
     #ifndef STATICBUILD
     freeGLProcWrapper(ctx);
     freeALProcWrapper(ctx);
+    freeCUDAProcWrapper(ctx);
     #ifdef BOX32
     #endif
     #endif

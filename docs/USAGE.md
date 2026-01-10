@@ -146,10 +146,17 @@ Enable x86 PAUSE emulation, may help the performance of spinlocks. Available in 
 
 ### BOX64_DYNAREC_PURGE
 
-Automatically purge old unused dynablocks and save memory, may have impact on performance.
+Purge dynablocks that haven't been executed recently, based on tick age threshold (BOX64_DYNAREC_PURGE_AGE).
 
  * 0: Dynarec will not purge old unused dynablocks. [Default]
- * 1: Dynarec will purge old unused dynablocks. 
+ * 1: Dynarec will purge old unused dynablocks based on tick age. 
+
+### BOX64_DYNAREC_PURGE_AGE
+
+Tick age threshold for dynablock purging (requires BOX64_DYNAREC_PURGE=1).
+
+ * 4096: Default age threshold. [Default]
+ * XXXX: Custom age threshold (range: 10-65536). 
 
 ### BOX64_DYNAREC_SAFEFLAGS
 
@@ -248,20 +255,6 @@ Arguments to pass to the guest program, only valid if there is no existing argum
  * XXXX: Pass argument XXXX to the program. 
  * XXXX YYYY ZZZZ: Pass arguments XXXX, YYYY and ZZZZ to the guest program. 
 
-### BOX64_CEFDISABLEGPU
-
-Add -cef-disable-gpu argument to the guest program.
-
- * 0: Does nothing. [Default]
- * 1: Add -cef-disable-gpu argument to the guest program. 
-
-### BOX64_CEFDISABLEGPUCOMPOSITING
-
-Add -cef-disable-gpu-compositing argument to the guest program.
-
- * 0: Does nothing. [Default]
- * 1: Add -cef-disable-gpu-compositing argument to the guest program. 
-
 ### BOX64_INSERT_ARGS
 
 Prepend arguments to the command line.
@@ -314,12 +307,6 @@ Expose AVX extension to CPUID and cpuinfo file. Default value is 2 on Arm64 beca
 Path to the bash executable.
 
  * XXXX: Use bash executable at path XXXX. 
-
-### BOX64_PYTHON3
-
-Path to a python3 executable.
-
- * XXXX: Use python3 executable at path XXXX. 
 
 ### BOX64_CPUTYPE
 
@@ -440,6 +427,22 @@ Expose PCLMULQDQ capabilities. Available in WowBox64.
 
  * 0: Do not expose PCLMULQDQ capabilities. 
  * 1: Expose PCLMULQDQ capabilities. [Default]
+
+### BOX64_PROFILE
+
+Predefined sets of environment variables with compatibility or performance in mind. Available in WowBox64.
+
+ * safest: Profile with all the unsafe DynaRec optimizations disabled. 
+ * safe: Well, less safer than safest. 
+ * default: The default settings that most programs runs fine with a handy performance. [Default]
+ * fast: Enable many unsafe optimizations, but also enable strongmem emulation. 
+ * fastest: Enable many unsafe optimizations to have a better performance. 
+
+### BOX64_PYTHON3
+
+Path to a python3 executable.
+
+ * XXXX: Use python3 executable at path XXXX. 
 
 ### BOX64_RCFILE
 

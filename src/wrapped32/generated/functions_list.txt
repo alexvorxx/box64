@@ -216,6 +216,7 @@
 #() iEEv -> iEEv
 #() iFEv -> iFEv
 #() iEEi -> iEEi
+#() iFEi -> iFEi
 #() iEEL -> iEEL
 #() iEEp -> iEEp
 #() iFEp -> iFEp
@@ -713,7 +714,6 @@
 #() pFEiu -> pFEiu
 #() pEEip -> pEEip
 #() pFEiV -> pFEiV
-#() pFELV -> pFELV
 #() pEEpi -> pEEpi
 #() pFEpi -> pFEpi
 #() pFEpu -> pFEpu
@@ -888,6 +888,7 @@
 #() vEEppp -> vEEppp
 #() vFEppp -> vFEppp
 #() vFEXLp -> vFEXLp
+#() vFEXpi -> vFEXpi
 #() vFcccc -> vFcccc
 #() vFwwww -> vFwwww
 #() vFiiii -> vFiiii
@@ -990,6 +991,7 @@
 #() cFpiii -> cFpiii
 #() iEEiip -> iEEiip
 #() iEEiiN -> iEEiiN
+#() iEEiLp -> iEEiLp
 #() iEEipp -> iEEipp
 #() iFEipp -> iFEipp
 #() iEEipV -> iEEipV
@@ -1458,6 +1460,7 @@
 #() iFuiuup -> iFuiuup
 #() iFuupid -> iFuupid
 #() iFpiiuu -> iFpiiuu
+#() iFpiipp -> iFpiipp
 #() iFpippL -> iFpippL
 #() iFpippp -> iFpippp
 #() iFpCCCC -> iFpCCCC
@@ -2527,6 +2530,7 @@ wrappedlibc:
   - __fcntl_time64
 - iEiLp:
   - __ioctl_time64
+  - ioctl
 - iEipp:
 - iEipV:
 - iEpii:
@@ -2790,6 +2794,63 @@ wrappedlibglx:
   - glXChooseFBConfig
 - pFXppi:
   - glXCreateContext
+wrappedlibglxnvidia:
+- iFi:
+  - glXSwapIntervalMESA
+- pFp:
+  - glGetVkProcAddrNV
+  - glXGetProcAddress
+  - glXGetProcAddressARB
+- vFip:
+  - glVDPAUMapSurfacesNV
+  - glVDPAUUnmapSurfacesNV
+- vFpp:
+  - glDebugMessageCallback
+  - glDebugMessageCallbackAMD
+  - glDebugMessageCallbackARB
+  - glDebugMessageCallbackKHR
+- iFpp:
+  - eglDebugMessageControlKHR
+- pFXp:
+  - glXGetFBConfigFromVisualSGIX
+  - glXGetVisualFromFBConfig
+  - glXGetVisualFromFBConfigSGIX
+- vFipp:
+  - glProgramCallbackMESA
+- vFppp:
+  - eglSetBlobCacheFuncsANDROID
+- vFXpi:
+  - glXSwapIntervalEXT
+- uFuip:
+  - glCreateShaderProgramv
+- pFXip:
+  - glXChooseVisual
+  - glXGetFBConfigs
+- vFuipu:
+  - glTransformFeedbackVaryings
+  - glTransformFeedbackVaryingsEXT
+- vFuipp:
+  - glCompileShaderIncludeARB
+  - glGetUniformIndices
+  - glShaderSource
+  - glShaderSourceARB
+- pFXipp:
+  - glXChooseFBConfig
+  - glXChooseFBConfigSGIX
+- pFXppi:
+  - glXCreateContext
+- vFuippp:
+  - glBindVertexBuffers
+- vFupupi:
+  - glMultiDrawElements
+  - glMultiDrawElementsEXT
+- vFuuippp:
+  - glBindBuffersRange
+  - glVertexArrayVertexBuffers
+- vFupupip:
+  - glMultiDrawElementsBaseVertex
+- vFppupui:
+  - glMultiModeDrawElementsIBM
 wrappedlibm:
 - UEs:
   - cacosf
@@ -3045,10 +3106,9 @@ wrappedlibx11:
   - XLookupKeysym
 - pFiV:
   - XVaCreateNestedList
-- pFLV:
-  - XGetICValues
 - pFpV:
   - XCreateIC
+  - XGetICValues
   - XGetIMValues
   - XSetICValues
   - XSetIMValues
@@ -3101,8 +3161,6 @@ wrappedlibx11:
   - XkbGetMap
 - vFXLpL:
   - XSetWMSizeHints
-- iFpppp:
-  - XPeekIfEvent
 - iFXLip:
   - XCheckTypedWindowEvent
 - iFXLlp:
@@ -3123,6 +3181,7 @@ wrappedlibx11:
 - iFXppp:
   - XCheckIfEvent
   - XIfEvent
+  - XPeekIfEvent
 - LFXLpi:
   - XCreateColormap
 - pFXCip:

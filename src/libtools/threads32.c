@@ -160,7 +160,7 @@ EXPORT int my32_pthread_attr_setstack(x64emu_t* emu, void* attr, void* stackaddr
 
 EXPORT int my32_pthread_create(x64emu_t *emu, void* t, void* attr, void* start_routine, void* arg)
 {
-	int stacksize = 2*1024*1024;	//default stack size is 2Mo
+	size_t stacksize = 2*1024*1024;	//default stack size is 2Mo
 	void* attr_stack;
 	size_t attr_stacksize;
 	int own;
@@ -312,23 +312,27 @@ EXPORT int my32_pthread_rwlock_init(void* rdlock, void* attr)
 	// the structure is bigger, but the "active" part should be the same size, so just save/restoore the padding at init
 	uint8_t buff[sizeof(pthread_rwlock_t)];
 	if(rdlock && sizeof(pthread_rwlock_t)>X86_RWLOCK_SIZE) {
-		memcpy(buff, rdlock+32, sizeof(pthread_rwlock_t)-X86_RWLOCK_SIZE);
+		memcpy(buff, rdlock+X86_RWLOCK_SIZE, sizeof(pthread_rwlock_t)-X86_RWLOCK_SIZE);
 	}
 	int ret = pthread_rwlock_init(rdlock, attr);
-	memcpy(rdlock+32, buff, sizeof(pthread_rwlock_t)-X86_RWLOCK_SIZE);
+	if(rdlock && sizeof(pthread_rwlock_t)>X86_RWLOCK_SIZE) {
+		memcpy(rdlock+X86_RWLOCK_SIZE, buff, sizeof(pthread_rwlock_t)-X86_RWLOCK_SIZE);
+	}
 	return ret;
 }
 EXPORT int my32___pthread_rwlock_init(void*, void*) __attribute__((alias("my32_pthread_rwlock_init")));
 
 EXPORT int my32_pthread_rwlock_destroy(void* rdlock)
 {
-	// the structure is bigger, but the "active" part should be the same size, so just save/restoore the padding at init
+	// the structure is bigger, but the "active" part should be the same size, so just save/restore the padding at init
 	uint8_t buff[sizeof(pthread_rwlock_t)];
 	if(rdlock && sizeof(pthread_rwlock_t)>X86_RWLOCK_SIZE) {
-		memcpy(buff, rdlock+32, sizeof(pthread_rwlock_t)-X86_RWLOCK_SIZE);
+		memcpy(buff, rdlock+X86_RWLOCK_SIZE, sizeof(pthread_rwlock_t)-X86_RWLOCK_SIZE);
 	}
 	int ret = pthread_rwlock_destroy(rdlock);
-	memcpy(rdlock+32, buff, sizeof(pthread_rwlock_t)-X86_RWLOCK_SIZE);
+	if(rdlock && sizeof(pthread_rwlock_t)>X86_RWLOCK_SIZE) {
+		memcpy(rdlock+X86_RWLOCK_SIZE, buff, sizeof(pthread_rwlock_t)-X86_RWLOCK_SIZE);
+	}
 	return ret;
 }
 
@@ -471,7 +475,7 @@ kh_mapcond_t *mapcond = NULL;
 
 static pthread_cond_t* add_cond(void* cond)
 {
-	if(((uintptr_t)cond)&7==0)
+	if((((uintptr_t)cond)&7)==0)
 		return cond;
 	mutex_lock(&my_context->mutex_thread);
 	khint_t k;
@@ -488,24 +492,20 @@ static pthread_cond_t* add_cond(void* cond)
 }
 static pthread_cond_t* get_cond(void* cond)
 {
-	if(((uintptr_t)cond)&7==0)
+	if((((uintptr_t)cond)&7)==0)
 		return cond;
 	pthread_cond_t* ret;
 	int r;
 	mutex_lock(&my_context->mutex_thread);
-	khint_t k = kh_get(mapcond, mapcond, *(uintptr_t*)cond);
+	khint_t k = kh_get(mapcond, mapcond, (uintptr_t)cond);
 	if(k==kh_end(mapcond)) {
-		khint_t k = kh_get(mapcond, mapcond, (uintptr_t)cond);
-		if(k==kh_end(mapcond)) {
-			printf_log(LOG_DEBUG, "BOX32: Note: phtread_cond not found, create a new empty one\n");
-			ret = (pthread_cond_t*)box_calloc(1, sizeof(pthread_cond_t));
-			k = kh_put(mapcond, mapcond, (uintptr_t)cond, &r);
-			kh_value(mapcond, k) = ret;
-			//*(ptr_t*)cond = to_ptrv(cond);
-			//pthread_cond_init(ret, NULL);
-			memcpy(ret, cond, sizeof(pthread_cond_t));
-		} else
-			ret = kh_value(mapcond, k);
+		printf_log(LOG_DEBUG, "BOX32: Note: phtread_cond not found, create a new empty one\n");
+		ret = (pthread_cond_t*)box_calloc(1, sizeof(pthread_cond_t));
+		k = kh_put(mapcond, mapcond, (uintptr_t)cond, &r);
+		kh_value(mapcond, k) = ret;
+		//*(ptr_t*)cond = to_ptrv(cond);
+		//pthread_cond_init(ret, NULL);
+		memcpy(ret, cond, sizeof(pthread_cond_t));
 	} else
 		ret = kh_value(mapcond, k);
 	mutex_unlock(&my_context->mutex_thread);
@@ -513,13 +513,13 @@ static pthread_cond_t* get_cond(void* cond)
 }
 static void del_cond(void* cond)
 {
-	if(((uintptr_t)cond)&7==0)
+	if((((uintptr_t)cond)&7)==0)
 		return;
 	if(!mapcond)
 		return;
 	mutex_lock(&my_context->mutex_thread);
-	khint_t k = kh_get(mapcond, mapcond, *(uintptr_t*)cond);
-	if(k!=kh_end(mapcond)) {
+	khint_t k = kh_get(mapcond, mapcond, (uintptr_t)cond);
+	if(k==kh_end(mapcond)) {
 		box_free(kh_value(mapcond, k));
 		kh_del(mapcond, mapcond, k);
 	}
@@ -790,7 +790,7 @@ EXPORT int my32_pthread_attr_setstacksize(x64emu_t* emu, void* attr, size_t p)
 	GetStackSize((uintptr_t)attr, &pp, &size);
 	AddStackSize((uintptr_t)attr, pp, p);
 	// PTHREAD_STACK_MIN on x86 might be lower than the current platform...
-	if(p>=0xc000 && p<PTHREAD_STACK_MIN && !(p&4095))
+	if(p>=0xc000 && p<(size_t)PTHREAD_STACK_MIN && !(p&4095))
 		p = PTHREAD_STACK_MIN;
 	return pthread_attr_setstacksize(get_attr(attr), p);
 }
@@ -920,7 +920,7 @@ pthread_mutex_t* createNewMutex()
 	return ret;
 }
 // init = 0: just get the mutex
-// init = 1: get the mutex and init it with optione attr (attr will disallow native mutex)
+// init = 1: get the mutex and init it with optional attr (attr will disallow native mutex)
 pthread_mutex_t* getAlignedMutex(pthread_mutex_t* m)
 {
 	fake_phtread_mutex_t* fake = (fake_phtread_mutex_t*)m;
@@ -951,7 +951,7 @@ pthread_mutex_t* getAlignedMutex(pthread_mutex_t* m)
 	pthread_mutexattr_settype(&attr, fake->i386__kind);
 	pthread_mutex_init(from_ptrv(fake->real_mutex), &attr);
 	pthread_mutexattr_destroy(&attr);
-	fake->__kind==KIND_SIGN;
+	fake->__kind = KIND_SIGN;
 	printf_log(LOG_DEBUG, " (fb: m=%p) ", from_ptrv(fake->real_mutex));
 	return from_ptrv(fake->real_mutex);
 }

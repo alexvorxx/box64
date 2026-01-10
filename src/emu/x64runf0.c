@@ -19,6 +19,8 @@
 #include "box64context.h"
 #include "my_cpuid.h"
 #include "bridge.h"
+#include "x64_signals.h"
+#include "emit_signals.h"
 #ifdef DYNAREC
 #include "../dynarec/native_lock.h"
 #endif
@@ -321,10 +323,10 @@ uintptr_t RunF0(x64emu_t *emu, rex_t rex, uintptr_t addr)
                                     tmp32s = native_lock_write_d(ED, GD->dword[0]);
                                 } else {
                                     R_EAX = tmp32u;
+                                    emu->regs[_AX].dword[1] = 0;
                                     tmp32s = 0;
                                 }
-                            } while(tmp32s);
-                        emu->regs[_AX].dword[1] = 0;
+                            } while (tmp32s);
                     }
 #else
                     pthread_mutex_lock(&my_context->mutex_lock);
@@ -341,8 +343,8 @@ uintptr_t RunF0(x64emu_t *emu, rex_t rex, uintptr_t addr)
                             ED->dword[0] = GD->dword[0];
                         } else {
                             R_EAX = ED->dword[0];
+                            emu->regs[_AX].dword[1] = 0;
                         }
-                        emu->regs[_AX].dword[1] = 0;
                     }
                     pthread_mutex_unlock(&my_context->mutex_lock);
 #endif
@@ -780,6 +782,9 @@ uintptr_t RunF0(x64emu_t *emu, rex_t rex, uintptr_t addr)
                     GETE8xw(0);
                     switch((nextop>>3)&7) {
                         case 1:
+                            if(rex.w && ((uintptr_t)ED)&0xf) {
+                                EmitSignal(emu, X64_SIGSEGV, (void*)R_RIP, 0xbad0); // GPF
+                            }
                             CHECK_FLAGS(emu);
                             GETGD;
 #if defined(DYNAREC) && !defined(TEST_INTERPRETER)

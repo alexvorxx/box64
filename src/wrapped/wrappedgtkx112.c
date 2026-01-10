@@ -81,6 +81,9 @@ typedef unsigned long (*LFpppppi_t)(void*, void*, void*, void*, void*, int);
     GO(g_module_supported, LFv_t)               \
     GO(g_module_symbol, iFppp_t)                \
     GO(g_log, vFpipV_t)                         \
+    GO(gtk_notebook_get_type, LFv_t)            \
+    GO(gtk_cell_renderer_get_type, LFv_t)       \
+    GO(gtk_cell_renderer_text_get_type, LFv_t)  \
 
 #include "generated/wrappedgtkx112types.h"
 
@@ -1303,7 +1306,10 @@ static void addGtk2Alternate(library_t* lib)
     SetGtkFrame2ID(my->gtk_frame_get_type());                                   \
     SetGtkMenuShell2ID(my->gtk_menu_shell_get_type());                          \
     SetGtkMenuBar2ID(my->gtk_menu_bar_get_type());                              \
-    SetGtkTextView2ID(my->gtk_text_view_get_type());
+    SetGtkTextView2ID(my->gtk_text_view_get_type());                            \
+    SetGtkNotebook2ID(my->gtk_notebook_get_type());                             \
+    SetGtkCellRenderer2ID(my->gtk_cell_renderer_get_type());                    \
+    SetGtkCellRendererText2ID(my->gtk_cell_renderer_text_get_type());
 
 #define NEEDED_LIBS "libgdk-x11-2.0.so.0", "libpangocairo-1.0.so.0"
 

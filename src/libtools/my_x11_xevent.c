@@ -39,10 +39,9 @@ void convertXEvent(my_XEvent_32_t* dst, my_XEvent_t* src)
     if(!src->type) {
         // This is an XErrorEvent, and it's different!
         dst->xerror.type = src->xerror.type;
-        // use the silent version here because sometimes src->xerror points to some garbage (we don't know why!)
-        dst->xerror.display = to_ptrv_silent(FindDisplay(src->xerror.display));
-        dst->xerror.resourceid = to_ulong_silent(src->xerror.resourceid);
-        dst->xerror.serial = to_ulong_silent(src->xerror.serial);
+        dst->xerror.display = to_ptrv(FindDisplay(src->xerror.display));
+        dst->xerror.resourceid = to_ulong(src->xerror.resourceid);
+        dst->xerror.serial = to_ulong(src->xerror.serial);
         dst->xerror.error_code = src->xerror.error_code;
         dst->xerror.request_code = src->xerror.request_code;
         dst->xerror.minor_code = src->xerror.minor_code;
@@ -263,9 +262,9 @@ void convertXEvent(my_XEvent_32_t* dst, my_XEvent_t* src)
         default: {
             register_events_t* head = register_events_head;
             while(head) {
-                if(type>=head->start_event && type<=head->end_event) {
-                    for(int i=0; i<head->n; ++i)
-                        if(type==head->events[i].event) {
+                if((uint32_t)type>=head->start_event && (uint32_t)type<=head->end_event) {
+                    for(size_t i=0; i<head->n; ++i)
+                        if((uint32_t)type==head->events[i].event) {
                             head->events[i].to32(dst, src);
                             return;
                         }
@@ -500,9 +499,9 @@ void unconvertXEvent(my_XEvent_t* dst, my_XEvent_32_t* src)
         default: {
             register_events_t* head = register_events_head;
             while(head) {
-                if(type>=head->start_event && type<=head->end_event) {
-                    for(int i=0; i<head->n; ++i)
-                        if(type==head->events[i].event) {
+                if((uint32_t)type>=head->start_event && (uint32_t)type<=head->end_event) {
+                    for(size_t i=0; i<head->n; ++i)
+                        if((uint32_t)type==head->events[i].event) {
                             head->events[i].to64(dst, src);
                             return;
                         }

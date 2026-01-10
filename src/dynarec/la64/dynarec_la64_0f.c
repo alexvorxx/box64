@@ -8,6 +8,7 @@
 #include "box64cpu.h"
 #include "emu/x64emu_private.h"
 #include "la64_emitter.h"
+#include "la64_mapping.h"
 #include "x64emu.h"
 #include "box64stack.h"
 #include "callback.h"
@@ -123,18 +124,22 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             switch ((nextop >> 3) & 7) {
                 case 0:
                     INST_NAME("PREFETCH");
-                    FAKEED;
+                    addr = geted(dyn, addr, ninst, nextop, &ed, x2, x3, &fixedaddress, rex, NULL, 0, 0);
+                    PRELD(0, ed, 0);
                     break;
                  case 1:
                      INST_NAME("PREFETCHW");
-                     FAKEED;
+                     addr = geted(dyn, addr, ninst, nextop, &ed, x2, x3, &fixedaddress, rex, NULL, 0, 0);
+                     PRELD(8, ed, 0);
                      break;
                 case 2:
                     INST_NAME("PREFETCHWT1");
+                    addr = geted(dyn, addr, ninst, nextop, &ed, x2, x3, &fixedaddress, rex, NULL, 0, 0);
+                    PRELD(8, ed, 0);
+                    break;
+                default: // NOP
                     FAKEED;
                     break;
-                default: //???
-                    DEFAULT;
             }
             break;
         case 0x10:
@@ -201,7 +206,6 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0x14:
             INST_NAME("UNPCKLPS Gx, Ex");
             nextop = F8;
-            SMREAD();
             GETEX(q0, 0, 0);
             GETGX(v0, 1);
             VILVL_W(v0, q0, v0);
@@ -209,7 +213,6 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0x15:
             INST_NAME("UNPCKHPS Gx, Ex");
             nextop = F8;
-            SMREAD();
             GETEX(q0, 0, 0);
             GETGX(v0, 1);
             VILVH_W(v0, q0, v0);
@@ -250,11 +253,22 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             } else
                 switch ((nextop >> 3) & 7) {
                     case 0:
-                    case 1:
-                    case 2:
-                    case 3:
-                        INST_NAME("PREFETCHh Ed");
+                        INST_NAME("PREFETCHNTA Ed");
                         FAKEED;
+                        break;
+                    case 1:
+                        INST_NAME("PREFETCHT0 Ed");
+                        addr = geted(dyn, addr, ninst, nextop, &ed, x2, x3, &fixedaddress, rex, NULL, 0, 0);
+                        PRELD(0, ed, 0);
+                        break;
+                    case 2:
+                        INST_NAME("PREFETCHT1 Ed");
+                        FAKEED;
+                        break;
+                    case 3:
+                        INST_NAME("PREFETCHT2 Ed");
+                        addr = geted(dyn, addr, ninst, nextop, &ed, x2, x3, &fixedaddress, rex, NULL, 0, 0);
+                        PRELDX_LOAD_L3_1CACHELINE(ed, x4); // is this a good idea?
                         break;
                     default:
                         INST_NAME("NOP (multibyte)");
@@ -695,6 +709,7 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     else
                         REVB_2W(x1, gd);
                     SDxw(x1, wback, fixedaddress);
+                    SMWRITE2();
                     break;
                 default:
                     DEFAULT;
@@ -779,6 +794,7 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 B##NO(tmp1, 8);                                                                  \
         }                                                                                        \
         LDxw(gd, ed, fixedaddress);                                                              \
+        if (!rex.w) ZEROUP(gd);                                                                  \
     }
 
             GOCOND(0x40, "CMOV", "Gd, Ed");
@@ -1306,7 +1322,6 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         j64 = (uint32_t)(addr + i32_);                                                      \
     else                                                                                    \
         j64 = addr + i32_;                                                                  \
-    BARRIER(BARRIER_MAYBE);                                                                 \
     JUMP(j64, 1);                                                                           \
     if (!dyn->insts[ninst].nat_flags_fusion) {                                              \
         if (cpuext.lbt) {                                                                   \
@@ -1382,7 +1397,19 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
 
             GOCOND(0x90, "SET", "Eb");
 #undef GO
-
+        case 0xA0:
+            INST_NAME("PUSH FS");
+            LD_HU(x2, xEmu, offsetof(x64emu_t, segs[_FS]));
+            PUSH1z(x2);
+            break;
+        case 0xA1:
+            INST_NAME("POP FS");
+            POP1z(x2);
+            ST_H(x2, xEmu, offsetof(x64emu_t, segs[_FS]));
+            CBZ_NEXT(x2);
+            ADDI_D(x1, xZR, _FS);
+            CALL(const_getsegmentbase, -1, x1, 0);
+            break;
         case 0xA2:
             INST_NAME("CPUID");
             NOTEST(x1);
@@ -1406,7 +1433,8 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     SRAI_D(x1, gd, 6);
                 else
                     SRAI_W(x1, gd, 5);
-                ALSL_D(x3, x1, wback, 2 + rex.w); // (&ed) += r1*4;
+                if (!rex.w && !rex.is32bits) { ADDI_W(x1, x1, 0); }
+                ALSLy(x3, x1, wback, 2 + rex.w); // (&ed) += r1*4;
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
             }
@@ -1438,16 +1466,31 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0xA5:
             nextop = F8;
             INST_NAME("SHLD Ed, Gd, CL");
-            SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION); // some flags are left undefined
-            if (BOX64DRENV(dynarec_safeflags) > 1)
-                MAYSETFLAGS();
+            if (BOX64DRENV(dynarec_safeflags) > 1) {
+                READFLAGS(X_ALL);
+                SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_FUSION);
+            } else
+                SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
             GETGD;
             GETED(0);
             if (!rex.w && !rex.is32bits && MODREG) { ZEROUP(ed); }
             ANDI(x3, xRCX, rex.w ? 0x3f : 0x1f);
-            BEQ_NEXT(x3, xZR);
+            CBZ_NEXT(x3);
             emit_shld32(dyn, ninst, rex, ed, gd, x3, x4, x5, x6);
             WBACK;
+            break;
+        case 0xA8:
+            INST_NAME("PUSH GS");
+            LD_HU(x2, xEmu, offsetof(x64emu_t, segs[_GS]));
+            PUSH1z(x2);
+            break;
+        case 0xA9:
+            INST_NAME("POP GS");
+            POP1z(x2);
+            ST_H(x2, xEmu, offsetof(x64emu_t, segs[_GS]));
+            CBZ_NEXT(x2);
+            ADDI_D(x1, xZR, _GS);
+            CALL(const_getsegmentbase, -1, x1, 0);
             break;
         case 0xAB:
             INST_NAME("BTS Ed, Gd");
@@ -1465,7 +1508,8 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     SRAI_D(x1, gd, 6);
                 else
                     SRAI_W(x1, gd, 5);
-                ALSL_D(x3, x1, wback, 2 + rex.w);
+                if (!rex.w && !rex.is32bits) { ADDI_W(x1, x1, 0); }
+                ALSLy(x3, x1, wback, 2 + rex.w); // (&ed) += r1*4;
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
                 wback = x3;
@@ -1508,14 +1552,16 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0xAD:
             nextop = F8;
             INST_NAME("SHRD Ed, Gd, CL");
-            SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
-            if (BOX64DRENV(dynarec_safeflags) > 1)
-                MAYSETFLAGS();
+            if (BOX64DRENV(dynarec_safeflags) > 1) {
+                READFLAGS(X_ALL);
+                SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_FUSION);
+            } else
+                SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
             GETGD;
             GETED(0);
             if (!rex.w && !rex.is32bits && MODREG) { ZEROUP(ed); }
             ANDI(x3, xRCX, rex.w ? 0x3f : 0x1f);
-            BEQ_NEXT(x3, xZR);
+            CBZ_NEXT(x3);
             emit_shrd32(dyn, ninst, rex, ed, gd, x3, x5, x4, x6);
             WBACK;
             break;
@@ -1525,15 +1571,15 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 switch (nextop) {
                     case 0xE8:
                         INST_NAME("LFENCE");
-                        SMDMB();
+                        DBAR(0);
                         break;
                     case 0xF0:
                         INST_NAME("MFENCE");
-                        SMDMB();
+                        DBAR(0);
                         break;
                     case 0xF8:
                         INST_NAME("SFENCE");
-                        SMDMB();
+                        DBAR(0);
                         break;
                     default:
                         DEFAULT;
@@ -1544,7 +1590,7 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         INST_NAME("FXSAVE Ed");
                         MESSAGE(LOG_DUMP, "Need Optimization\n");
                         SKIPTEST(x1);
-                        fpu_purgecache(dyn, ninst, 0, x1, x2, x3);
+                        BARRIER(BARRIER_FLOAT);
                         if (MODREG) {
                             DEFAULT;
                         } else {
@@ -1556,7 +1602,7 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                         INST_NAME("FXRSTOR Ed");
                         MESSAGE(LOG_DUMP, "Need Optimization\n");
                         SKIPTEST(x1);
-                        fpu_purgecache(dyn, ninst, 0, x1, x2, x3);
+                        BARRIER(BARRIER_FLOAT);
                         addr = geted(dyn, addr, ninst, nextop, &ed, x1, x3, &fixedaddress, rex, NULL, 0, 0);
                         CALL(rex.is32bits ? const_fpu_fxrstor32 : const_fpu_fxrstor64, -1, ed, 0);
                         break;
@@ -1611,7 +1657,7 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     case 4:
                         INST_NAME("XSAVE Ed");
                         MESSAGE(LOG_DUMP, "Need Optimization\n");
-                        fpu_purgecache(dyn, ninst, 0, x1, x2, x3);
+                        BARRIER(BARRIER_FLOAT);
                         addr = geted(dyn, addr, ninst, nextop, &ed, x1, x2, &fixedaddress, rex, NULL, 0, 0);
                         MOV32w(x2, rex.w ? 0 : 1);
                         CALL(const_fpu_xsave, -1, ed, x2);
@@ -1619,16 +1665,16 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     case 5:
                         INST_NAME("XRSTOR Ed");
                         MESSAGE(LOG_DUMP, "Need Optimization\n");
-                        fpu_purgecache(dyn, ninst, 0, x1, x2, x3);
+                        BARRIER(BARRIER_FLOAT);
                         addr = geted(dyn, addr, ninst, nextop, &ed, x1, x2, &fixedaddress, rex, NULL, 0, 0);
                         MOV32w(x2, rex.w ? 0 : 1);
                         CALL(const_fpu_xrstor, -1, ed, x2);
                         break;
                     case 7:
                         INST_NAME("CLFLUSH Ed");
-                        MESSAGE(LOG_DUMP, "Need Optimization?\n");
-                        addr = geted(dyn, addr, ninst, nextop, &ed, x1, x2, &fixedaddress, rex, NULL, 0, 0);
-                        CALL_(const_native_clflush, -1, 0, ed, 0);
+                        FAKEED;
+                        // Full flush... no fine-grained options available
+                        DBAR(0);
                         break;
                     default:
                         DEFAULT;
@@ -1660,13 +1706,12 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 UFLAG_IF {
                     SLLI_W(gd, gd, 0);
                     SLLI_W(x3, ed, 0);
-                    MUL_D(gd, gd, x3);
-                    SRLI_D(x3, gd, 32);
-                    SLLI_W(gd, gd, 0);
+                    MUL_D(x4, gd, x3);
+                    SRLI_D(x3, x4, 32);
+                    SLLI_W(gd, x4, 0);
                     SET_DFNONE();
                     IFX (X_CF | X_OF) {
-                        SRAI_W(x4, gd, 31);
-                        SUB_D(x3, x3, x4);
+                        XOR(x3, gd, x4);
                         SNEZ(x3, x3);
                         IFX (X_CF) BSTRINS_D(xFlags, x3, F_CF, F_CF);
                         IFX (X_OF) BSTRINS_D(xFlags, x3, F_OF, F_OF);
@@ -1699,7 +1744,8 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     SRAI_D(x1, gd, 6);
                 else
                     SRAI_W(x1, gd, 5);
-                ALSL_D(x3, x1, wback, 2 + rex.w);
+                if (!rex.w && !rex.is32bits) { ADDI_W(x1, x1, 0); }
+                ALSLy(x3, x1, wback, 2 + rex.w); // (&ed) += r1*4;
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
                 wback = x3;
@@ -1858,7 +1904,8 @@ uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                     SRAI_D(x1, gd, 6);
                 else
                     SRAI_W(x1, gd, 5);
-                ALSL_D(x3, x1, wback, 2 + rex.w);
+                if (!rex.w && !rex.is32bits) { ADDI_W(x1, x1, 0); }
+                ALSLy(x3, x1, wback, 2 + rex.w); // (&ed) += r1*4;
                 LDxw(x1, x3, fixedaddress);
                 ed = x1;
                 wback = x3;

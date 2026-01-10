@@ -382,6 +382,7 @@ static int loadEmulatedLib(const char* libname, library_t *lib, box64context_t* 
             printf_dump(LOG_INFO, "libjvm detected, disable Dynarec BigBlock and enable Dynarec StrongMem, hide SSE 4.2\n");
             SET_BOX64ENV(dynarec_bigblock, 0);
             SET_BOX64ENV(dynarec_strongmem, 1);
+            SET_BOX64ENV(dynarec_safeflags, 2); // for example, SlayTheSpire requires safeflags=2 on the REPZ SCASD opcode
             #else
             printf_dump(LOG_INFO, "libjvm detected, hide SSE 4.2\n");
             #endif
@@ -1180,7 +1181,7 @@ void AddMainElfToLinkmap32(elfheader_t* elf)
 
     lm->l_addr = (Elf32_Addr)to_ptrv(GetElfDelta(elf));
     lm->l_name = to_cstring(my_context->fullpath);
-    lm->l_ld = to_ptrv(GetDynamicSection(elf));
+    lm->l_ld = to_ptrv(GetLoadedDynamicSection(elf));
 }
 #endif
 
@@ -1236,7 +1237,7 @@ void AddMainElfToLinkmap(elfheader_t* elf)
 
     lm->l_addr = (Elf64_Addr)GetElfDelta(elf);
     lm->l_name = my_context->fullpath;
-    lm->l_ld = GetDynamicSection(elf);
+    lm->l_ld = GetLoadedDynamicSection(elf);
 }
 
 needed_libs_t* new_neededlib(int n)

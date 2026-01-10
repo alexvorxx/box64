@@ -69,17 +69,7 @@
         LDz(x1, wback, fixedaddress);                                                           \
         ed = x1;                                                                                \
     }
-// GETED32 can use r1 for ed, and r2 for wback. wback is 0 if ed is xEAX..xEDI
-#define GETED32(D)                                                                                \
-    if (MODREG) {                                                                                 \
-        ed = TO_NAT((nextop & 7) + (rex.b << 3));                                                 \
-        wback = 0;                                                                                \
-    } else {                                                                                      \
-        SMREAD();                                                                                 \
-        addr = geted32(dyn, addr, ninst, nextop, &wback, x2, x1, &fixedaddress, rex, NULL, 1, D); \
-        LDxw(x1, wback, fixedaddress);                                                            \
-        ed = x1;                                                                                  \
-    }
+
 // GETEDH can use hint for wback and ret for ed. wback is 0 if ed is xEAX..xEDI
 #define GETEDH(hint, ret, D)                                                                       \
     if (MODREG) {                                                                                  \
@@ -119,35 +109,19 @@
 // GETEW will use i for ed, and can use r3 for wback.
 #define GETEW(i, D) GETEWW(x3, i, D)
 
-// GETEDO can use r1 for ed, and r2 for wback. wback is 0 if ed is xEAX..xEDI
-#define GETEDO(O, D)                                                                                \
-    if (MODREG) {                                                                                   \
-        ed = TO_NAT((nextop & 7) + (rex.b << 3));                                                   \
-        wback = 0;                                                                                  \
-    } else {                                                                                        \
-        SMREAD();                                                                                   \
-        if (rex.is32bits) {                                                                         \
-            addr = geted(dyn, addr, ninst, nextop, &wback, x2, x1, &fixedaddress, rex, NULL, 1, D); \
-            ADDz(O, wback, O);                                                                      \
-            LD_WU(x1, O, fixedaddress);                                                             \
-        } else {                                                                                    \
-            addr = geted(dyn, addr, ninst, nextop, &wback, x2, x1, &fixedaddress, rex, NULL, 0, D); \
-            LDXxw(x1, wback, O);                                                                    \
-        }                                                                                           \
-        ed = x1;                                                                                    \
+#define GETGWEW(i, j, D)                                    \
+    GETEW(j, D);                                            \
+    if (MODREG) {                                           \
+        gd = TO_NAT(((nextop & 0x38) >> 3) + (rex.r << 3)); \
+        if (gd == wback)                                    \
+            gd = ed;                                        \
+        else {                                              \
+            GETGW(i);                                       \
+        }                                                   \
+    } else {                                                \
+        GETGW(i);                                           \
     }
-// GETEDOz can use r1 for ed, and r2 for wback. wback is 0 if ed is xEAX..xEDI
-#define GETEDOz(O, D, S)                                                                       \
-    if (MODREG) {                                                                              \
-        ed = TO_NAT((nextop & 7) + (rex.b << 3));                                              \
-        wback = 0;                                                                             \
-    } else {                                                                                   \
-        SMREAD();                                                                              \
-        addr = geted(dyn, addr, ninst, nextop, &wback, x2, S, &fixedaddress, rex, NULL, 1, D); \
-        ADDz(S, wback, O);                                                                     \
-        LDz(x1, S, fixedaddress);                                                              \
-        ed = x1;                                                                               \
-    }
+
 // GETSED can use r1 for ed, and r2 for wback. ed will be sign extended!
 #define GETSED(D)                                                                               \
     if (MODREG) {                                                                               \
@@ -313,33 +287,24 @@
     gd = i;                                                  \
     BSTRPICK_D(gd, gb1, gb2 + 7, gb2);
 
-// GETEBO will use i for ed, i is also Offset, and can use r3 for wback.
-#define GETEBO(i, D)                                                                                \
-    if (MODREG) {                                                                                   \
-        if (rex.rex) {                                                                              \
-            wback = TO_NAT((nextop & 7) + (rex.b << 3));                                            \
-            wb2 = 0;                                                                                \
-        } else {                                                                                    \
-            wback = (nextop & 7);                                                                   \
-            wb2 = (wback >> 2) * 8;                                                                 \
-            wback = TO_NAT(wback & 3);                                                              \
-        }                                                                                           \
-        BSTRPICK_D(i, wback, wb2 + 7, wb2);                                                         \
-        wb1 = 0;                                                                                    \
-        ed = i;                                                                                     \
-    } else {                                                                                        \
-        SMREAD();                                                                                   \
-        if (rex.is32bits) {                                                                         \
-            addr = geted(dyn, addr, ninst, nextop, &wback, x3, x2, &fixedaddress, rex, NULL, 1, D); \
-            ADDz(x3, wback, i);                                                                     \
-            if (wback != x3) wback = x3;                                                            \
-            LD_BU(i, wback, fixedaddress);                                                          \
-        } else {                                                                                    \
-            addr = geted(dyn, addr, ninst, nextop, &wback, x3, x2, &fixedaddress, rex, NULL, 0, D); \
-            LDX_BU(i, wback, i);                                                                    \
-        }                                                                                           \
-        wb1 = 1;                                                                                    \
-        ed = i;                                                                                     \
+#define GETGBEB(i, j, D)                                         \
+    GETEB(j, D);                                                 \
+    if (MODREG) {                                                \
+        if (rex.rex) {                                           \
+            gb1 = TO_NAT(((nextop & 0x38) >> 3) + (rex.r << 3)); \
+            gb2 = 0;                                             \
+        } else {                                                 \
+            gd = (nextop & 0x38) >> 3;                           \
+            gb2 = ((gd & 4) << 1);                               \
+            gb1 = TO_NAT((gd & 3));                              \
+        }                                                        \
+        if (gb1 == wback && gb2 == wb2)                          \
+            gd = ed;                                             \
+        else {                                                   \
+            GETGB(i);                                            \
+        }                                                        \
+    } else {                                                     \
+        GETGB(i);                                                \
     }
 
 #define VEXTRINS_IMM_4_0(n, m) ((n & 0xf) << 4 | (m & 0xf))
@@ -826,16 +791,6 @@
     j64 = (dyn->insts) ? (dyn->insts[ninst].epilog - (dyn->native_size)) : 0; \
     BCNEZ(fcc, j64)
 
-// Branch to NEXT if reg1==reg2 (use j64)
-#define BEQ_NEXT(reg1, reg2)                                                  \
-    j64 = (dyn->insts) ? (dyn->insts[ninst].epilog - (dyn->native_size)) : 0; \
-    BEQ(reg1, reg2, j64)
-
-// Branch to NEXT if reg1!=reg2 (use j64)
-#define BNE_NEXT(reg1, reg2)                                                  \
-    j64 = (dyn->insts) ? (dyn->insts[ninst].epilog - (dyn->native_size)) : 0; \
-    BNE(reg1, reg2, j64)
-
 // Branch to MARKSEG if reg is 0 (use j64)
 #define CBZ_MARKSEG(reg)                   \
     j64 = GETMARKSEG - (dyn->native_size); \
@@ -900,14 +855,12 @@
 
 #define FORCE_DFNONE() ST_W(xZR, xEmu, offsetof(x64emu_t, df))
 
-#define SET_DFNONE()                          \
-    do {                                      \
-        if (!dyn->f.dfnone) {                 \
-            FORCE_DFNONE();                   \
-        }                                     \
-        if (!dyn->insts[ninst].x64.may_set) { \
-            dyn->f.dfnone = 1;                \
-        }                                     \
+#define SET_DFNONE()          \
+    do {                      \
+        if (!dyn->f.dfnone) { \
+            FORCE_DFNONE();   \
+        }                     \
+        dyn->f.dfnone = 1;    \
     } while (0)
 
 #define SET_DF(S, N)                                           \
@@ -1003,12 +956,6 @@
     x87_do_pop(dyn, ninst, scratch);
 #endif
 
-#ifndef MAYSETFLAGS
-#define MAYSETFLAGS() \
-    do {              \
-    } while (0)
-#endif
-
 #ifndef READFLAGS
 #define READFLAGS(A)                                 \
     if (((A) != X_PEND && dyn->f.pending != SF_SET)  \
@@ -1053,6 +1000,7 @@
 
 #define NAT_FLAGS_ENABLE_CARRY() dyn->insts[ninst].nat_flags_carry = 1
 #define NAT_FLAGS_ENABLE_SIGN()  dyn->insts[ninst].nat_flags_sign = 1
+#define NAT_FLAGS_ENABLE_SF()    dyn->insts[ninst].nat_flags_sf = 1
 
 #ifndef SETFLAGS
 #define SETFLAGS(A, B, FUSION)                                                                                      \
@@ -1188,11 +1136,7 @@
 
 #define dynarec64_00          STEPNAME(dynarec64_00)
 #define dynarec64_0F          STEPNAME(dynarec64_0F)
-#define dynarec64_64          STEPNAME(dynarec64_64)
 #define dynarec64_66          STEPNAME(dynarec64_66)
-#define dynarec64_6664        STEPNAME(dynarec64_6664)
-#define dynarec64_67          STEPNAME(dynarec64_67)
-#define dynarec64_6764        STEPNAME(dynarec64_6764)
 #define dynarec64_F30F        STEPNAME(dynarec64_F30F)
 #define dynarec64_660F        STEPNAME(dynarec64_660F)
 #define dynarec64_66F0        STEPNAME(dynarec64_66F0)
@@ -1223,7 +1167,7 @@
 #define dynarec64_F0 STEPNAME(dynarec64_F0)
 
 #define geted               STEPNAME(geted)
-#define geted32             STEPNAME(geted32)
+#define geted16             STEPNAME(geted16)
 #define jump_to_epilog      STEPNAME(jump_to_epilog)
 #define jump_to_epilog_fast STEPNAME(jump_to_epilog_fast)
 #define jump_to_next        STEPNAME(jump_to_next)
@@ -1233,92 +1177,103 @@
 #define call_c              STEPNAME(call_c)
 #define call_n              STEPNAME(call_n)
 #define grab_segdata        STEPNAME(grab_segdata)
+#define emit_adc16          STEPNAME(emit_adc16)
+#define emit_adc32          STEPNAME(emit_adc32)
+#define emit_adc8           STEPNAME(emit_adc8)
+#define emit_adc8c          STEPNAME(emit_adc8c)
+#define emit_add16          STEPNAME(emit_add16)
+#define emit_add32          STEPNAME(emit_add32)
+#define emit_add32c         STEPNAME(emit_add32c)
+#define emit_add8           STEPNAME(emit_add8)
+#define emit_add8c          STEPNAME(emit_add8c)
+#define emit_and16          STEPNAME(emit_and16)
+#define emit_and32          STEPNAME(emit_and32)
+#define emit_and32c         STEPNAME(emit_and32c)
+#define emit_and8           STEPNAME(emit_and8)
+#define emit_and8c          STEPNAME(emit_and8c)
 #define emit_cmp16          STEPNAME(emit_cmp16)
 #define emit_cmp16_0        STEPNAME(emit_cmp16_0)
 #define emit_cmp32          STEPNAME(emit_cmp32)
 #define emit_cmp32_0        STEPNAME(emit_cmp32_0)
 #define emit_cmp8           STEPNAME(emit_cmp8)
 #define emit_cmp8_0         STEPNAME(emit_cmp8_0)
-#define emit_test8          STEPNAME(emit_test8)
-#define emit_test8c         STEPNAME(emit_test8c)
-#define emit_test16         STEPNAME(emit_test16)
-#define emit_test32         STEPNAME(emit_test32)
-#define emit_test32c        STEPNAME(emit_test32c)
-#define emit_add32          STEPNAME(emit_add32)
-#define emit_add32c         STEPNAME(emit_add32c)
-#define emit_add8           STEPNAME(emit_add8)
-#define emit_add8c          STEPNAME(emit_add8c)
-#define emit_add16          STEPNAME(emit_add16)
-#define emit_adc32          STEPNAME(emit_adc32)
-#define emit_adc8           STEPNAME(emit_adc8)
-#define emit_adc8c          STEPNAME(emit_adc8c)
-#define emit_adc16          STEPNAME(emit_adc16)
-#define emit_sub16          STEPNAME(emit_sub16)
-#define emit_sub32          STEPNAME(emit_sub32)
-#define emit_sub32c         STEPNAME(emit_sub32c)
-#define emit_sub8           STEPNAME(emit_sub8)
-#define emit_sub8c          STEPNAME(emit_sub8c)
-#define emit_sbb8           STEPNAME(emit_sbb8)
-#define emit_sbb8c          STEPNAME(emit_sbb8c)
-#define emit_sbb16          STEPNAME(emit_sbb16)
-#define emit_sbb32          STEPNAME(emit_sbb32)
-#define emit_neg8           STEPNAME(emit_neg8)
-#define emit_neg16          STEPNAME(emit_neg16)
-#define emit_neg32          STEPNAME(emit_neg32)
-#define emit_inc8           STEPNAME(emit_inc8)
-#define emit_inc16          STEPNAME(emit_inc16)
-#define emit_inc32          STEPNAME(emit_inc32)
-#define emit_dec8           STEPNAME(emit_dec8)
 #define emit_dec16          STEPNAME(emit_dec16)
 #define emit_dec32          STEPNAME(emit_dec32)
+#define emit_dec8           STEPNAME(emit_dec8)
+#define emit_inc16          STEPNAME(emit_inc16)
+#define emit_inc32          STEPNAME(emit_inc32)
+#define emit_inc8           STEPNAME(emit_inc8)
+#define emit_neg16          STEPNAME(emit_neg16)
+#define emit_neg32          STEPNAME(emit_neg32)
+#define emit_neg8           STEPNAME(emit_neg8)
+#define emit_or16           STEPNAME(emit_or16)
 #define emit_or32           STEPNAME(emit_or32)
 #define emit_or32c          STEPNAME(emit_or32c)
 #define emit_or8            STEPNAME(emit_or8)
 #define emit_or8c           STEPNAME(emit_or8c)
-#define emit_or16           STEPNAME(emit_or16)
-#define emit_xor8           STEPNAME(emit_xor8)
-#define emit_xor8c          STEPNAME(emit_xor8c)
-#define emit_xor16          STEPNAME(emit_xor16)
-#define emit_xor32          STEPNAME(emit_xor32)
-#define emit_xor32c         STEPNAME(emit_xor32c)
-#define emit_and8           STEPNAME(emit_and8)
-#define emit_and8c          STEPNAME(emit_and8c)
-#define emit_and16          STEPNAME(emit_and16)
-#define emit_and32          STEPNAME(emit_and32)
-#define emit_and32c         STEPNAME(emit_and32c)
+#define emit_rcl16c         STEPNAME(emit_rcl16c)
+#define emit_rcl32          STEPNAME(emit_rcl32)
+#define emit_rcl32c         STEPNAME(emit_rcl32c)
+#define emit_rcl8           STEPNAME(emit_rcl8)
+#define emit_rcl8c          STEPNAME(emit_rcl8c)
+#define emit_rcr16c         STEPNAME(emit_rcr16c)
+#define emit_rcr32          STEPNAME(emit_rcr32)
+#define emit_rcr32c         STEPNAME(emit_rcr32c)
+#define emit_rcr8           STEPNAME(emit_rcr8)
+#define emit_rcr8c          STEPNAME(emit_rcr8c)
+#define emit_rol16          STEPNAME(emit_rol16)
+#define emit_rol16c         STEPNAME(emit_rol16c)
+#define emit_rol32          STEPNAME(emit_rol32)
+#define emit_rol32c         STEPNAME(emit_rol32c)
+#define emit_rol8           STEPNAME(emit_rol8)
+#define emit_rol8c          STEPNAME(emit_rol8c)
+#define emit_ror16c         STEPNAME(emit_ror16c)
+#define emit_ror32          STEPNAME(emit_ror32)
+#define emit_ror32c         STEPNAME(emit_ror32c)
+#define emit_ror8           STEPNAME(emit_ror8)
+#define emit_ror8c          STEPNAME(emit_ror8c)
+#define emit_sar16          STEPNAME(emit_sar16)
+#define emit_sar16c         STEPNAME(emit_sar16c)
+#define emit_sar32          STEPNAME(emit_sar32)
+#define emit_sar32c         STEPNAME(emit_sar32c)
+#define emit_sar8           STEPNAME(emit_sar8)
+#define emit_sbb16          STEPNAME(emit_sbb16)
+#define emit_sbb32          STEPNAME(emit_sbb32)
+#define emit_sbb8           STEPNAME(emit_sbb8)
+#define emit_sbb8c          STEPNAME(emit_sbb8c)
 #define emit_shl16          STEPNAME(emit_shl16)
 #define emit_shl16c         STEPNAME(emit_shl16c)
 #define emit_shl32          STEPNAME(emit_shl32)
 #define emit_shl32c         STEPNAME(emit_shl32c)
 #define emit_shl8           STEPNAME(emit_shl8)
-#define emit_shr8           STEPNAME(emit_shr8)
-#define emit_sar8           STEPNAME(emit_sar8)
+#define emit_shld16         STEPNAME(emit_shld16)
+#define emit_shld16c        STEPNAME(emit_shld16c)
+#define emit_shld32         STEPNAME(emit_shld32)
+#define emit_shld32c        STEPNAME(emit_shld32c)
 #define emit_shr16          STEPNAME(emit_shr16)
 #define emit_shr16c         STEPNAME(emit_shr16c)
 #define emit_shr32          STEPNAME(emit_shr32)
 #define emit_shr32c         STEPNAME(emit_shr32c)
-#define emit_sar16          STEPNAME(emit_sar16)
-#define emit_sar16c         STEPNAME(emit_sar16c)
-#define emit_sar32c         STEPNAME(emit_sar32c)
-#define emit_shld32c        STEPNAME(emit_shld32c)
-#define emit_shrd32c        STEPNAME(emit_shrd32c)
-#define emit_shld32         STEPNAME(emit_shld32)
-#define emit_shrd32         STEPNAME(emit_shrd32)
-#define emit_ror32          STEPNAME(emit_ror32)
-#define emit_ror32c         STEPNAME(emit_ror32c)
-#define emit_rol8           STEPNAME(emit_rol8)
-#define emit_rol8c          STEPNAME(emit_rol8c)
-#define emit_rol16          STEPNAME(emit_rol16)
-#define emit_rol16c         STEPNAME(emit_rol16c)
-#define emit_rol32          STEPNAME(emit_rol32)
-#define emit_rol32c         STEPNAME(emit_rol32c)
-#define emit_rcl16c         STEPNAME(emit_rcl16c)
-#define emit_rcr16c         STEPNAME(emit_rcr16c)
-#define emit_ror16c         STEPNAME(emit_ror16c)
-#define emit_shld16c        STEPNAME(emit_shld16c)
-#define emit_shrd16c        STEPNAME(emit_shrd16c)
+#define emit_shr8           STEPNAME(emit_shr8)
 #define emit_shrd16         STEPNAME(emit_shrd16)
-#define emit_shld16         STEPNAME(emit_shld16)
+#define emit_shrd16c        STEPNAME(emit_shrd16c)
+#define emit_shrd32         STEPNAME(emit_shrd32)
+#define emit_shrd32c        STEPNAME(emit_shrd32c)
+#define emit_sub16          STEPNAME(emit_sub16)
+#define emit_sub32          STEPNAME(emit_sub32)
+#define emit_sub32c         STEPNAME(emit_sub32c)
+#define emit_sub8           STEPNAME(emit_sub8)
+#define emit_sub8c          STEPNAME(emit_sub8c)
+#define emit_test16         STEPNAME(emit_test16)
+#define emit_test32         STEPNAME(emit_test32)
+#define emit_test32c        STEPNAME(emit_test32c)
+#define emit_test8          STEPNAME(emit_test8)
+#define emit_test8c         STEPNAME(emit_test8c)
+#define emit_xor16          STEPNAME(emit_xor16)
+#define emit_xor32          STEPNAME(emit_xor32)
+#define emit_xor32c         STEPNAME(emit_xor32c)
+#define emit_xor8           STEPNAME(emit_xor8)
+#define emit_xor8c          STEPNAME(emit_xor8c)
 
 #define emit_pf STEPNAME(emit_pf)
 
@@ -1377,7 +1332,7 @@
 uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, uint8_t* ed, uint8_t hint, uint8_t scratch, int64_t* fixaddress, rex_t rex, int* l, int i12, int delta);
 
 /* setup r2 to address pointed by */
-uintptr_t geted32(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, uint8_t* ed, uint8_t hint, uint8_t scratch, int64_t* fixaddress, rex_t rex, int* l, int i12, int delta);
+uintptr_t geted16(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, uint8_t* ed, uint8_t hint, uint8_t scratch, int64_t* fixaddress, rex_t rex, int i12);
 
 // generic x64 helper
 void jump_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int reg, int ninst);
@@ -1389,91 +1344,102 @@ void iret_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, int is64bits);
 void call_c(dynarec_la64_t* dyn, int ninst, la64_consts_t fnc, int reg, int ret, int saveflags, int save_reg, int arg1, int arg2, int arg3, int arg4, int arg5, int arg6);
 void call_n(dynarec_la64_t* dyn, int ninst, void* fnc, int w);
 void grab_segdata(dynarec_la64_t* dyn, uintptr_t addr, int ninst, int reg, int segment, int modreg);
-void emit_cmp8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5, int s6);
-void emit_cmp16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5, int s6);
-void emit_cmp32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5, int s6);
-void emit_cmp8_0(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4);
-void emit_cmp16_0(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4);
-void emit_cmp32_0(dynarec_la64_t* dyn, int ninst, rex_t rex, uint8_t nextop, int s1, int s3, int s4, int s5);
-void emit_test8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_test8c(dynarec_la64_t* dyn, int ninst, int s1, uint8_t c, int s3, int s4, int s5);
-void emit_test16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_test32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
-void emit_test32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s3, int s4, int s5);
+void emit_adc16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_adc32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5, int s6);
+void emit_adc8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_adc8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s3, int s4, int s5, int s6);
+void emit_add16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
 void emit_add32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
 void emit_add32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s2, int s3, int s4, int s5);
 void emit_add8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
 void emit_add8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s2, int s3, int s4);
-void emit_add16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_adc32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5, int s6);
-void emit_adc8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_adc8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s3, int s4, int s5, int s6);
-void emit_adc16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_sub16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_sub32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
-void emit_sub32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s2, int s3, int s4, int s5);
-void emit_sub8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_sub8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s2, int s3, int s4, int s5);
-void emit_sbb8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_sbb8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s3, int s4, int s5, int s6);
-void emit_sbb16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_sbb32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
-void emit_neg8(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4);
-void emit_neg16(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4);
-void emit_neg32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3);
-void emit_inc8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
-void emit_inc16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
-void emit_inc32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
-void emit_dec8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
+void emit_and16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
+void emit_and32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
+void emit_and32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s3, int s4);
+void emit_and8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
+void emit_and8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s3, int s4);
+void emit_cmp16_0(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4);
+void emit_cmp16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5, int s6);
+void emit_cmp32_0(dynarec_la64_t* dyn, int ninst, rex_t rex, uint8_t nextop, int s1, int s3, int s4, int s5);
+void emit_cmp32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5, int s6);
+void emit_cmp8_0(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4);
+void emit_cmp8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5, int s6);
 void emit_dec16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
 void emit_dec32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
+void emit_dec8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
+void emit_inc16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
+void emit_inc32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
+void emit_inc8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
+void emit_neg16(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4);
+void emit_neg32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3);
+void emit_neg8(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4);
+void emit_or16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
 void emit_or32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
 void emit_or32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s3, int s4);
 void emit_or8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
 void emit_or8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s2, int s3, int s4);
-void emit_or16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
-void emit_xor8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
-void emit_xor8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s3, int s4);
-void emit_xor16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_xor32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s3, int s4);
-void emit_xor32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
-void emit_and8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
-void emit_and8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s3, int s4);
-void emit_and16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
-void emit_and32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
-void emit_and32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s3, int s4);
+void emit_rcl16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
+void emit_rcl32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
+void emit_rcl32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4, int s5);
+void emit_rcl8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_rcl8c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
+void emit_rcr16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
+void emit_rcr32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
+void emit_rcr32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4, int s5);
+void emit_rcr8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_rcr8c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
+void emit_rol16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int s5);
+void emit_rol32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
+void emit_rol32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
+void emit_rol8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
+void emit_rol8c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int s5);
+void emit_ror16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
+void emit_ror32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
+void emit_ror32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
+void emit_ror8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
+void emit_ror8c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
+void emit_sar16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_sar16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int s5);
+void emit_sar32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
+void emit_sar32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
+void emit_sar8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_sbb16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_sbb32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
+void emit_sbb8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_sbb8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s3, int s4, int s5, int s6);
 void emit_shl16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
 void emit_shl16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int s5);
 void emit_shl32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
 void emit_shl32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4, int s5);
 void emit_shl8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_shr8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_sar8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_shld16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5, int s6);
+void emit_shld16c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, uint32_t c, int s3, int s4, int s5);
+void emit_shld32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s5, int s3, int s4, int s6);
+void emit_shld32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, uint32_t c, int s3, int s4);
 void emit_shr16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
 void emit_shr16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int s5);
 void emit_shr32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
 void emit_shr32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
-void emit_sar16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_sar16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int s5);
-void emit_sar32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
-void emit_shld32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, uint32_t c, int s3, int s4);
-void emit_shrd32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, uint32_t c, int s3, int s4);
-void emit_shld32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s5, int s3, int s4, int s6);
-void emit_shrd32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s5, int s3, int s4, int s6);
-void emit_ror32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
-void emit_ror32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
-void emit_rol8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
-void emit_rol8c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int s5);
-void emit_rol16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int s5);
-void emit_rol32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
-void emit_rol32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
-void emit_rcl16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
-void emit_rcr16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
-void emit_ror16c(dynarec_la64_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
-void emit_shrd16c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, uint32_t c, int s3, int s4, int s5);
-void emit_shld16c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, uint32_t c, int s3, int s4, int s5);
-void emit_shld16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5, int s6);
+void emit_shr8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
 void emit_shrd16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5, int s6);
+void emit_shrd16c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, uint32_t c, int s3, int s4, int s5);
+void emit_shrd32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s5, int s3, int s4, int s6);
+void emit_shrd32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, uint32_t c, int s3, int s4);
+void emit_sub16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_sub32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
+void emit_sub32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s2, int s3, int s4, int s5);
+void emit_sub8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_sub8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s2, int s3, int s4, int s5);
+void emit_test16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_test32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4, int s5);
+void emit_test32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s3, int s4, int s5);
+void emit_test8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_test8c(dynarec_la64_t* dyn, int ninst, int s1, uint8_t c, int s3, int s4, int s5);
+void emit_xor16(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4, int s5);
+void emit_xor32(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int s2, int s3, int s4);
+void emit_xor32c(dynarec_la64_t* dyn, int ninst, rex_t rex, int s1, int64_t c, int s3, int s4);
+void emit_xor8(dynarec_la64_t* dyn, int ninst, int s1, int s2, int s3, int s4);
+void emit_xor8c(dynarec_la64_t* dyn, int ninst, int s1, int32_t c, int s3, int s4);
 
 void emit_pf(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4);
 
@@ -1600,19 +1566,19 @@ int lsxcache_st_coherency(dynarec_la64_t* dyn, int ninst, int a, int b);
 #endif
 
 
-uintptr_t dynarec64_00(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
+uintptr_t dynarec64_00(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
 uintptr_t dynarec64_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
 uintptr_t dynarec64_F30F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
-uintptr_t dynarec64_64(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int seg, int* ok, int* need_epilog);
-uintptr_t dynarec64_66(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
+uintptr_t dynarec64_64(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int seg, int* ok, int* need_epilog);
+uintptr_t dynarec64_66(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
 uintptr_t dynarec64_6664(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int seg, int* ok, int* need_epilog);
-uintptr_t dynarec64_67(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
-uintptr_t dynarec64_6764(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int seg, int* ok, int* need_epilog);
+uintptr_t dynarec64_67(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
+uintptr_t dynarec64_6764(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int seg, int* ok, int* need_epilog);
 uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
-uintptr_t dynarec64_66F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
+uintptr_t dynarec64_66F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
 uintptr_t dynarec64_66F20F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
 uintptr_t dynarec64_66F30F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
-uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
+uintptr_t dynarec64_F0(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
 uintptr_t dynarec64_F20F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
 uintptr_t dynarec64_AVX(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, vex_t vex, int* ok, int* need_epilog);
 uintptr_t dynarec64_AVX_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, vex_t vex, int* ok, int* need_epilog);
@@ -1625,14 +1591,14 @@ uintptr_t dynarec64_AVX_F2_0F38(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t i
 uintptr_t dynarec64_AVX_F2_0F3A(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, vex_t vex, int* ok, int* need_epilog);
 uintptr_t dynarec64_AVX_F3_0F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, vex_t vex, int* ok, int* need_epilog);
 uintptr_t dynarec64_AVX_F3_0F38(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, vex_t vex, int* ok, int* need_epilog);
-uintptr_t dynarec64_D8(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
-uintptr_t dynarec64_D9(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
-uintptr_t dynarec64_DA(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
-uintptr_t dynarec64_DB(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
-uintptr_t dynarec64_DC(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
-uintptr_t dynarec64_DD(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
-uintptr_t dynarec64_DE(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
-uintptr_t dynarec64_DF(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int rep, int* ok, int* need_epilog);
+uintptr_t dynarec64_D8(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
+uintptr_t dynarec64_D9(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
+uintptr_t dynarec64_DA(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
+uintptr_t dynarec64_DB(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
+uintptr_t dynarec64_DC(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
+uintptr_t dynarec64_DD(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
+uintptr_t dynarec64_DE(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
+uintptr_t dynarec64_DF(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
 
 
 #if STEP < 3
@@ -1682,11 +1648,11 @@ uintptr_t dynarec64_DF(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         break;                                                                                               \
     case B + 0x8:                                                                                            \
         INST_NAME(T1 "S " T2);                                                                               \
-        GO(ANDI(tmp1, xFlags, 1 << F_SF), EQZ, NEZ, _, _, X_SF, X64_JMP_JS);                                 \
+        GO(ANDI(tmp1, xFlags, 1 << F_SF), EQZ, NEZ, GE, LT, X_SF, X64_JMP_JS);                               \
         break;                                                                                               \
     case B + 0x9:                                                                                            \
         INST_NAME(T1 "NS " T2);                                                                              \
-        GO(ANDI(tmp1, xFlags, 1 << F_SF), NEZ, EQZ, _, _, X_SF, X64_JMP_JNS);                                \
+        GO(ANDI(tmp1, xFlags, 1 << F_SF), NEZ, EQZ, LT, GE, X_SF, X64_JMP_JNS);                              \
         break;                                                                                               \
     case B + 0xA:                                                                                            \
         INST_NAME(T1 "P " T2);                                                                               \

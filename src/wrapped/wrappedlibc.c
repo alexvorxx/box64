@@ -1047,6 +1047,14 @@ EXPORT int my___isoc99_swscanf(x64emu_t* emu, void* stream, void* fmt, uint64_t*
   return vswscanf(stream, fmt, VARARGS);
 }
 
+EXPORT int my___isoc23_swscanf(x64emu_t* emu, void* stream, void* fmt, uint64_t* b)
+{
+    myStackAlignScanfW(emu, (const char*)fmt, b, emu->scratch, 2);
+    PREPARE_VALIST;
+
+    return vswscanf(stream, fmt, VARARGS);
+}
+
 EXPORT int my_vsnprintf(x64emu_t* emu, void* buff, size_t s, void * fmt, x64_va_list_t b) {
     (void)emu;
     #ifdef CONVERT_VALIST
@@ -2190,7 +2198,7 @@ EXPORT int32_t my_epoll_pwait(x64emu_t* emu, int32_t epfd, void* events, int32_t
         UnalignEpollEvent(events, _events, ret);
     return ret;
 }
-EXPORT int my_epoll_pwait2(x64emu_t* emu, int epfd, void* events, int maxevents, struct timespec *timeout, sigset_t * sigmask)
+EXPORT int32_t my_epoll_pwait2(x64emu_t* emu, int epfd, void* events, int maxevents, struct timespec *timeout, sigset_t * sigmask)
 {
     struct epoll_event _events[maxevents];
     //AlignEpollEvent(_events, events, maxevents);
@@ -2305,12 +2313,21 @@ EXPORT int32_t my_execve(x64emu_t* emu, const char* path, char* const argv[], ch
     int x86 = my_context->box86path?FileIsX86ELF(path):0;
     int script = (my_context->bashpath && FileIsShell(path))?1:0;
     int python = (my_context->pythonpath && FileIsPython(path))?1:0;
-    printf_log(LOG_DEBUG, "execve(\"%s\", %p[\"%s\", \"%s\", \"%s\"...], %p) is x64=%d x86=%d script=%d python=%d (my_context->envv=%p, environ=%p\n", path, argv, argv[0], argv[1]?argv[1]:"(nil)", argv[2]?argv[2]:"(nil)", envp, x64, x86, script, python, my_context->envv, environ);
+    if(box64env.log>=LOG_DEBUG) {
+        printf_log(LOG_DEBUG, "execve(\"%s\", %p[\"%s\"", path, argv, argv[0]);
+        for(int i=1; argv[i]; ++i)
+            printf_log_prefix(0, LOG_DEBUG, ", \"%s\"", argv[i]);
+        printf_log_prefix(0, LOG_DEBUG, "], %p) is x64=%d x86=%d script=%d python=%d (my_context->envv=%p, environ=%p\n", envp, x64, x86, script, python, my_context->envv, environ);
+    }
     // hack to update the environ var if needed
     if(envp == my_context->envv && environ) {
         envp = environ;
+    } else if(box64env.log>=LOG_DEBUG) {
+        printf_log(LOG_DEBUG, "envv=[\"%s\'", envp[0]);
+        for(int i=1; envp[i]; ++i)
+            printf_log_prefix(0, LOG_DEBUG, ", \"%s\"", envp[i]);
+        printf_log_prefix(0, LOG_DEBUG, "]\n");
     }
-    #if 1
     if (x64 || x86 || self || script || python) {
         int skip_first = 0;
         if(strlen(path)>=strlen("wine64-preloader") && strcmp(path+strlen(path)-strlen("wine64-preloader"), "wine64-preloader")==0)
@@ -2336,7 +2353,6 @@ EXPORT int32_t my_execve(x64emu_t* emu, const char* path, char* const argv[], ch
         int ret = execve(newargv[0], (char* const*)newargv, envp);
         return ret;
     }
-    #endif
     if(!strcmp(path + strlen(path) - strlen("/uname"), "/uname")
      && argv[1] && (!strcmp(argv[1], "-m") || !strcmp(argv[1], "-p") || !strcmp(argv[1], "-i"))
      && !argv[2]) {
@@ -2930,7 +2946,7 @@ void EXPORT my_longjmp(x64emu_t* emu, /*struct __jmp_buf_tag __env[1]*/void *p, 
     R_R15 = jpbuff->save_r15;
     R_RSP = jpbuff->save_rsp;
     // jmp to saved location, plus restore val to rax
-    R_RAX = __val;
+    R_RAX = __val?__val:1;
     R_RIP = jpbuff->save_rip;
     if(((__jmp_buf_tag_t*)p)->__mask_was_saved) {
         sigprocmask(SIG_SETMASK, &((__jmp_buf_tag_t*)p)->__saved_mask, NULL);
@@ -3935,6 +3951,21 @@ EXPORT int my_prctl(x64emu_t* emu, int option, unsigned long arg2, unsigned long
         return 0;
     }
     return prctl(option, arg2, arg3, arg4, arg5);
+}
+
+size_t __attribute__((weak)) strlcpy(char* dest, const char* src, size_t len)
+{
+    size_t l = strlen(src);
+    if(len) {
+        strncpy(dest, src, len-1);
+        dest[len]=0;
+    }
+    return l;
+}
+size_t __attribute__((weak)) __strlcpy_chk(char* dest, const char* src, size_t len, size_t chk)
+{
+    // in case it's not defined... create a weak version with no actual chk
+    return strlcpy(dest, src, len);
 }
 
 #ifndef _SC_NPROCESSORS_ONLN

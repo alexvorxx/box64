@@ -384,7 +384,7 @@ GO(XGetGeometry, iFXLbL_pppppp)
 GO(_XGetHostname, iFpi)
 GO(XGetIconName, iFXLbp_)
 GO(XGetIconSizes, iFXLbp_p)
-GOM(XGetICValues, pFELV)      // use varargs...
+GOM(XGetICValues, pFEpV)      // use varargs...
 GOM(XGetImage, pFEXLiiuuLi)     // return an XImage with callbacks that needs wrapping
 GOM(XGetIMValues, pFEpV)
 GO(XGetInputFocus, iFXBL_p)
@@ -942,8 +942,8 @@ GO(XOpenOM, pFXppp)
 //GO(_XParseBaseFontNameList, 
 GO(XParseColor, iFXLpbLWWWcc_)
 GO(XParseGeometry, iFppppp)
-GOM(XPeekEvent, iFEXp) // Warning: failed to confirm
-GOM(XPeekIfEvent, iFEpppp)
+GOM(XPeekEvent, iFEXp)
+GOM(XPeekIfEvent, iFEXppp)
 GO(XPending, iFX)
 GO(Xpermalloc, pFu)
 //GOM(XPlanesOfScreen, iFEbpXLiiiiipippLLLiiiil_)

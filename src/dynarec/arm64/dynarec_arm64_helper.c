@@ -31,15 +31,14 @@ uintptr_t geted(dynarec_arm_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, u
     if (l == LOCK_LOCK) {
         dyn->insts[ninst].lock = 1;
     }
+    int lock = l?((l==LOCK_LOCK)?1:2):0;
+    if(lock==2) *l = 0;
 
     if(rex.is32bits && rex.is67)
         return geted16(dyn, addr, ninst, nextop, ed, hint, fixaddress, unscaled, absmax, mask, rex, s);
 
-    int lock = l?((l==LOCK_LOCK)?1:2):0;
     if(unscaled)
         *unscaled = 0;
-    if(lock==2)
-        *l = 0;
     uint8_t ret = x2;
     uint8_t scratch = x2;
     *fixaddress = 0;
@@ -343,7 +342,7 @@ void jump_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int reg, int ninst)
     NOTEST(x2);
     TABLE64C(x2, const_epilog);
     SMEND();
-    CHECK_DFNONE();
+    CHECK_DFNONE(0);
     if(dyn->have_purge)
         doLeaveBlock(dyn, ninst, x4, x5, x6);
     BR(x2);
@@ -353,7 +352,6 @@ void jump_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int reg, int ninst)
 static int indirect_lookup(dynarec_arm_t* dyn, int ninst, int is32bits, int s1, int s2)
 {
     MAYUSE(dyn);
-    CHECK_DFNONE();
     if (!is32bits) {
         // check higher 48bits
         LSRx_IMM(s1, xRIP, 48);
@@ -400,7 +398,7 @@ void jump_to_next(dynarec_arm_t* dyn, uintptr_t ip, int reg, int ninst, int is32
         ip &= 0xffffffffLL;
 
     SMEND();
-    CHECK_DFNONE();
+    CHECK_DFNONE(0);
     int dest;
     if (reg) {
         if (reg != xRIP) {
@@ -435,12 +433,10 @@ void jump_to_next(dynarec_arm_t* dyn, uintptr_t ip, int reg, int ninst, int is32
     #endif
 }
 
-void ret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, rex_t rex)
+void ret_to_next(dynarec_arm_t* dyn, uintptr_t ip, int ninst, rex_t rex)
 {
     MAYUSE(dyn); MAYUSE(ninst);
-    MESSAGE(LOG_DUMP, "Ret to epilog\n");
-    CHECK_DFNONE();
-    POP1z(xRIP);
+    CHECK_DFNONE(0);
     MOVz_REG(x1, xRIP);
     SMEND();
     if(BOX64DRENV(dynarec_callret)) {
@@ -466,44 +462,7 @@ void ret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, rex_t rex)
     CLEARIP();
 }
 
-void retn_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, rex_t rex, int n)
-{
-    MAYUSE(dyn); MAYUSE(ninst);
-    MESSAGE(LOG_DUMP, "Retn to epilog\n");
-    CHECK_DFNONE();
-    POP1z(xRIP);
-    if(n>0xfff) {
-        MOV32w(w1, n);
-        ADDz_REG(xRSP, xRSP, x1);
-    } else {
-        ADDz_U12(xRSP, xRSP, n);
-    }
-    MOVz_REG(x1, xRIP);
-    SMEND();
-    if(BOX64DRENV(dynarec_callret)) {
-        // pop the actual return address for ARM stack
-        LDPx_S7_postindex(xLR, x6, xSP, 16);
-        SUBx_REG(x6, x6, xRIP); // is it the right address?
-        if(dyn->have_purge)
-            doLeaveBlock(dyn, ninst, x4, x5, x3);
-        CBNZx(x6, 2*4);
-        RET(xLR);
-        // not the correct return address, regular jump
-        SUBx_U12(xSP, xSavedSP, 16);
-    }
-    NOTEST(x2);
-    int dest = indirect_lookup(dyn, ninst, rex.is32bits, x2, x3);
-    if(dyn->have_purge && !BOX64DRENV(dynarec_callret))
-        doLeaveBlock(dyn, ninst, x4, x5, x6);
-    #ifdef HAVE_TRACE
-    BLR(dest);
-    #else
-    BR(dest);
-    #endif
-    CLEARIP();
-}
-
-void iret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, int is32bits, int is64bits)
+void iret_to_next(dynarec_arm_t* dyn, uintptr_t ip, int ninst, int is32bits, int is64bits)
 {
     int64_t j64;
     //#warning TODO: is64bits
@@ -556,14 +515,10 @@ void iret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, int is32bits, i
     MOVx_REG(xRIP, x1);
     MOVw_REG(xFlags, x3);
     // Ret....
-    // epilog on purpose, CS might have changed!
-    if(dyn->need_reloc)
-        TABLE64C(x2, const_epilog);
-    else
-        MOV64x(x2, getConst(const_epilog));
-    if(dyn->have_purge)
-        doLeaveBlock(dyn, ninst, x4, x5, x6);
-    BR(x2);
+    rex_t dummy = {0};
+    dummy.is32bits = is32bits;
+    dummy.w = is64bits;
+    ret_to_next(dyn, ip, ninst, dummy);
     CLEARIP();
     MARK;
     if(is64bits)
@@ -581,6 +536,7 @@ void iret_to_epilog(dynarec_arm_t* dyn, uintptr_t ip, int ninst, int is32bits, i
 void call_c(dynarec_arm_t* dyn, int ninst, arm64_consts_t fnc, int reg, int ret, int saveflags, int savereg)
 {
     MAYUSE(fnc);
+    CHECK_DFNONE(1);
     #if STEP == 0
     dyn->insts[ninst].nat_flags_op = NAT_FLAG_OP_UNUSABLE;
     #endif
@@ -635,6 +591,7 @@ void call_c(dynarec_arm_t* dyn, int ninst, arm64_consts_t fnc, int reg, int ret,
 void call_d(dynarec_arm_t* dyn, int ninst, arm64_consts_t fnc, int ret, int arg1, int arg2, int sav1, int sav2)
 {
     MAYUSE(fnc);
+    CHECK_DFNONE(1);
     #if STEP == 0
     dyn->insts[ninst].nat_flags_op = NAT_FLAG_OP_UNUSABLE;
     #endif
@@ -680,6 +637,7 @@ void call_d(dynarec_arm_t* dyn, int ninst, arm64_consts_t fnc, int ret, int arg1
 void call_n(dynarec_arm_t* dyn, int ninst, void* fnc, int w)
 {
     MAYUSE(fnc);
+    CHECK_DFNONE(1);
     #if STEP == 0
     dyn->insts[ninst].nat_flags_op = NAT_FLAG_OP_UNUSABLE;
     #endif
@@ -2296,24 +2254,38 @@ static void flagsCacheTransform(dynarec_arm_t* dyn, int ninst)
     int jmp = dyn->insts[ninst].x64.jmp_insts;
     if(jmp<0)
         return;
-    if((dyn->insts[jmp].f_exit.dfnone && !dyn->insts[jmp].f_entry.dfnone) && !dyn->insts[jmp].x64.use_flags)  // flags will be fully known, nothing we can do more
+    if(dyn->insts[jmp].f_exit==dyn->insts[jmp].f_entry)  // flags will be fully known, nothing we can do more
+        return;
+    if(dyn->insts[jmp].df_notneeded)
         return;
     MESSAGE(LOG_DUMP, "\tFlags fetch ---- ninst=%d -> %d\n", ninst, jmp);
-    if(dyn->insts[jmp].f_entry.dfnone!=dyn->f.dfnone && !dyn->insts[jmp].df_notneeded && dyn->insts[ninst].f_exit.dfnone) { FORCE_DFNONE(); }
-    int go = dyn->f.dfnone?0:1;
-    switch (dyn->insts[jmp].f_entry.pending) {
-        case SF_UNKNOWN: 
-            go = 0;
-            break;
-        default:
-            if(go && !(dyn->insts[jmp].x64.need_before&X_PEND) && (dyn->f.pending!=SF_UNKNOWN)) {
-                // just clear df flags
-                go = 0;
+    int go_fetch = 0;
+    switch(dyn->insts[jmp].f_entry) {
+        case status_unk:
+            if(dyn->insts[ninst].f_exit==status_none_pending) {
+                FORCE_DFNONE();
             }
             break;
+        case status_set:
+            if(dyn->insts[ninst].f_exit==status_none_pending) {
+                FORCE_DFNONE();
+            }
+            if(dyn->insts[ninst].f_exit==status_unk)
+                go_fetch = 1;
+            break;
+        case status_none_pending:
+            if(dyn->insts[ninst].f_exit!=status_none)
+                go_fetch = 1;
+            break;
+        case status_none:
+            if(dyn->insts[ninst].f_exit==status_none_pending) {
+                FORCE_DFNONE();
+            } else
+                go_fetch = 1;
+            break;
     }
-    if(!dyn->f.dfnone) {
-        if(dyn->f.pending!=SF_PENDING) {
+    if(go_fetch) {
+        if(dyn->f==status_unk) {
             LDRw_U12(x1, xEmu, offsetof(x64emu_t, df));
             j64 = (GETMARKF2)-(dyn->native_size);
             CBZw(x1, j64);
@@ -2782,16 +2754,10 @@ void doEnterBlock(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3)
         STLXRw(s3, s2, s1);
         CBNZw(s3, -3*4);
     }
-    // now increment hot
-    ADDx_U12(s1, s1, offsetof(dynablock_t, hot)-offsetof(dynablock_t, in_used));
-    if(cpuext.atomics) {
-        STADDLw(s3, s1);
-    } else {
-        LDAXRw(s2, s1);
-        ADDw_U12(s2, s2, 1);
-        STLXRw(s3, s2, s1);
-        CBNZw(s3, -3*4);
-    }
+    // set tick
+    LDRx_U12(s2, xEmu, offsetof(x64emu_t, context));
+    LDRw_U12(s2, s2, offsetof(box64context_t, tick));
+    STRw_U12(s2, s1, offsetof(dynablock_t, tick)-offsetof(dynablock_t, in_used));
     MESSAGE(LOG_INFO, "-------- doEnter\n");
 }
 void doLeaveBlock(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3)

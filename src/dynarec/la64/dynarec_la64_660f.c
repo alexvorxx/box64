@@ -887,6 +887,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     addr = geted(dyn, addr, ninst, nextop, &wback, x3, x2, &fixedaddress, rex, NULL, 1, 0);
                     REVB_2H(x1, gd);
                     ST_H(x1, wback, fixedaddress);
+                    SMWRITE();
                     break;
                 case 0xF6:
                     INST_NAME("ADCX Gd, Ed");
@@ -1119,6 +1120,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         u8 = (F8) & 15;
                         VPICKVE2GR_BU(x1, q0, u8);
                         ST_B(x1, wback, fixedaddress);
+                        SMWRITE2();
                     }
                     break;
                 case 0x15:
@@ -1135,6 +1137,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         u8 = (F8) & 7;
                         VPICKVE2GR_HU(x1, q0, u8);
                         ST_H(x1, wback, fixedaddress);
+                        SMWRITE2();
                     }
                     break;
                 case 0x16:
@@ -2121,8 +2124,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             u8 = geted_ib(dyn, addr, ninst, nextop) & 0x1f;
             if (u8) {
                 SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
-                GETEW(x1, 1);
-                GETGW(x2);
+                GETGWEW(x1, x2, 1);
                 u8 = F8;
                 emit_shld16c(dyn, ninst, rex, ed, gd, u8, x6, x4, x5);
                 EWBACK;
@@ -2139,10 +2141,9 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                 SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_FUSION);
             } else
                 SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
-            GETGW(x2);
-            GETEW(x1, 0);
+            GETGWEW(x1, x2, 0);
             ANDI(x4, xRCX, 0x1f);
-            UFLAG_IF { BEQ_NEXT(x4, xZR); }
+            UFLAG_IF { CBZ_NEXT(x4); }
             emit_shld16(dyn, ninst, ed, gd, x4, x5, x6, x7);
             EWBACK;
             break;
@@ -2191,8 +2192,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             u8 = geted_ib(dyn, addr, ninst, nextop) & 0x1f;
             if (u8) {
                 SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
-                GETEW(x1, 1);
-                GETGW(x2);
+                GETGWEW(x1, x2, 1);
                 u8 = F8;
                 emit_shrd16c(dyn, ninst, rex, ed, gd, u8, x6, x4, x5);
                 EWBACK;
@@ -2209,12 +2209,35 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                 SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_FUSION);
             } else
                 SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
-            GETGW(x2);
-            GETEW(x1, 0);
+            GETGWEW(x1, x2, 0);
             ANDI(x4, xRCX, 0x1f);
-            UFLAG_IF { BEQ_NEXT(x4, xZR); }
+            UFLAG_IF { CBZ_NEXT(x4); }
             emit_shrd16(dyn, ninst, ed, gd, x4, x5, x6, x7);
             EWBACK;
+            break;
+        case 0xAE:
+            nextop = F8;
+            if (MODREG)
+                switch (nextop) {
+                    default: DEFAULT;
+                }
+            else
+                switch ((nextop >> 3) & 7) {
+                    case 6:
+                        INST_NAME("CLWB Ed");
+                        FAKEED;
+                        // Full flush... no fine-grained options available
+                        DBAR(0);
+                        break;
+                    case 7:
+                        INST_NAME("CLFLUSHOPT Ed");
+                        FAKEED;
+                        // Full flush... no fine-grained options available
+                        DBAR(0);
+                        break;
+                    default:
+                        DEFAULT;
+                }
             break;
         case 0xAF:
             INST_NAME("IMUL Gw,Ew");
@@ -2434,8 +2457,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                 SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             SET_DFNONE();
             nextop = F8;
-            GETEW(x5, 0);
-            GETGW(x4);
+            GETGWEW(x4, x5, 0);
             BNE_MARK(ed, xZR);
             IFX (X_ZF) ORI(xFlags, xFlags, 1 << F_ZF);
             B_MARK2_nocond;
@@ -2459,8 +2481,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                 SETFLAGS(X_ZF, SF_SUBSET, NAT_FLAGS_NOFUSION);
             SET_DFNONE();
             nextop = F8;
-            GETEW(x5, 0);
-            GETGW(x4);
+            GETGWEW(x4, x5, 0);
             BNE_MARK(ed, xZR);
             IFX (X_ZF) ORI(xFlags, xFlags, 1 << F_ZF);
             B_MARK2_nocond;
@@ -2508,8 +2529,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             INST_NAME("XADD Ew, Gw");
             SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
             nextop = F8;
-            GETGW(x1);
-            GETEW(x2, 0);
+            GETGWEW(x1, x2, 0);
             BSTRINS_D(TO_NAT(((nextop & 0x38) >> 3) + (rex.r << 3)), ed, 15, 0);
             emit_add16(dyn, ninst, ed, gd, x4, x5, x6);
             EWBACK;
@@ -2584,8 +2604,8 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             if(rex.w){
                 REVB_D(gd, gd);
             } else {
-                REVB_2H(x2, gd);
-                BSTRINS_D(gd, x2, 15, 0);
+                // undefined behaviour
+                BSTRINS_D(gd, xZR, 15, 0);
             }
             break;
         case 0xD0:

@@ -131,6 +131,7 @@ int convert_bitmask(uint64_t bitmask);
 #define ADDSUB_ext(sf, op, S, Rm, option, imm3, Rn, Rd)    ((sf)<<31 | (op)<<30 | (S)<<29 | 0b01011<<24 | 1<<21 | (Rm)<<16 | (option)<<13 | (imm3)<<10 | (Rn)<<5 | (Rd))
 #define SUBxw_UXTB(Rd, Rn, Rm)      EMIT(ADDSUB_ext(rex.w, 1, 0, Rm, 0b000, 0, Rn, Rd))
 #define SUBw_UXTB(Rd, Rn, Rm)       EMIT(ADDSUB_ext(0, 1, 0, Rm, 0b000, 0, Rn, Rd))
+#define SUBw_UXTH(Rd, Rn, Rm)       EMIT(ADDSUB_ext(0, 1, 0, Rm, 0b001, 0, Rn, Rd))
 #define ADDw_UXTH(Rd, Rn, Rm)       EMIT(ADDSUB_ext(0, 0, 0, Rm, 0b001, 0, Rn, Rd))
 #define ADDx_UXTW(Rd, Rn, Rm)       EMIT(ADDSUB_ext(1, 0, 0, Rm, 0b010, 0, Rn, Rd))
 #define ADDx_SXTW(Rd, Rn, Rm)       EMIT(ADDSUB_ext(1, 0, 0, Rm, 0b110, 0, Rn, Rd))
@@ -157,6 +158,7 @@ int convert_bitmask(uint64_t bitmask);
 #define LDRH_S9_postindex(Rt, Rn, imm9)   EMIT(LDR_gen(0b01, 0b00, (imm9)&0x1ff, 0b01, Rn, Rt))
 #define LDRH_S9_preindex(Rt, Rn, imm9)    EMIT(LDR_gen(0b01, 0b00, (imm9)&0x1ff, 0b11, Rn, Rt))
 #define LDRxw_S9_postindex(Rt, Rn, imm9)  EMIT(LDR_gen(rex.w?0b11:0b10, 0b00, (imm9)&0x1ff, 0b01, Rn, Rt))
+#define LDRz_S9_preindex(Rt, Rn, imm9)  EMIT(LDR_gen(rex.is32bits?0b10:0b11, 0b00, (imm9)&0x1ff, 0b11, Rn, Rt))
 
 #define LDRS_gen(size, op1, imm9, op2, Rn, Rt)   ((size)<<30 | 0b111<<27 | (op1)<<24 | 0b10<<22 | (imm9)<<12 | (op2)<<10 | (Rn)<<5 | (Rt))
 #define LDRSW_S9_postindex(Rt, Rn, imm9)  EMIT(LDRS_gen(0b10, 0b00, (imm9)&0x1ff, 0b01, Rn, Rt))
@@ -400,6 +402,9 @@ int convert_bitmask(uint64_t bitmask);
 #define DSB_LD()                        EMIT(DSB_gen(0b1101))
 #define DSB_ST()                        EMIT(DSB_gen(0b1110))
 #define DSB_SY()                        EMIT(DSB_gen(0b1111))
+
+#define DC_gen(op1, CRm, op2, Xt)       (0b1101010100001<<19 | (op1)<<16 | 0b0111<<12 | (CRm)<<8 | (op2)<<5 | Xt)
+#define DC_CIVAC(Xt)                    EMIT(DC_gen(0b011, 0b1110, 0b001, Xt))
 
 // Break
 #define BRK_gen(imm16)                  (0b11010100<<24 | 0b001<<21 | (((imm16)&0xffff)<<5))
