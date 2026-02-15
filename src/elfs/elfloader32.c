@@ -178,9 +178,9 @@ int AllocLoadElfMemory32(box64context_t* context, elfheader_t* head, int mainbin
     if(image==MAP_FAILED || image!=from_ptrv(head->vaddr?head->vaddr:offs)) {
         printf_log(LOG_NONE, "%s cannot create memory map (@%p 0x%zx) for elf \"%s\"", (image==MAP_FAILED)?"Error:":"Warning:", from_ptrv(head->vaddr?head->vaddr:offs), head->memsz, head->name);
         if(image==MAP_FAILED) {
-            printf_log(LOG_NONE, " error=%d/%s\n", errno, strerror(errno));
+            printf_log_prefix(0, LOG_NONE, " error=%d/%s\n", errno, strerror(errno));
         } else {
-            printf_log(LOG_NONE, " got %p\n", image);
+            printf_log_prefix(0, LOG_NONE, " got %p\n", image);
         }
         if(image==MAP_FAILED)
             return 1;
@@ -308,7 +308,7 @@ int AllocLoadElfMemory32(box64context_t* context, elfheader_t* head, int mainbin
                         return 1;
                     }
                 }
-                if(!(prot&PROT_WRITE) && (paddr==(paddr&(box64_pagesize-1)) && (asize==ALIGN(asize))))
+                if(!(prot&PROT_WRITE) && (paddr==(paddr&~(box64_pagesize-1)) && (asize==ALIGN(asize))))
                     mprotect((void*)paddr, asize, prot);
             }
 #ifdef DYNAREC
@@ -768,32 +768,32 @@ void ResetSpecialCaseMainElf32(elfheader_t* h)
             if(strcmp(symname, "_IO_2_1_stderr_")==0 && (from_ptrv(sym->st_value+h->delta))) {
                 memcpy(from_ptrv(sym->st_value+h->delta), stderr, sym->st_size);
                 my__IO_2_1_stderr_ = from_ptrv(sym->st_value+h->delta);
-                printf_log(LOG_DEBUG, "BOX32: Set @_IO_2_1_stderr_ to %p\n", my__IO_2_1_stderr_);
+                printf_log(LOG_DEBUG, "Set @_IO_2_1_stderr_ to %p\n", my__IO_2_1_stderr_);
             } else
             if(strcmp(symname, "_IO_2_1_stdin_")==0 && (from_ptrv(sym->st_value+h->delta))) {
                 memcpy(from_ptrv(sym->st_value+h->delta), stdin, sym->st_size);
                 my__IO_2_1_stdin_ = from_ptrv(sym->st_value+h->delta);
-                printf_log(LOG_DEBUG, "BOX32: Set @_IO_2_1_stdin_ to %p\n", my__IO_2_1_stdin_);
+                printf_log(LOG_DEBUG, "Set @_IO_2_1_stdin_ to %p\n", my__IO_2_1_stdin_);
             } else
             if(strcmp(symname, "_IO_2_1_stdout_")==0 && (from_ptrv(sym->st_value+h->delta))) {
                 memcpy(from_ptrv(sym->st_value+h->delta), stdout, sym->st_size);
                 my__IO_2_1_stdout_ = from_ptrv(sym->st_value+h->delta);
-                printf_log(LOG_DEBUG, "BOX32: Set @_IO_2_1_stdout_ to %p\n", my__IO_2_1_stdout_);
+                printf_log(LOG_DEBUG, "Set @_IO_2_1_stdout_ to %p\n", my__IO_2_1_stdout_);
             } else
             if(strcmp(symname, "_IO_stderr_")==0 && (from_ptrv(sym->st_value+h->delta))) {
                 memcpy(from_ptrv(sym->st_value+h->delta), stderr, sym->st_size);
                 my__IO_2_1_stderr_ = from_ptrv(sym->st_value+h->delta);
-                printf_log(LOG_DEBUG, "BOX32: Set @_IO_stderr_ to %p\n", my__IO_2_1_stderr_);
+                printf_log(LOG_DEBUG, "Set @_IO_stderr_ to %p\n", my__IO_2_1_stderr_);
             } else
             if(strcmp(symname, "_IO_stdin_")==0 && (from_ptrv(sym->st_value+h->delta))) {
                 memcpy(from_ptrv(sym->st_value+h->delta), stdin, sym->st_size);
                 my__IO_2_1_stdin_ = from_ptrv(sym->st_value+h->delta);
-                printf_log(LOG_DEBUG, "BOX32: Set @_IO_stdin_ to %p\n", my__IO_2_1_stdin_);
+                printf_log(LOG_DEBUG, "Set @_IO_stdin_ to %p\n", my__IO_2_1_stdin_);
             } else
             if(strcmp(symname, "_IO_stdout_")==0 && (from_ptrv(sym->st_value+h->delta))) {
                 memcpy(from_ptrv(sym->st_value+h->delta), stdout, sym->st_size);
                 my__IO_2_1_stdout_ = from_ptrv(sym->st_value+h->delta);
-                printf_log(LOG_DEBUG, "BOX32: Set @_IO_stdout_ to %p\n", my__IO_2_1_stdout_);
+                printf_log(LOG_DEBUG, "Set @_IO_stdout_ to %p\n", my__IO_2_1_stdout_);
             }
         }
     }

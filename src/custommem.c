@@ -1346,7 +1346,7 @@ void* box32_dynarec_mmap(size_t size, int fd, off_t offset)
                 if(ret!=MAP_FAILED) {
                     //rb_set(mapallmem, cur, cur+size, MEM_BOX);    // mark as allocated by/for box
                 } else
-                    printf_log(LOG_INFO, "BOX32: Error allocating Dynarec memory: %s\n", strerror(errno));
+                    printf_log(LOG_INFO, "Error allocating Dynarec memory: %s\n", strerror(errno));
                 cur = cur+size;
                 return ret;
             }
@@ -1355,7 +1355,7 @@ void* box32_dynarec_mmap(size_t size, int fd, off_t offset)
     }
 #endif
     uint32_t map_flags = ((fd==-1)?MAP_ANONYMOUS:0) | MAP_PRIVATE;
-    //printf_log(LOG_INFO, "BOX32: Error allocating Dynarec memory: %s\n", "fallback to internal mmap");
+    // printf_log(LOG_INFO, "Error allocating Dynarec memory: %s\n", "fallback to internal mmap");
     void* ret = InternalMmap(box64_isAddressSpace32?NULL:(void*)0x100000000ULL, size, PROT_READ | PROT_WRITE | PROT_EXEC, map_flags, fd, offset);
     //printf_log(LOG_INFO, "fallback on box32_dynarec_mmap: %p\n", ret);
     return ret;
@@ -1480,6 +1480,7 @@ int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t 
             GO(instsize);
             GO(arch);
             GO(callrets);
+            GO(sep);
             GO(jmpnext);
             GO(table64);
             GO(relocs);
@@ -1506,6 +1507,14 @@ int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t 
                 // cannot add blocks?
                 printf_log(LOG_INFO, "Warning, cannot add DynaCache Block %d to JmpTable\n", i);
             } else {
+                for(int i=0; i<bl->sep_size; ++i) {
+                    uint32_t x64_offs = bl->sep[i].x64_offs;
+                    uint32_t nat_offs = bl->sep[i].nat_offs;
+                    if(addJumpTableIfDefault64(bl->x64_addr+x64_offs, (bl->dirty || bl->always_test)?bl->jmpnext:(bl->block+nat_offs)))
+                        bl->sep[i].active = 1;
+                    else
+                        bl->sep[i].active = 0;
+                }
                 if(bl->x64_size) {
                     dynarec_log(LOG_DEBUG, "Added DynCache bl %p for %p - %p\n", bl, bl->x64_addr, bl->x64_addr+bl->x64_size);
                     if(bl->x64_size>my_context->max_db_size) {
@@ -1556,6 +1565,7 @@ void DelMmaplist(mmaplist_t* list)
             } else
                 rb_unset(mapallmem, (uintptr_t)addr, (uintptr_t)addr+size);
         }
+    box_free(list->chunks);
     box_free(list);
 }
 
@@ -3123,9 +3133,9 @@ void fini_custommem_helper(box64context_t *ctx)
             for (int i=0; i<head->size; ++i) {
                 InternalMunmap(head->chunks[i]->block-sizeof(blocklist_t), head->chunks[i]->size+sizeof(blocklist_t));
             }
-            free(head);
+            box_free(head->chunks);
+            box_free(head);
         }
-        box_free(mmaplist);
         #ifdef JMPTABL_SHIFT4
         uintptr_t**** box64_jmptbl3;
         for(int i4 = 0; i4 < (1<< JMPTABL_SHIFT4); ++i4)

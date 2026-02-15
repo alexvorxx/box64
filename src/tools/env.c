@@ -26,7 +26,7 @@ box64env_t box64env = { 0 };
 
 KHASH_MAP_INIT_STR(box64env_entry, box64env_t)
 static kh_box64env_entry_t* box64env_entries = NULL;
-static kh_box64env_entry_t* box64env_entries_gen = NULL;
+static kh_box64env_entry_t* box64env_entries_wildcard = NULL;
 
 mmaplist_t* NewMmaplist();
 void DelMmaplist(mmaplist_t* list);
@@ -142,7 +142,6 @@ static void parseRange(const char* s, uintptr_t* start, uintptr_t* end)
 }
 
 void AddNewLibs(const char* list);
-int canNCpuBeChanged();
 
 extern int box64_cycle_log_initialized;
 
@@ -255,8 +254,7 @@ static void applyCustomRules()
     }
 
     if (box64env.maxcpu == 0 || (box64env.new_maxcpu < box64env.maxcpu)) {
-        if(canNCpuBeChanged())
-            box64env.maxcpu = box64env.new_maxcpu;
+        box64env.maxcpu = box64env.new_maxcpu;
     }
 
 #ifndef _WIN32
@@ -335,7 +333,7 @@ static void freeEnv(box64env_t* env)
 #define ENV_ARCH "unknown"
 #endif
 
-static void pushNewEntry(const char* name, box64env_t* env, int gen)
+static void pushNewEntry(const char* name, box64env_t* env, int wildcard)
 {
     if (env->is_arch_overridden && *env->arch == '\0') env->is_arch_overridden = 0;
 
@@ -345,7 +343,7 @@ static void pushNewEntry(const char* name, box64env_t* env, int gen)
         return;
     }
     khint_t k;
-    kh_box64env_entry_t* khp = gen ? box64env_entries_gen : box64env_entries;
+    kh_box64env_entry_t* khp = wildcard ? box64env_entries_wildcard : box64env_entries;
     k = kh_get(box64env_entry, khp, name);
     // No entry exist, add a new one
     if (k == kh_end(khp)) {
@@ -356,8 +354,8 @@ static void pushNewEntry(const char* name, box64env_t* env, int gen)
         return;
     }
 
-    // Entry exists, replace it if the new one is arch specific
-    if (env->is_arch_overridden && !strcasecmp(env->arch, ENV_ARCH)) {
+    // Entry exists, replace it if the new one is arch specific or has higher priority
+    if (env->is_arch_overridden && !strcasecmp(env->arch, ENV_ARCH) || env->priority > kh_value(khp, k).priority) {
         freeEnv(&kh_value(khp, k));
         box64env_t* p = &kh_value(khp, k);
         memcpy(p, env, sizeof(box64env_t));
@@ -382,7 +380,7 @@ static int shm_unlink(const char *name) {
 }
 #endif
 
-static void initializeEnvFile(const char* filename)
+static void initializeEnvFile(const char* filename, int priority)
 {
     if (box64env.noenvfiles) return;
 
@@ -406,10 +404,11 @@ static void initializeEnvFile(const char* filename)
 
     if (!box64env_entries)
         box64env_entries = kh_init(box64env_entry);
-    if (!box64env_entries_gen)
-        box64env_entries_gen = kh_init(box64env_entry);
+    if (!box64env_entries_wildcard)
+        box64env_entries_wildcard = kh_init(box64env_entry);
 
     box64env_t current_env = { 0 };
+    current_env.priority = priority;
     size_t linesize = 0, len = 0;
     char* current_name = NULL;
     bool is_wildcard_name = false;
@@ -519,20 +518,21 @@ static void initializeEnvFile(const char* filename)
 
 void InitializeEnvFiles()
 {
+    int priority = 0;
 #ifndef _WIN32 // FIXME: this needs some consideration on Windows, so for now, only do it on Linux
     if (BOX64ENV(envfile) && FileExist(BOX64ENV(envfile), IS_FILE))
-        initializeEnvFile(BOX64ENV(envfile));
+        initializeEnvFile(BOX64ENV(envfile), priority++);
 #ifndef TERMUX
     else if (FileExist("/etc/box64.box64rc", IS_FILE))
-        initializeEnvFile("/etc/box64.box64rc");
+        initializeEnvFile("/etc/box64.box64rc", priority++);
     else if (FileExist("/data/data/com.termux/files/usr/glibc/etc/box64.box64rc", IS_FILE))
-        initializeEnvFile("/data/data/com.termux/files/usr/glibc/etc/box64.box64rc");
+        initializeEnvFile("/data/data/com.termux/files/usr/glibc/etc/box64.box64rc", priority++);
 #else
     else if (FileExist("/data/data/com.termux/files/usr/etc/box64.box64rc", IS_FILE))
-        initializeEnvFile("/data/data/com.termux/files/usr/etc/box64.box64rc");
+        initializeEnvFile("/data/data/com.termux/files/usr/etc/box64.box64rc", priority++);
 #endif
     else
-        initializeEnvFile(NULL); // load default rcfile
+        initializeEnvFile(NULL, priority++); // load default rcfile
 #endif
 
     char* p = GetEnv(HOME);
@@ -541,7 +541,7 @@ void InitializeEnvFiles()
         strncpy(tmp, p, 4095);
         strncat(tmp, PATHSEP ".box64rc", 4095);
         if (FileExist(tmp, IS_FILE)) {
-            initializeEnvFile(tmp);
+            initializeEnvFile(tmp, priority++);
         }
     }
 }
@@ -587,11 +587,12 @@ static void internalApplyEnvFileEntry(const char* entryname, const box64env_t* e
 }
 
 static char old_entryname[256] = "";
-void ApplyEnvFileEntry(const char* entryname)
+int ApplyEnvFileEntry(const char* entryname)
 {
-    if (!entryname || !box64env_entries) return;
-    if (!strcasecmp(entryname, old_entryname)) return;
+    if (!entryname || !box64env_entries) return 0;
+    if (!strcasecmp(entryname, old_entryname)) return 0;
 
+    int ret = 0;
     strncpy(old_entryname, entryname, 255);
     khint_t k1;
     {
@@ -599,18 +600,23 @@ void ApplyEnvFileEntry(const char* entryname)
         k1 = kh_get(box64env_entry, box64env_entries, lowercase_entryname);
         box64env_t* env;
         const char* k2;
-        kh_foreach_ref(box64env_entries_gen, k2, env,
-            if (strstr(lowercase_entryname, k2))
+        // clang-format off
+        kh_foreach_ref(box64env_entries_wildcard, k2, env,
+            if (strstr(lowercase_entryname, k2)) {
                 internalApplyEnvFileEntry(entryname, env);
-            applyCustomRules();
+                applyCustomRules();
+                ret = 1;
+            }
         )
         box_free(lowercase_entryname);
+        // clang-format on
     }
-    if (k1 == kh_end(box64env_entries)) return;
+    if (k1 == kh_end(box64env_entries)) return ret;
 
     box64env_t* env = &kh_value(box64env_entries, k1);
     internalApplyEnvFileEntry(entryname, env);
     applyCustomRules();
+    return 1;
 }
 
 void LoadEnvVariables()
@@ -768,15 +774,24 @@ void RecordEnvMappings(uintptr_t addr, size_t length, int fd)
     if (!filename) return;
 
     char* lowercase_filename = LowerCase(filename);
-
+    if(strstr(lowercase_filename, "/memfd:")==lowercase_filename) {
+        // memfd, first remove the (deleted) at the end
+        char* p = strstr(lowercase_filename, " (deleted)");
+        if(p=lowercase_filename+strlen(lowercase_filename)-strlen(" (deleted)"))
+            *p = 0;
+        // add the "/fd" at the end to differenciate between memfd
+        char* new_name = box_calloc(1, strlen(lowercase_filename)+100);
+        sprintf(new_name, "%s/%d", lowercase_filename, fd);
+        box_free(lowercase_filename);
+        lowercase_filename = new_name;
+    }
+    mutex_lock(&my_context->mutex_dyndump);
     int ret;
     mapping_t* mapping = NULL;
+    int new_mapping = 0;
     khint_t k = kh_get(mapping_entry, mapping_entries, fullname);
     if(k == kh_end(mapping_entries)) {
-        // First time we see this file
-        if (box64_wine && BOX64ENV(unityplayer)) DetectUnityPlayer(lowercase_filename+1);
-        if (box64_wine && BOX64ENV(dynarec_volatile_metadata)) ParseVolatileMetadata(fullname, (void*)addr);
-
+        new_mapping = 1;
         mapping = box_calloc(1, sizeof(mapping_t));
         mapping->filename = box_strdup(lowercase_filename);
         mapping->fullname = box_strdup(fullname);
@@ -788,20 +803,14 @@ void RecordEnvMappings(uintptr_t addr, size_t length, int fd)
             if (k != kh_end(box64env_entries))
                 mapping->env = &kh_value(box64env_entries, k);
         }
-        dynarec_log(LOG_INFO, "Mapping %s (%s) in %p-%p\n", fullname, lowercase_filename, (void*)addr, (void*)(addr+length));
-        #if defined(DYNAREC) && !defined(WIN32)
-        int dynacache = box64env.dynacache;
-        if(mapping->env && mapping->env->is_dynacache_overridden)
-            dynacache = mapping->env->dynacache;
-        if(dynacache)
-            MmapDynaCache(mapping);
-        #endif
+        dynarec_log(LOG_INFO, "Mapping of fd:%d %s (%s) in %p-%p\n", fd, fullname, lowercase_filename, (void*)addr, (void*)(addr+length));
     } else
         mapping = kh_value(mapping_entries, k);
 
     if(mapping && mapping->start>addr) { 
-        dynarec_log(LOG_INFO, "Ignoring Mapping %s (%s) adjusted start: %p from %p\n", fullname, lowercase_filename, (void*)addr, (void*)(mapping->start)); 
+        dynarec_log(LOG_INFO, "Ignoring Mapping of fd:%d %s (%s) adjusted start: %p from %p\n", fd, fullname, lowercase_filename, (void*)addr, (void*)(mapping->start)); 
         box_free(lowercase_filename);
+        mutex_unlock(&my_context->mutex_dyndump);
         return;
     }
     if(BOX64ENV(dynarec_log)) {
@@ -812,6 +821,19 @@ void RecordEnvMappings(uintptr_t addr, size_t length, int fd)
             }
     }
     rb_set_64(envmap, addr, addr + length, (uint64_t)mapping);
+    mutex_unlock(&my_context->mutex_dyndump);
+    if(new_mapping) {
+        // First time we see this file
+        if (box64_wine && BOX64ENV(unityplayer)) DetectUnityPlayer(lowercase_filename+1);
+        if (box64_wine && !box64_is32bits && BOX64ENV(dynarec_volatile_metadata)) ParseVolatileMetadata(fullname, (void*)addr);
+        #if defined(DYNAREC) && !defined(WIN32)
+        int dynacache = box64env.dynacache;
+        if(mapping->env && mapping->env->is_dynacache_overridden)
+            dynacache = mapping->env->dynacache;
+        if(dynacache)
+            MmapDynaCache(mapping);
+        #endif
+    }
     if(mapping->env) {
         printf_log(LOG_DEBUG, "Applied [%s] of range %p:%p\n", filename, addr, addr + length);
         PrintEnvVariables(mapping->env, LOG_DEBUG);
@@ -874,15 +896,15 @@ done:
 #define HEADER_SIGN "DynaCache"
 #define SET_VERSION(MAJ, MIN, REV) (((MAJ)<<24)|((MIN)<<16)|(REV))
 #ifdef ARM64
-#define ARCH_VERSION SET_VERSION(0, 0, 11)
+#define ARCH_VERSION SET_VERSION(0, 0, 12)
 #elif defined(RV64)
 #define ARCH_VERSION SET_VERSION(0, 0, 4)
 #elif defined(LA64)
-#define ARCH_VERSION SET_VERSION(0, 0, 4)
+#define ARCH_VERSION SET_VERSION(0, 0, 5)
 #else
 #error meh!
 #endif
-#define DYNAREC_VERSION SET_VERSION(0, 1, 0)
+#define DYNAREC_VERSION SET_VERSION(0, 1, 1)
 
 typedef struct DynaCacheHeader_s {
     char sign[10];  //"DynaCache\0"
@@ -1363,20 +1385,28 @@ void WillRemoveMapping(uintptr_t addr, size_t length)
 void RemoveMapping(uintptr_t addr, size_t length)
 {
     if(!envmap) return;
+    #ifdef DYNAREC
+    mmaplist_t* list = NULL;
+    #endif
+    mutex_lock(&my_context->mutex_dyndump);
     mapping_t* mapping = (mapping_t*)rb_get_64(envmap, addr);
     rb_unset(envmap, addr, addr+length);
     // quick check at next address
     if(mapping) {
-        if(mapping == (mapping_t*)rb_get_64(envmap, addr+length))
+        if(mapping == (mapping_t*)rb_get_64(envmap, addr+length)) {
+            mutex_unlock(&my_context->mutex_dyndump);
             return; // still present, don't purge mapping
+        }
         // Will traverse the tree to find any left over
         uintptr_t start = rb_get_leftmost(envmap);
         uintptr_t end;
         uint64_t val;
         do {
             rb_get_end_64(envmap, start, &val, &end);
-            if((mapping_t*)val==mapping)
+            if((mapping_t*)val==mapping) {
+                mutex_unlock(&my_context->mutex_dyndump);
                 return; // found more occurance, exiting
+            }
             start = end;
         } while(end!=UINTPTR_MAX);
         // no occurence found, delete mapping
@@ -1385,13 +1415,16 @@ void RemoveMapping(uintptr_t addr, size_t length)
         if(k!=kh_end(mapping_entries))
             kh_del(mapping_entry, mapping_entries, k);
 	#ifdef DYNAREC
-        if(mapping->mmaplist)
-            DelMmaplist(mapping->mmaplist);
+        if(mapping->mmaplist) list = mapping->mmaplist; // deferring the deletion because of
 	#endif
         box_free(mapping->filename);
         box_free(mapping->fullname);
         box_free(mapping);
     }
+    mutex_unlock(&my_context->mutex_dyndump);
+    #ifdef DYNAREC
+    if(list) DelMmaplist(list);
+    #endif
 }
 
 void SerializeAllMapping()

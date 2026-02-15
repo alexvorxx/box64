@@ -28,9 +28,9 @@
 #include "modrm.h"
 
 #ifdef TEST_INTERPRETER
-uintptr_t Test66(x64test_t *test, rex_t rex, uintptr_t addr)
+uintptr_t Test66(x64test_t *test, rex_t rex, uintptr_t addr, int *step)
 #else
-uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr)
+uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
 #endif
 {
     uint8_t opcode;
@@ -122,9 +122,9 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr)
                 #endif
             case 1:
                 #ifdef TEST_INTERPRETER
-                return Test66F20F(test, rex, addr);
+                return Test66F20F(test, rex, addr, step);
                 #else
-                return Run66F20F(emu, rex, addr);
+                return Run66F20F(emu, rex, addr, step);
                 #endif
             case 2:
                 #ifdef TEST_INTERPRETER
@@ -246,6 +246,13 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr)
         } else {
             return 0;
         }
+        break;
+
+    case 0x63:                      /* MOVSXD Gw,Ew */
+        nextop = F8;
+        GETEW(0);
+        GETGW;
+        GW->sword[0] = EW->sword[0];
         break;
 
     case 0x68:                       /* PUSH u16 */
@@ -816,11 +823,24 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr)
             #endif
             break;
     case 0xE8:                              /* CALL Id */
-        tmp32s = F32S; // call is relative
+        tmp32s = (rex.is32bits)?F16S:F32S; // call is relative
         if(rex.is32bits)
             Push32(emu, addr);
         else
             Push64(emu, addr);
+        addr += tmp32s;
+        break;
+    case 0xE9:                      /* JMP Id */
+        tmp32s = (rex.is32bits)?(F16S):(F32S); // jmp is relative
+        if(rex.is32bits)
+            addr = (uint32_t)(addr+tmp32s);
+        else
+            addr += tmp32s;
+        addr = (uintptr_t)getAlternate((void*)addr);
+        break;
+
+    case 0xEB:                      /* JMP Ib */
+        tmp32s = F8S; // jump is relative
         addr += tmp32s;
         break;
 

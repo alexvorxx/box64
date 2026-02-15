@@ -44,7 +44,7 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
     int rep = 0;    // 0 none, 1=F2 prefix, 2=F3 prefix
     int need_epilog = 1;
     // Clean up (because there are multiple passes)
-    #ifdef ARM64
+    #if defined(ARM64) || defined(LA64)
     dyn->f = status_unk;
     #else
     dyn->f.pending = 0;
@@ -111,7 +111,7 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             dyn->last_ip = 0;
             if(reset_n==-2) {
                 MESSAGE(LOG_DEBUG, "Reset Caches to zero\n");
-                #ifdef ARM64
+                #if defined(ARM64) || defined(LA64)
                 dyn->f = status_unk;
                 #else
                 dyn->f.dfnone = 0;
@@ -128,7 +128,7 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
                 }
                 if(dyn->insts[ninst].x64.barrier&BARRIER_FLAGS) {
                     MESSAGE(LOG_DEBUG, "Apply Barrier Flags\n");
-                    #ifdef ARM64
+                    #if defined(ARM64) || defined(LA64)
                     dyn->f = status_unk;
                     #else
                     dyn->f.dfnone = 0;
@@ -166,7 +166,12 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
         if((dyn->insts[ninst].x64.need_before&~X_PEND) && !ninst) {
             READFLAGS(dyn->insts[ninst].x64.need_before&~X_PEND);
         }
+        if (BOX64DRENV(dynarec_dump) && (!BOX64ENV(dynarec_dump_range_end) || (ip >= BOX64ENV(dynarec_dump_range_start) && ip < BOX64ENV(dynarec_dump_range_end)))) {
+            dyn->need_dump = BOX64DRENV(dynarec_dump);
+        }
         if(BOX64ENV(dynarec_test) && (!BOX64ENV(dynarec_test_end) || (ip>=BOX64ENV(dynarec_test_start) && ip<BOX64ENV(dynarec_test_end)))) {
+            int need_dump = dyn->need_dump;
+            if (BOX64ENV(dynarec_test_nodump)) dyn->need_dump = 0;
             MESSAGE(LOG_DUMP, "TEST STEP ----\n");
             extcache_native_t save;
             fpu_save_and_unwind(dyn, ninst, &save);
@@ -175,9 +180,7 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             fpu_unreflectcache(dyn, ninst, x1, x2, x3);
             fpu_unwind_restore(dyn, ninst, &save);
             MESSAGE(LOG_DUMP, "----------\n");
-        }
-        if (BOX64DRENV(dynarec_dump) && (!BOX64ENV(dynarec_dump_range_end) || (ip >= BOX64ENV(dynarec_dump_range_start) && ip < BOX64ENV(dynarec_dump_range_end)))) {
-            dyn->need_dump = BOX64DRENV(dynarec_dump);
+            dyn->need_dump = need_dump;
         }
         #ifdef HAVE_TRACE
         else if(my_context->dec && BOX64ENV(dynarec_trace)) {
@@ -262,7 +265,7 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
                 #endif
             }
             if(dyn->insts[next].x64.barrier&BARRIER_FLAGS) {
-                #ifdef ARM64
+                #if defined(ARM64) || defined(LA64)
                 dyn->f = status_unk;
                 #else
                 dyn->f.pending = 0;
@@ -288,7 +291,7 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             // we use the 1st predecessor here
             if((ninst+1)<dyn->size && !dyn->insts[ninst+1].x64.alive) {
                 // reset fpu value...
-                #ifdef ARM64
+                #if defined(ARM64) || defined(LA64)
                 dyn->f = status_unk;
                 #else
                 dyn->f.dfnone = 0;

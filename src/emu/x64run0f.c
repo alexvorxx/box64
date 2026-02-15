@@ -25,6 +25,7 @@
 #include "emit_signals.h"
 #include "x64shaext.h"
 #include "freq.h"
+#include "random.h"
 #ifdef DYNAREC
 #include "custommem.h"
 #include "../dynarec/native_lock.h"
@@ -85,8 +86,20 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                     default:
                         return 0;
                 }
-            } else
-                return 0;
+            } else {
+                nextop = F8;
+                switch((nextop>>3)&7) {
+                    case 0:                 /* SLDT Ew */
+                        GETEW(0);
+                        if(MODREG)
+                            ED->q[0] = 0;
+                        else
+                            EW->word[0] = 0;
+                        break;
+                    default:
+                        return 0;
+                }
+            }
             break;
         case 0x01:                      /* XGETBV, SGDT, etc... */
             nextop = F8;
@@ -186,7 +199,7 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
         case 0x06:                      /* CLTS */
             // this is a privilege opcode...
             #ifndef TEST_INTERPRETER
-            EmitSignal(emu, X64_SIGSEGV, (void*)R_RIP, 0);
+            EmitSignal(emu, X64_SIGSEGV, (void*)R_RIP, 0xbad0);
             #endif
             break;
 
@@ -250,7 +263,9 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             break;
         case 0x13:                      /* MOVLPS Ex, Gx */
             nextop = F8;
-            if(!MODREG) {
+            if(MODREG) {
+                EmitSignal(emu, X64_SIGILL, (void*)R_RIP, 0);
+            } else {
                 GETEX(0);
                 GETGX;
                 EX->q[0] = GX->q[0];
@@ -350,10 +365,14 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             break;
         case 0x2B:                      /* MOVNTPS Ex,Gx */
             nextop = F8;
-            GETEX(0);
-            GETGX;
-            EX->q[0] = GX->q[0];
-            EX->q[1] = GX->q[1];
+            if(MODREG) {
+                EmitSignal(emu, X64_SIGILL, (void*)R_RIP, 0);
+            } else {
+                GETEX(0);
+                GETGX;
+                EX->q[0] = GX->q[0];
+                EX->q[1] = GX->q[1];
+            }
             break;
         case 0x2C:                      /* CVTTPS2PI Gm, Ex */
             nextop = F8;
@@ -1182,8 +1201,7 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                 GetSegmentBaseEmu(emu, _FS);  // refresh segs_offs
             break;
         case 0xA2:                      /* CPUID */
-            tmp32u = R_EAX;
-            my_cpuid(emu, tmp32u);
+            my_cpuid(emu);
             break;
         case 0xA3:                      /* BT Ed,Gd */
             CHECK_FLAGS(emu);

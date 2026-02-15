@@ -291,15 +291,19 @@ static void initWrappedLib(library_t *lib, box64context_t* context) {
                 printf_dlsym_dump(LOG_DEBUG, "Failure to add lib %s linkmap\n", lib->name);
                 break;
             }
-            struct link_map real_lm;
+            struct link_map *real_lm = NULL;
             #ifndef ANDROID
             if(dlinfo(lib->w.lib, RTLD_DI_LINKMAP, &real_lm)) {
                 printf_dlsym_dump(LOG_DEBUG, "Failed to dlinfo lib %s\n", lib->name);
             }
             #endif
-            lm->l_addr = real_lm.l_addr;
-            lm->l_name = real_lm.l_name;
-            lm->l_ld = real_lm.l_ld;
+            if(real_lm) {
+                lm->l_addr = real_lm->l_addr;
+                lm->l_name = real_lm->l_name;
+                lm->l_ld = real_lm->l_ld;
+            } else {
+                lm->l_name = lib->path;
+            }
             break;
         }
     }
@@ -729,6 +733,18 @@ int IsSameLib(library_t* lib, const char* path)
         if(lib->type==LIB_EMULATED && lib->e.elf->path && !strcmp(lib->e.elf->path, rpath)) {
             ret=1;
         }
+        /**
+         * EasyAntiCheat would use memfd to create a library on the fly, the real path will be something like
+         *     /memfd:2a87dfdb-d3d2-f6db-46be-dabbbd (deleted)
+         * In this case, handle it by checking the original path.
+         */
+        if (strlen(rpath) >= strlen("/memfd:") && strncmp(rpath, "/memfd:", strlen("/memfd:")) == 0) {
+            if (!strcmp(path, lib->path))
+                ret = 1;
+            if (lib->type == LIB_EMULATED && lib->e.elf->path && !strcmp(lib->e.elf->path, path)) {
+                ret = 1;
+            }
+        }
     }
     if(!ret) {
         int n = NbDot(name);
@@ -886,8 +902,14 @@ static int getSymbolInSymbolMaps(library_t*lib, const char* name, int noweak, ui
                 printf_log(LOG_NONE, "Warning, function %s not found\n", buff);
                 return 0;
             }
-            s->addr = AddBridge(lib->w.bridge, s->w, symbol, 0, name);
-            s->resolved = 1;
+            void* s2 = dlsym(lib->w.lib, name);
+            if(s2) {
+                s->addr = AddBridge2(lib->w.bridge, s->w, symbol, s2, 0, name);
+                // don't resolve the symbol here, it may change
+            } else {
+                s->addr = AddBridge(lib->w.bridge, s->w, symbol, 0, name);
+                s->resolved = 1;
+            }
         }
         *addr = s->addr;
         *size = sizeof(void*);
@@ -979,8 +1001,14 @@ static int getSymbolInSymbolMaps(library_t*lib, const char* name, int noweak, ui
                     printf_log(LOG_NONE, "Warning, function %s not found\n", buff);
                     return 0;
                 }
+            void* s2 = dlsym(lib->w.lib, name);
+            if(s2) {
+                s->addr = AddBridge2(lib->w.bridge, s->w, symbol, s2, 0, name);
+                // don't resolve the symbol here, it may change
+            } else {
                 s->addr = AddBridge(lib->w.bridge, s->w, symbol, 0, name);
                 s->resolved = 1;
+            }
             }
             *addr = s->addr;
             *size = sizeof(void*);

@@ -174,6 +174,7 @@ Enable the emulation of x86 strong memory model. Available in WowBox64.
  * 1: Enable some memory barriers when writing to memory to emulate the x86 strong memory model in a limited way. 
  * 2: All in 1, plus memory barriers on SIMD instructions. 
  * 3: All in 2, plus more memory barriers on a regular basis. 
+ * 4: Mimic x86 TSO similarly to QEMU's approach, for evaluation purposes. 
 
 ### BOX64_DYNAREC_VOLATILE_METADATA
 
@@ -372,6 +373,13 @@ Fix 64bit inodes.
  * 0: Do not fix 64bit inodes. [Default]
  * 1: Fix 64bit inodes. 
 
+### BOX64_FORCE_LD_PRELOAD
+
+Force symbols from BOX64_LD_PRELOAD libraries to be resolved by RTLD_NEXT.
+
+ * 0: Do nothing. [Default]
+ * 1: Force symbols from BOX64_LD_PRELOAD libraries to be resolved by RTLD_NEXT. 
+
 ### BOX64_IGNOREINT3
 
 Ignore INT3 instructions.
@@ -473,7 +481,7 @@ Expose SHAEXT (a.k.a. SHA_NI) capabilities. Available in WowBox64.
 
 ### BOX64_SSE_FLUSHTO0
 
-Behaviour of SSE Flush to 0 flags. Also tracking SSE exception flags Available in WowBox64.
+Behaviour of SSE Flush to 0 flags. Also tracking SSE exception flags. Available in WowBox64.
 
  * 0: Just track the flag. [Default]
  * 1: Apply SSE Flush to 0 flag directly. Also reflect SSE exception flags in Dynarec (if available) 
@@ -511,7 +519,7 @@ Detect UnityPlayer and apply conservative settings.
 Games is a Unity one.
 
  * 0: Does nothing. 
- * 1: Unity Game, use special detecting code for Windows, apply BOX64_DYNAREC_STRONGMEM=1 for Linux [Default]
+ * 1: Unity Game, use special detecting code for Windows, apply BOX64_DYNAREC_STRONGMEM=1 for Linux. [Default]
 
 ### BOX64_X11GLX
 
@@ -598,6 +606,14 @@ Print missing opcodes. Available in WowBox64.
  * 1: Print missing opcodes. 
  * 2: Print the fallback to scalar opcodes, only valid on RISC-V. 
 
+### BOX64_DYNAREC_NOHOSTEXT
+
+Disable optional host extensions.
+
+ * 0: Disable nothing. [Default]
+ * 1: Disable all the optional extensions. 
+ * xxx,yyy,zzz: Disable selected optional extensions, choices are Arm: `crc32,pmull,aes,atomics,sha1,sha2,uscat,flagm,flagm2,frintts,afp,rndr`, LoongArch: `lasx,lbt,frecipe,lam_bh,lamcas,scq`, and RISC-V: `zba,zbb,zbc,zbs,vector,xtheadba,xtheadbb,xtheadbs,xtheadmemidx,xtheadmempair,xtheadcondmov`. 
+
 ### BOX64_DYNAREC_PERFMAP
 
 Generate map file for Linux perf tool.
@@ -615,10 +631,17 @@ Enable DynaRec execution comparison with the interpreter, very slow, only for te
 
 ### BOX64_DYNAREC_TEST_NODUP
 
-Enable deduplication of IP address where COSIM find a difference Available in WowBox64.
+Enable deduplication of IP address where COSIM find a difference. Available in WowBox64.
 
- * 0: Show all addresses in error [Default]
- * 1: Show address in error only 1 time, even if dump might differs 
+ * 0: Show all addresses in error. [Default]
+ * 1: Show address in error only 1 time, even if dump might differs. 
+
+### BOX64_DYNAREC_TEST_NODUMP
+
+Do not dump test code when BOX64_DYNAREC_DUMP is enabled. Available in WowBox64.
+
+ * 0: Dump test code. 
+ * 1: Do not dump test code. [Default]
 
 ### BOX64_DYNAREC_TRACE
 

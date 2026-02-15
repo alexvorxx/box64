@@ -15,6 +15,7 @@ typedef void (*vFp_t)(void*);
 typedef int32_t (*iFp_t)(void*);
 typedef void* (*pFv_t)(void);
 typedef void (*vFpp_t)(void*, void*);
+typedef int32_t (*iFpp_t)(void*, void*);
 typedef void* (*pFpp_t)(void*, void*);
 typedef void (*vFppp_t)(void*, void*, void*);
 typedef int32_t (*iFppp_t)(void*, void*, void*);
@@ -26,6 +27,7 @@ typedef int32_t (*iFpppA_t)(void*, void*, void*, va_list);
 typedef void* (*pFpppi_t)(void*, void*, void*, int32_t);
 typedef void* (*pFpppp_t)(void*, void*, void*, void*);
 typedef int32_t (*iFppppp_t)(void*, void*, void*, void*, void*);
+typedef void* (*pFpppip_t)(void*, void*, void*, int32_t, void*);
 typedef void* (*pFppppi_t)(void*, void*, void*, void*, int32_t);
 typedef void (*vFpppppp_t)(void*, void*, void*, void*, void*, void*);
 typedef int32_t (*iFpppppp_t)(void*, void*, void*, void*, void*, void*);
@@ -41,6 +43,7 @@ typedef void* (*pFppppppi_t)(void*, void*, void*, void*, void*, void*, int32_t);
 	GO(xmlHashFree, vFpp_t) \
 	GO(xmlSetGenericErrorFunc, vFpp_t) \
 	GO(xmlSetStructuredErrorFunc, vFpp_t) \
+	GO(valuePush, iFpp_t) \
 	GO(xmlHashCopy, pFpp_t) \
 	GO(xmlHashScan, vFppp_t) \
 	GO(xmlHashScanFull, vFppp_t) \
@@ -63,6 +66,7 @@ typedef void* (*pFppppppi_t)(void*, void*, void*, void*, void*, void*, int32_t);
 	GO(xmlOutputBufferCreateIO, pFpppp_t) \
 	GO(xmlHashRemoveEntry3, iFppppp_t) \
 	GO(xmlHashUpdateEntry2, iFppppp_t) \
+	GO(xmlCreatePushParserCtxt, pFpppip_t) \
 	GO(xmlSaveToIO, pFppppi_t) \
 	GO(xmlHashScan3, vFpppppp_t) \
 	GO(xmlHashScanFull3, vFpppppp_t) \

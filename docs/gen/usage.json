@@ -610,6 +610,29 @@
     ]
   },
   {
+    "name": "BOX64_DYNAREC_NOHOSTEXT",
+    "description": "Disable optional host extensions.",
+    "category": "Debugging",
+    "wine": false,
+    "options": [
+      {
+        "key": "0",
+        "description": "Disable nothing.",
+        "default": true
+      },
+      {
+        "key": "1",
+        "description": "Disable all the optional extensions.",
+        "default": false
+      },
+      {
+        "key": "xxx,yyy,zzz",
+        "description": "Disable selected optional extensions, choices are Arm: `crc32,pmull,aes,atomics,sha1,sha2,uscat,flagm,flagm2,frintts,afp,rndr`, LoongArch: `lasx,lbt,frecipe,lam_bh,lamcas,scq`, and RISC-V: `zba,zbb,zbc,zbs,vector,xtheadba,xtheadbb,xtheadbs,xtheadmemidx,xtheadmempair,xtheadcondmov`.",
+        "default": false
+      }
+    ]
+  },
+  {
     "name": "BOX64_DYNAREC_PAUSE",
     "description": "Enable x86 PAUSE emulation, may help the performance of spinlocks.",
     "category": "Performance",
@@ -739,6 +762,11 @@
         "key": "3",
         "description": "All in 2, plus more memory barriers on a regular basis.",
         "default": false
+      },
+      {
+        "key": "4",
+        "description": "Mimic x86 TSO similarly to QEMU's approach, for evaluation purposes.",
+        "default": false
       }
     ]
   },
@@ -785,19 +813,37 @@
   },
   {
     "name": "BOX64_DYNAREC_TEST_NODUP",
-    "description": "Enable deduplication of IP address where COSIM find a difference",
+    "description": "Enable deduplication of IP address where COSIM find a difference.",
     "category": "Debugging",
     "wine": true,
     "options": [
       {
         "key": "0",
-        "description": "Show all addresses in error",
+        "description": "Show all addresses in error.",
         "default": true
       },
       {
         "key": "1",
-        "description": "Show address in error only 1 time, even if dump might differs",
+        "description": "Show address in error only 1 time, even if dump might differs.",
         "default": false
+      }
+    ]
+  },
+  {
+    "name": "BOX64_DYNAREC_TEST_NODUMP",
+    "description": "Do not dump test code when BOX64_DYNAREC_DUMP is enabled.",
+    "category": "Debugging",
+    "wine": true,
+    "options": [
+      {
+        "key": "0",
+        "description": "Dump test code.",
+        "default": false
+      },
+      {
+        "key": "1",
+        "description": "Do not dump test code.",
+        "default": true
       }
     ]
   },
@@ -1049,6 +1095,24 @@
       {
         "key": "1",
         "description": "Fix 64bit inodes.",
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "BOX64_FORCE_LD_PRELOAD",
+    "description": "Force symbols from BOX64_LD_PRELOAD libraries to be resolved by RTLD_NEXT.",
+    "category": "Compatibility",
+    "wine": false,
+    "options": [
+      {
+        "key": "0",
+        "description": "Do nothing.",
+        "default": true
+      },
+      {
+        "key": "1",
+        "description": "Force symbols from BOX64_LD_PRELOAD libraries to be resolved by RTLD_NEXT.",
         "default": false
       }
     ]
@@ -1777,7 +1841,7 @@
   },
   {
     "name": "BOX64_SSE_FLUSHTO0",
-    "description": "Behaviour of SSE Flush to 0 flags. Also tracking SSE exception flags",
+    "description": "Behaviour of SSE Flush to 0 flags. Also tracking SSE exception flags.",
     "category": "Compatibility",
     "wine": true,
     "options": [
@@ -2039,7 +2103,7 @@
       },
       {
         "key": "1",
-        "description": "Unity Game, use special detecting code for Windows, apply BOX64_DYNAREC_STRONGMEM=1 for Linux",
+        "description": "Unity Game, use special detecting code for Windows, apply BOX64_DYNAREC_STRONGMEM=1 for Linux.",
         "default": true
       }
     ]

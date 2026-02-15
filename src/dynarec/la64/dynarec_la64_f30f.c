@@ -326,25 +326,24 @@ uintptr_t dynarec64_F30F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             nextop = F8;
             GETEX(v1, 0, 0);
             GETGX_empty(v0);
-            if (BOX64ENV(dynarec_fastround)) {
-                VFTINTRZ_W_S(v0, v1);
-            } else {
-                MOVGR2FCSR(FCSR2, xZR); // reset all bits
-                VFTINTRZ_W_S(v0, v1);
-                MOVFCSR2GR(x5, FCSR2); // get back FPSR to check
-                MOV32w(x3, (1 << FR_V) | (1 << FR_O));
-                AND(x5, x5, x3);
-                BEQZ_MARK(x5); // no fp exception, work done, fast path.
-
+            if (v0 == v1 && !BOX64ENV(dynarec_fastround)) {
+                v1 = fpu_get_scratch(dyn);
+                VOR_V(v1, v0, v0);
+            }
+            VFTINTRZ_W_S(v0, v1);
+            if (!BOX64ENV(dynarec_fastround)) {
                 q0 = fpu_get_scratch(dyn);
-                q1 = fpu_get_scratch(dyn); // mask
-                d0 = fpu_get_scratch(dyn);
-                VLDI(q0, 0b1001110000000); // broadcast 0x80000000 to all
-                VLDI(d0, (0b10011 << 8) | 0x4f);
-                VFCMP_S(q1, d0, v1, cULE); // get Nan,+overflow mark
-                VBITSEL_V(v0, v0, q0, q1);
-
-                MARK;
+                q1 = fpu_get_scratch(dyn);
+                d1 = fpu_get_scratch(dyn);
+                VFCMP_S(q0, v1, v1, cEQ);
+                VLDI(q1, 0b1001110000000); // broadcast 0x80000000
+                VAND_V(v0, q0, v0);
+                VANDN_V(d1, q0, q1);
+                VOR_V(v0, v0, d1);
+                VSUBI_WU(d1, q1, 1);
+                VSEQ_W(q0, v0, d1);
+                VSRLI_W(q0, q0, 31);
+                VADD_W(v0, v0, q0);
             }
             break;
         case 0x5C:
@@ -362,12 +361,8 @@ uintptr_t dynarec64_F30F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             GETGX(d0, 1);
             GETEXSS(d1, 0, 0);
             q0 = fpu_get_scratch(dyn);
-            if (BOX64ENV(dynarec_fastnan)) {
-                FMIN_S(q0, d0, d1);
-            } else {
-                FCMP_S(fcc0, d1, d0, cULE);
-                FSEL(q0, d0, d1, fcc0);
-            }
+            FCMP_S(fcc0, d1, d0, cULE);
+            FSEL(q0, d0, d1, fcc0);
             VEXTRINS_W(d0, q0, 0);
             break;
         case 0x5E:
@@ -385,12 +380,8 @@ uintptr_t dynarec64_F30F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             GETGX(d0, 1);
             GETEXSS(d1, 0, 0);
             q0 = fpu_get_scratch(dyn);
-            if (BOX64ENV(dynarec_fastnan)) {
-                FMAX_S(q0, d0, d1);
-            } else {
-                FCMP_S(fcc0, d1, d0, cLT);
-                FSEL(q0, d1, d0, fcc0);
-            }
+            FCMP_S(fcc0, d1, d0, cLT);
+            FSEL(q0, d1, d0, fcc0);
             VEXTRINS_W(d0, q0, 0);
             break;
         case 0x6F:
@@ -464,24 +455,37 @@ uintptr_t dynarec64_F30F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         FAKEED;
                         UDF();
                     } else {
-                        if(((nextop>>3)&7)==1) {INST_NAME("RDGSBASE");} else {INST_NAME("RDFSBASE");}
+                        if (((nextop >> 3) & 7) == 1) {
+                            INST_NAME("RDGSBASE");
+                        } else {
+                            INST_NAME("RDFSBASE");
+                        }
                         ed = TO_NAT((nextop & 7) + (rex.b << 3));
-                        int seg = _FS + ((nextop>>3)&7);
-                        grab_segdata(dyn, addr, ninst, x4, seg, (MODREG));
-                        MV(ed, x4);
+                        int seg = _FS + ((nextop >> 3) & 7);
+                        grab_segdata(dyn, addr, ninst, x4, seg);
+                        MVxw(ed, x4);
                     }
-                     break;
+                    break;
                 case 2:
                 case 3:
-                    if(rex.is32bits || !MODREG) {
+                    if (rex.is32bits || !MODREG) {
                         INST_NAME("Illegal AE");
                         FAKEED;
                         UDF();
                     } else {
-                        if(((nextop>>3)&7)==3) {INST_NAME("WRGSBASE");} else {INST_NAME("WRFSBASE");}
+                        if (((nextop >> 3) & 7) == 3) {
+                            INST_NAME("WRGSBASE");
+                        } else {
+                            INST_NAME("WRFSBASE");
+                        }
                         ed = TO_NAT((nextop & 7) + (rex.b << 3));
-                        int seg = _FS + ((nextop>>3)&7)-2;
-                        ST_D(ed, xEmu, offsetof(x64emu_t, segs_offs[seg]));
+                        int seg = _FS + ((nextop >> 3) & 7) - 2;
+                        if (!rex.w) {
+                            ZEROUP2(x4, ed);
+                            ST_D(x4, xEmu, offsetof(x64emu_t, segs_offs[seg]));
+                        } else {
+                            ST_D(ed, xEmu, offsetof(x64emu_t, segs_offs[seg]));
+                        }
                     }
                     break;
                 case 5:

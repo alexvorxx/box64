@@ -309,7 +309,7 @@ uintptr_t RunF20F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             GETEX(2);
             tmp8s = F8&0x3f;
             tmp8u = F8&0x3f;
-            tmp64u = (1<<(tmp8s+1))-1;
+            tmp64u = (tmp8s==63)?~0ULL:((1ULL<<(tmp8s+1))-1);
             GX->q[0] &=~(tmp64u<<tmp8u);
             GX->q[0] |= (EX->q[0]&tmp64u)<<tmp8u;
         }
@@ -327,7 +327,7 @@ uintptr_t RunF20F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             GETEX(2);
             tmp8u = EX->ub[8]&0x3f;
             tmp8s = EX->ub[9]&0x3f;
-            tmp64u = (1<<(tmp8s+1))-1;
+            tmp64u = (tmp8s==63)?~0ULL:((1ULL<<(tmp8s+1))-1);
             GX->q[0] &=~(tmp64u<<tmp8u);
             GX->q[0] |= (EX->q[0]&tmp64u)<<tmp8u;
         }
@@ -381,7 +381,9 @@ uintptr_t RunF20F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
     )                               /* 0x80 -> 0x8F Jxx */
 
     case 0xA5:  // ignore F2 prefix
+    case 0xB7:
     case 0xBA:
+    case 0xBC:  // this one is still BSR, not TZCNT
         #ifdef TEST_INTERPRETER 
         return Test0F(test, rex, addr-1, step);
         #else

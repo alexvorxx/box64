@@ -66,13 +66,15 @@ extern char* ftrace_name;
     INTEGER(BOX64_DYNAREC_LOG, dynarec_log, 0, 0, 3, 1)                       \
     INTEGER(BOX64_DYNAREC_MISSING, dynarec_missing, 0, 0, 2, 1)               \
     BOOLEAN(BOX64_DYNAREC_NATIVEFLAGS, dynarec_nativeflags, 1, 1)             \
+    STRING(BOX64_DYNAREC_NOHOSTEXT, dynarec_nohostext, 0)                     \
     INTEGER(BOX64_DYNAREC_PAUSE, dynarec_pause, 0, 0, 3, 1)                   \
     BOOLEAN(BOX64_DYNAREC_PERFMAP, dynarec_perf_map, 0, 0)                    \
     INTEGER(BOX64_DYNAREC_SAFEFLAGS, dynarec_safeflags, 1, 0, 2, 1)           \
-    INTEGER(BOX64_DYNAREC_STRONGMEM, dynarec_strongmem, 0, 0, 3, 1)           \
+    INTEGER(BOX64_DYNAREC_STRONGMEM, dynarec_strongmem, 0, 0, 4, 1)           \
     BOOLEAN(BOX64_DYNAREC_TBB, dynarec_tbb, 1, 0)                             \
     STRING(BOX64_DYNAREC_TEST, dynarec_test_str, 1)                           \
     BOOLEAN(BOX64_DYNAREC_TEST_NODUP, dynarec_test_nodup, 0, 1)               \
+    BOOLEAN(BOX64_DYNAREC_TEST_NODUMP, dynarec_test_nodump, 1, 1)             \
     BOOLEAN(BOX64_DYNAREC_TRACE, dynarec_trace, 0, 0)                         \
     BOOLEAN(BOX64_DYNAREC_VOLATILE_METADATA, dynarec_volatile_metadata, 1, 0) \
     BOOLEAN(BOX64_DYNAREC_WAIT, dynarec_wait, 1, 1)                           \
@@ -92,6 +94,7 @@ extern char* ftrace_name;
     STRING(BOX64_ENV5, env5, 0)                                               \
     BOOLEAN(BOX64_EXIT, exit, 0, 0)                                           \
     BOOLEAN(BOX64_FIX_64BIT_INODES, fix_64bit_inodes, 0, 0)                   \
+    BOOLEAN(BOX64_FORCE_LD_PRELOAD, force_ld_preload, 0, 0)                   \
     BOOLEAN(BOX64_IGNOREINT3, ignoreint3, 0, 0)                               \
     STRING(BOX64_INSERT_ARGS, insert_args, 0)                                 \
     BOOLEAN(BOX64_INPROCESSGPU, inprocessgpu, 0, 0)                           \
@@ -196,6 +199,7 @@ typedef struct box64env_s {
 #undef ADDRESS
 #undef STRING
 
+    int priority;
     /******** Custom ones ********/
     int maxcpu;
     int dynarec_test;
@@ -228,7 +232,7 @@ typedef struct DynaCacheBlock_s {
 #endif
 
 void InitializeEnvFiles();
-void ApplyEnvFileEntry(const char* name);
+int ApplyEnvFileEntry(const char* name);
 const char* GetLastApplyEntryName();
 void InitializeEnv();
 void LoadEnvVariables();

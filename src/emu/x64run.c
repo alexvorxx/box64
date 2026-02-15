@@ -169,10 +169,10 @@ x64emurun:
         } else if(rex.is66) {
             /* 16bits prefix */
             #ifdef TEST_INTERPRETER
-            if(!(addr = Test66(test, rex, addr-1)))
+            if(!(addr = Test66(test, rex, addr-1, &step)))
                 unimp = 1;
             #else
-            if(!(addr = Run66(emu, rex, addr-1))) {
+            if(!(addr = Run66(emu, rex, addr-1, &step))) {
                 unimp = 1;
                 goto fini;
             }
@@ -271,10 +271,10 @@ x64emurun:
                     break;
                 case 2:
                     #ifdef TEST_INTERPRETER 
-                    if(!(addr = TestF30F(test, rex, addr)))
+                    if(!(addr = TestF30F(test, rex, addr, &step)))
                         unimp = 1;
                     #else
-                    if(!(addr = RunF30F(emu, rex, addr))) {
+                    if(!(addr = RunF30F(emu, rex, addr, &step))) {
                         unimp = 1;
                         goto fini;
                     }
@@ -518,13 +518,27 @@ x64emurun:
             break;
         case 0x63:                      /* MOVSXD Gd,Ed */
             nextop = F8;
-            GETE4(0);
-            GETGD;
             if(rex.is32bits) {
-                // ARPL here
-                // faking to always happy...
-                SET_FLAG(F_ZF);
+                // ARPL r/m16, r16
+                // If dest.RPL < src.RPL then dest.RPL = src.RPL and ZF=1, else ZF=0.
+                // Only ZF is modified.
+                CHECK_FLAGS(emu);
+
+                GETEW(0);
+                GETGW;
+                uint16_t dst = EW->word[0];
+                uint16_t src = GW->word[0];
+                uint16_t dst_rpl = dst & 0x3;
+                uint16_t src_rpl = src & 0x3;
+                if(dst_rpl < src_rpl) {
+                    EW->word[0] = (dst & 0xFFFC) | src_rpl;
+                    SET_FLAG(F_ZF);
+                } else {
+                    CLEAR_FLAG(F_ZF);
+                }
             } else {
+                GETE4(0);
+                GETGD;
                 if(rex.w)
                     GD->sq[0] = ED->sdword[0];
                 else
@@ -1667,15 +1681,15 @@ x64emurun:
                 if(!is32bits || (is32bits && (new_cs!=0x23))) {
                     uintptr_t new_sp = (!rex.w)?Pop32(emu):Pop64(emu);
                     uint32_t new_ss = ((!rex.w)?Pop32(emu):Pop64(emu))&0xffff;
-                    if(!new_ss) {
+                    if(!new_ss || ((new_ss&3)!=3)) {
                         // R_RIP doesn't advance
-                        printf_log(LOG_INFO, "Warning, unexpected new_cs=0x%x at %p\n", new_cs, (void*)R_RIP);
+                        printf_log(LOG_INFO, "Warning, unexpected new_ss=0x%x at %p\n", new_cs, (void*)R_RIP);
                         R_RSP-=(rex.w?4:8)*5;
                         EmitSignal(emu, X64_SIGSEGV, (void*)R_RIP, 0xbad0); // GPF
                         goto fini;
                     }
                     R_RSP = new_sp;
-                    emu->segs[_SS] = new_sp;
+                    emu->segs[_SS] = new_ss;
                 }
                 emu->eflags.x64 = new_flags;
                 tf = ACCESS_FLAG(F_TF);
@@ -1787,7 +1801,7 @@ x64emurun:
             };
             break;
         case 0xD7:                      /* XLAT */
-            R_AL = *(uint8_t*)(R_RBX + R_AL);
+            R_AL = *(uint8_t*)(rex.offset + R_RBX + R_AL);
             break;
         case 0xD8:                      /* x87 opcodes */
             #ifdef TEST_INTERPRETER

@@ -715,17 +715,17 @@ pid_t EXPORT my32_fork(x64emu_t* emu)
     if(type == EMUTYPE_MAIN)
         thread_set_emu(emu);
     if(v<0) {
-        printf_log(LOG_NONE, "BOX32: Warning, fork errored... (%d)\n", v);
+        printf_log(LOG_NONE, "Warning, fork errored... (%d)\n", v);
         // error...
     } else if(v>0) {
         // execute atforks parent functions
-        for (int i=0; i<my_context->atfork_sz; --i)
+        for (int i=0; i<my_context->atfork_sz; ++i)
             if(my_context->atforks[i].parent)
                 RunFunctionWithEmu(emu, 0, my_context->atforks[i].parent, 0);
 
     } else /*if(v==0)*/ {
         // execute atforks child functions
-        for (int i=0; i<my_context->atfork_sz; --i)
+        for (int i=0; i<my_context->atfork_sz; ++i)
             if(my_context->atforks[i].child)
                 RunFunctionWithEmu(emu, 0, my_context->atforks[i].child, 0);
     }
@@ -1585,8 +1585,6 @@ static int isProcSelf(const char *path, const char* w)
     }
     return 0;
 }
-
-int getNCpu();
 
 #ifdef ANDROID
 static int shm_open(const char *name, int oflag, mode_t mode) {
@@ -2609,12 +2607,13 @@ EXPORT int32_t my32___register_atfork(x64emu_t *emu, void* prepare, void* parent
     // this is partly incorrect, because the emulated funcionts should be executed by actual fork and not by my32_atfork...
     if(my_context->atfork_sz==my_context->atfork_cap) {
         my_context->atfork_cap += 4;
-        my_context->atforks = (atfork_fnc_t*)realloc(my_context->atforks, my_context->atfork_cap*sizeof(atfork_fnc_t));
+        my_context->atforks = (atfork_fnc_t*)box_realloc(my_context->atforks, my_context->atfork_cap*sizeof(atfork_fnc_t));
     }
-    my_context->atforks[my_context->atfork_sz].prepare = (uintptr_t)prepare;
-    my_context->atforks[my_context->atfork_sz].parent = (uintptr_t)parent;
-    my_context->atforks[my_context->atfork_sz].child = (uintptr_t)child;
-    my_context->atforks[my_context->atfork_sz].handle = handle;
+    int i = my_context->atfork_sz++;
+    my_context->atforks[i].prepare = (uintptr_t)prepare;
+    my_context->atforks[i].parent = (uintptr_t)parent;
+    my_context->atforks[i].child = (uintptr_t)child;
+    my_context->atforks[i].handle = handle;
     return 0;
 }
 

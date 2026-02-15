@@ -1204,18 +1204,13 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             for (int i = 0; i < 4; ++i) {
                 FLW(s0, wback, fixedaddress + i * 4);
                 FLW(s1, gback, gdoffset + i * 4);
-                if (!BOX64ENV(dynarec_fastnan)) {
-                    FEQS(x3, s0, s0);
-                    FEQS(x4, s1, s1);
-                    AND(x3, x3, x4);
-                    BEQZ(x3, 12);
-                    FLTS(x3, s0, s1);
-                    BEQZ(x3, 8);
-                    FSW(s0, gback, gdoffset + i * 4);
-                } else {
-                    FMINS(s1, s1, s0);
-                    FSW(s1, gback, gdoffset + i * 4);
-                }
+                FEQS(x3, s0, s0);
+                FEQS(x4, s1, s1);
+                AND(x3, x3, x4);
+                BEQZ(x3, 12);
+                FLTS(x3, s0, s1);
+                BEQZ(x3, 8);
+                FSW(s0, gback, gdoffset + i * 4);
             }
             break;
         case 0x5E:
@@ -1254,18 +1249,13 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
             for (int i = 0; i < 4; ++i) {
                 FLW(s0, wback, fixedaddress + i * 4);
                 FLW(s1, gback, gdoffset + i * 4);
-                if (!BOX64ENV(dynarec_fastnan)) {
-                    FEQS(x3, s0, s0);
-                    FEQS(x4, s1, s1);
-                    AND(x3, x3, x4);
-                    BEQZ(x3, 12);
-                    FLTS(x3, s1, s0);
-                    BEQZ(x3, 8);
-                    FSW(s0, gback, gdoffset + i * 4);
-                } else {
-                    FMAXS(s1, s1, s0);
-                    FSW(s1, gback, gdoffset + i * 4);
-                }
+                FEQS(x3, s0, s0);
+                FEQS(x4, s1, s1);
+                AND(x3, x3, x4);
+                BEQZ(x3, 12);
+                FLTS(x3, s1, s0);
+                BEQZ(x3, 8);
+                FSW(s0, gback, gdoffset + i * 4);
             }
             break;
         case 0x60:
@@ -1851,7 +1841,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0xA2:
             INST_NAME("CPUID");
             NOTEST(x1);
-            CALL_(const_cpuid, -1, 0, xRAX, 0);
+            CALL_(const_cpuid, -1, 0, 0, 0);
             // BX and DX are not synchronized during the call, so need to force the update
             LD(xRDX, xEmu, offsetof(x64emu_t, regs[_DX]));
             LD(xRBX, xEmu, offsetof(x64emu_t, regs[_BX]));
@@ -1885,7 +1875,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0xA4:
             nextop = F8;
             INST_NAME("SHLD Ed, Gd, Ib");
-            if (geted_ib(dyn, addr, ninst, nextop)) {
+            if (geted_ib(dyn, addr, ninst, nextop) & (rex.w ? 63 : 31)) {
                 SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
                 GETED(1);
                 GETGD;
@@ -1951,7 +1941,7 @@ uintptr_t dynarec64_0F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0xAC:
             nextop = F8;
             INST_NAME("SHRD Ed, Gd, Ib");
-            if (geted_ib(dyn, addr, ninst, nextop)) {
+            if (geted_ib(dyn, addr, ninst, nextop) & (rex.w ? 63 : 31)) {
                 SETFLAGS(X_ALL, SF_SET_PENDING, NAT_FLAGS_FUSION);
                 GETED(1);
                 GETGD;

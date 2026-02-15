@@ -162,6 +162,7 @@ typedef struct box64context_s {
     pthread_mutex_t     mutex_tls;
     pthread_mutex_t     mutex_thread;
     pthread_mutex_t     mutex_bridge;
+    pthread_mutex_t     mutex_dyndump;
     #else
     #ifdef USE_CUSTOM_MUTEX
     uint32_t            mutex_dyndump;
@@ -211,6 +212,8 @@ typedef struct box64context_s {
     cleanup_t           *cleanups;          // atexit functions
     int                 clean_sz;
     int                 clean_cap;
+
+    void*               video_mem;
 
     zydis_dec_t         *dec;           // trace
     zydis_dec_t         *dec32;         // trace

@@ -60,24 +60,20 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
 
     switch(opcode) {
         case 0x00:
-            if(rex.is32bits) {
-                nextop = F8;
-                switch((nextop>>3)&7) {
-                    case 0:
-                        INST_NAME("SLDT EW");
-                        if(MODREG) {
-                            ed = TO_NAT((nextop & 7) + (rex.b << 3));
-                            MOV32w(ed, 0);
-                        } else {
-                            addr = geted(dyn, addr, ninst, nextop, &wback, x2, &fixedaddress, NULL, 0, 0, rex, NULL, 0, 0);
-                            STRH_U12(xZR, wback, 0);
-                        }
-                        break;
-                    default:
-                        DEFAULT;
-                }
-            } else {
-                DEFAULT;
+            nextop = F8;
+            switch((nextop>>3)&7) {
+                case 0:
+                    INST_NAME("SLDT EW");
+                    if(MODREG) {
+                        ed = TO_NAT((nextop & 7) + (rex.b << 3));
+                        MOV32w(ed, 0);
+                    } else {
+                        addr = geted(dyn, addr, ninst, nextop, &wback, x2, &fixedaddress, NULL, 0, 0, rex, NULL, 0, 0);
+                        STRH_U12(xZR, wback, 0);
+                    }
+                    break;
+                default:
+                    DEFAULT;
             }
             break;
         case 0x01:
@@ -318,12 +314,12 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             break;
         case 0x13:
             nextop = F8;
-            INST_NAME("MOVLPS Ex, Gx");
-            GETGX(v0, 0);
             if(MODREG) {
-                DEFAULT;
-                return addr;
+                INST_NAME("Illegal 0F 13");
+                UDF(0);
             } else {
+                INST_NAME("MOVLPS Ex, Gx");
+                GETGX(v0, 0);
                 addr = geted(dyn, addr, ninst, nextop, &ed, x1, &fixedaddress, NULL, 0, 0, rex, NULL, 0, 0);
                 VST1_64(v0, 0, ed);  // better to use VST1 than VSTR_64, to avoid NEON->VFPU transfert I assume
                 SMWRITE2();
@@ -426,7 +422,7 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             nextop = F8;
             GETIP(ip);
             u8 = (rex.r*8)+(nextop>>3&7);
-            if((((opcode==0x20) || (opcode==0x22)) && ((u8==1) || (u8==5) || (u8==6) || (u8==7) || (u8>8))) || (((opcode==0x21) || (opcode==0x23) && rex.r))) {
+            if((((opcode==0x20) || (opcode==0x22)) && ((u8==1) || (u8==5) || (u8==6) || (u8==7) || (u8>8))) || (((opcode==0x21) || (opcode==0x23)) && rex.r)) {
                 INST_NAME("Illegal 0F 20..23");
                 UDF(0);
             } else {
@@ -483,13 +479,14 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             VMOVeD(v0, 0, d0, 0);
             break;
         case 0x2B:
-            INST_NAME("MOVNTPS Ex,Gx");
             nextop = F8;
-            GETG;
-            v0 = sse_get_reg(dyn, ninst, x1, gd, 0);
             if(MODREG) {
-                DEFAULT;
+                INST_NAME("Illegal 0F 2B");
+                UDF(0);
             } else {
+                INST_NAME("MOVNTPS Ex,Gx");
+                GETG;
+                v0 = sse_get_reg(dyn, ninst, x1, gd, 0);
                 addr = geted(dyn, addr, ninst, nextop, &ed, x1, &fixedaddress, &unscaled, 0xfff<<4, 15, rex, NULL, 0, 0);
                 VST128(v0, ed, fixedaddress);
             }
@@ -1794,7 +1791,6 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             NOTEST(x1);
             GETIP(ip);  // sync RIP for easier debugging
             STRx_U12(xRIP, xEmu, offsetof(x64emu_t, ip));
-            MOVx_REG(x1, xRAX);
             CALL_(const_cpuid, -1, 0);
             break;
         case 0xA3:
@@ -1960,15 +1956,15 @@ uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 switch (nextop) {
                     case 0xE8:
                         INST_NAME("LFENCE");
-                        SMDMB();
+                        DMB_LD();
                         break;
                     case 0xF0:
                         INST_NAME("MFENCE");
-                        SMDMB();
+                        DMB_SY();
                         break;
                     case 0xF8:
                         INST_NAME("SFENCE");
-                        SMDMB();
+                        DMB_ST();
                         break;
                     default:
                         DEFAULT;

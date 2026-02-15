@@ -139,6 +139,14 @@ static kh_customclass_t *my_customclass = NULL;
 // ---- Defining the multiple functions now -----
 #include "super80.h"
 
+#define WRAPPED_RET(A, NAME, RET, FRET, DEF, FMT, ...)  \
+static uintptr_t my_##NAME##_fct_##A = 0;   \
+static RET my_##NAME##_##A DEF              \
+{                                           \
+    printf_log(LOG_DEBUG, "Calling " #NAME "_" #A " wrapper\n");                \
+    return FRET((RET)RunFunctionFmt(my_##NAME##_fct_##A, FMT, __VA_ARGS__));    \
+}
+
 #define WRAPPED(A, NAME, RET, DEF, FMT, ...)  \
 static uintptr_t my_##NAME##_fct_##A = 0;   \
 static RET my_##NAME##_##A DEF              \
@@ -338,6 +346,51 @@ WRAPPED(36, NAME##_##A, RET, DEF, FMT, __VA_ARGS__) \
 WRAPPED(37, NAME##_##A, RET, DEF, FMT, __VA_ARGS__) \
 WRAPPED(38, NAME##_##A, RET, DEF, FMT, __VA_ARGS__) \
 WRAPPED(39, NAME##_##A, RET, DEF, FMT, __VA_ARGS__) \
+FIND(A, NAME)                                       \
+REVERSE(A, NAME)                                    \
+AUTOBRIDGE(A, NAME)
+
+#define WRAPPER_RET(A, NAME, RET, FRET, DEF, FMT, ...)        \
+WRAPPED_RET( 0, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET( 1, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET( 2, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET( 3, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET( 4, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET( 5, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET( 6, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET( 7, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET( 8, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET( 9, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(10, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(11, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(12, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(13, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(14, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(15, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(16, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(17, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(18, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(19, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(20, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(21, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(22, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(23, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(24, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(25, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(26, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(27, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(28, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(29, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(30, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(31, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(32, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(33, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(34, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(35, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(36, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(37, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(38, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
+WRAPPED_RET(39, NAME##_##A, RET, FRET, DEF, FMT, __VA_ARGS__) \
 FIND(A, NAME)                                       \
 REVERSE(A, NAME)                                    \
 AUTOBRIDGE(A, NAME)
@@ -2062,6 +2115,59 @@ static void unwrapGDBusObjectManagerClientInstance(my_GDBusObjectManagerClient_t
 }
 // autobridge
 static void bridgeGDBusObjectManagerClientInstance(my_GDBusObjectManagerClient_t* class)
+{
+    bridgeGObjectInstance(&class->parent);
+}
+
+// ----- GDBusInterfaceSkeletonClass ------
+// wrapper x86 -> natives of callbacks
+WRAPPER(GDBusInterfaceSkeleton,get_info, void*, (void* interface_), "p", interface_);
+WRAPPER_RET(GDBusInterfaceSkeleton,get_vtable, my_GDBusInterfaceVTable_t*, findFreeGDBusInterfaceVTable,(void* interface_), "p", interface_);
+WRAPPER(GDBusInterfaceSkeleton,get_properties, void*, (void* interface_), "p", interface_);
+WRAPPER(GDBusInterfaceSkeleton,flush, void, (void* interface_), "p", interface_);
+WRAPPER(GDBusInterfaceSkeleton,g_authorize_method, int, (void* interface_, void* invocation), "pp", interface_, invocation);
+
+#define SUPERGO()                   \
+    GO(get_info, pFp);              \
+    GO(get_vtable, pFp);            \
+    GO(get_properties, pFp);        \
+    GO(flush, vFp);                 \
+    GO(g_authorize_method, iFpp);   \
+
+
+// wrap (so bridge all calls, just in case)
+static void wrapGDBusInterfaceSkeletonClass(my_GDBusInterfaceSkeletonClass_t* class)
+{
+    wrapGObjectClass(&class->parent);
+    #define GO(A, W) class->A = reverse_##A##_GDBusInterfaceSkeleton (W, class->A)
+    SUPERGO()
+    #undef GO
+}
+// unwrap (and use callback if not a native call anymore)
+static void unwrapGDBusInterfaceSkeletonClass(my_GDBusInterfaceSkeletonClass_t* class)
+{
+    unwrapGObjectClass(&class->parent);
+    #define GO(A, W)   class->A = find_##A##_GDBusInterfaceSkeleton (W, class->A)
+    SUPERGO()
+    #undef GO
+}
+// autobridge
+static void bridgeGDBusInterfaceSkeletonClass(my_GDBusInterfaceSkeletonClass_t* class)
+{
+    bridgeGObjectClass(&class->parent);
+    #define GO(A, W) autobridge_##A##_GDBusInterfaceSkeleton (W, class->A)
+    SUPERGO()
+    #undef GO
+}
+
+#undef SUPERGO
+
+static void unwrapGDBusInterfaceSkeletonInstance(my_GDBusInterfaceSkeleton_t* class)
+{
+    unwrapGObjectInstance(&class->parent);
+}
+// autobridge
+static void bridgeGDBusInterfaceSkeletonInstance(my_GDBusInterfaceSkeleton_t* class)
 {
     bridgeGObjectInstance(&class->parent);
 }
@@ -4955,7 +5061,7 @@ void wrapGTKClass(void* cl, size_t type)
 
     printf_log(LOG_DEBUG, "wrapGTKClass(%p, %zd (%s))\n", cl, type, g_type_name(type));
     GTKCLASSES()
-    if(type==8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else {
         if(my_MetaFrames2==(size_t)-1 && !strcmp(g_type_name(type), "MetaFrames")) {
             my_MetaFrames2 = type;
@@ -4977,7 +5083,7 @@ void unwrapGTKClass(void* cl, size_t type)
 
     printf_log(LOG_DEBUG, "...unwrapGTKClass(%p, %zd (%s))\n", cl, type, g_type_name(type));
     GTKCLASSES()
-    if(type<=8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else
         printf_log(LOG_NONE, "Warning: fail to unwrapGTKClass for type %zx (%s)\n", type, g_type_name(type));
     #undef GTKCLASS
@@ -4994,9 +5100,9 @@ static void bridgeGTKClass(void* cl, size_t type)
 
     printf_log(LOG_DEBUG, "bridgeGTKClass(%p, %zd (%s))\n", cl, type, g_type_name(type));
     GTKCLASSES()
-    if(type==8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else {
-        printf_log(LOG_NONE, "Warning, AutoBridge GTK Class with unknown class type 0w%zx (%s)\n", type, g_type_name(type));
+        printf_log(LOG_NONE, "Warning, AutoBridge GTK Class with unknown class type 0x%zx (%s)\n", type, g_type_name(type));
     }
     #undef GTKCLASS
     #undef GTKIFACE
@@ -5012,7 +5118,7 @@ static void wrapGTKInterface(void* cl, size_t type)
 
     printf_log(LOG_DEBUG, "wrapGTKInterface(%p, %zd (%s))\n", cl, type, g_type_name(type));
     GTKCLASSES()
-    if(type==8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else {
         printf_log(LOG_NONE, "Warning, Custom Interface initializer with unknown class type 0x%zx (%s)\n", type, g_type_name(type));
     }
@@ -5030,7 +5136,7 @@ void unwrapGTKInterface(void* cl, size_t type)
 
     printf_log(LOG_DEBUG, "unwrapGTKInterface(%p, %zd (%s))\n", cl, type, g_type_name(type));
     GTKCLASSES()
-    if(type==8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else
     {}  // else no warning, one is enough...
     #undef GTKIFACE
@@ -5047,7 +5153,7 @@ static void bridgeGTKInterface(void* cl, size_t type)
 
     printf_log(LOG_DEBUG, "bridgeGTKInterface(%p, %zd (%s))\n", cl, type, g_type_name(type));
     GTKCLASSES()
-    if(type==8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else {
         printf_log(LOG_NONE, "Warning, AutoBridge GTK Interface with unknown class type 0x%zx (%s)\n", type, g_type_name(type));
     }
@@ -5065,7 +5171,7 @@ void unwrapGTKInstance(void* cl, size_t type)
 
     printf_log(LOG_DEBUG, "unwrapGTKInstance(%p, %zd (%s))\n", cl, type, g_type_name(type));
     GTKCLASSES()
-    if(type==8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else
     {}  // else no warning, one is enough...
     #undef GTKCLASS
@@ -5082,7 +5188,7 @@ void bridgeGTKInstance(void* cl, size_t type)
 
     printf_log(LOG_DEBUG, "bridgeGTKInstance(%p, %zd (%s))\n", cl, type, g_type_name(type));
     GTKCLASSES()
-    if(type==8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else {
         printf_log(LOG_NONE, "Warning, AutoBridge GTK Class with unknown class type 0w%zx (%s)\n", type, g_type_name(type));
     }
@@ -5118,7 +5224,7 @@ void* unwrapCopyGTKClass(void* klass, size_t type)
     #define GTKIFACE(A)
     #define GTKCLASS(A) if(type==my_##A) sz = sizeof(my_##A##Class_t); else
     GTKCLASSES()
-    if(type==8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else {
         printf_log(LOG_NONE, "Warning, unwrapCopyGTKClass called with unknown class type 0x%zx (%s)\n", type, g_type_name(type));
         return klass;
@@ -5151,7 +5257,7 @@ void* unwrapCopyGTKInterface(void* iface, size_t type)
     #define GTKIFACE(A) if(type==my_##A) sz = sizeof(my_##A##Interface_t); else
     #define GTKCLASS(A)
     GTKCLASSES()
-    if(type==8) {}  // GInterface have no structure
+    if(type<0x35) {}  // GInterface (8) and other simple opbjects have no structure
     else {
         printf_log(LOG_NONE, "Warning, unwrapCopyGTKInterface called with unknown class type 0x%zx (%s)\n", type, g_type_name(type));
         return iface;

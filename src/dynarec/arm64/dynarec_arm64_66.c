@@ -144,6 +144,8 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             emit_adc16(dyn, ninst, x1, x2, x4, x3);
             GWBACK;
             break;
+        case 0x14:
+            return dynarec64_00(dyn, addr-1, ip, ninst, rex, ok, need_epilog);
         case 0x15:
             INST_NAME("ADC AX, Iw");
             READFLAGS(X_CF);
@@ -407,8 +409,12 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
         case 0x68:
             INST_NAME("PUSH Iw");
             u16 = F16;
-            MOV32w(x2, u16);
-            PUSH1_16(x2);
+            if (!u16) {
+                PUSH1_16(xZR);
+            } else {
+                MOV32w(x2, u16);
+                PUSH1_16(x2);
+            }
             break;
         case 0x69:
         case 0x6B:
@@ -452,8 +458,12 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
         case 0x6A:
             INST_NAME("PUSH Ib");
             i16 = F8S;
-            MOV32w(x2, (uint16_t)i16);
-            PUSH1_16(x2);
+            if (!i16) {
+                PUSH1_16(xZR);
+            } else {
+                MOV32w(x2, (uint16_t)i16);
+                PUSH1_16(x2);
+            }
             break;
         case 0x6C:
         case 0x6E:
@@ -805,7 +815,7 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 u64 = F64;
             unscaled = 0; fixedaddress = 0;
             if(rex.seg && (u64<0x1000 || (int64_t)u64>-0x1000 || (u64<(0x1000<<1) && !(u64&1)))) {
-                grab_segdata(dyn, addr, ninst, x1, rex.seg, 0);
+                grab_segdata(dyn, addr, ninst, x1, rex.seg);
                 if(u64) {
                     if(u64<0x100)
                         {fixedaddress = u64; unscaled = 1;}
@@ -821,7 +831,7 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             } else {
                 MOV64y(x1, u64);
                 if(rex.seg) {
-                    grab_segdata(dyn, addr, ninst, x3, rex.seg, 0);
+                    grab_segdata(dyn, addr, ninst, x3, rex.seg);
                     ADDx_REGy(x1, x3, x1);
                 }
             }
@@ -841,7 +851,7 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                 u64 = F64;
             unscaled = 0; fixedaddress = 0;
             if(rex.seg && (u64<0x1000 || (int64_t)u64>-0x1000 || (u64<(0x1000<<1) && !(u64&1)))) {
-                grab_segdata(dyn, addr, ninst, x1, rex.seg, 0);
+                grab_segdata(dyn, addr, ninst, x1, rex.seg);
                 if(u64) {
                     if(u64<0x100)
                         {fixedaddress = u64; unscaled = 1;}
@@ -857,7 +867,7 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
             } else {
                 MOV64y(x1, u64);
                 if(rex.seg) {
-                    grab_segdata(dyn, addr, ninst, x3, rex.seg, 0);
+                    grab_segdata(dyn, addr, ninst, x3, rex.seg);
                     ADDx_REGy(x1, x3, x1);
                 }
             }
@@ -1348,7 +1358,7 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     }
                     MARK;
                     IFX2(X_OF, && BOX64ENV(cputype)) {
-                        EORw_REG_LSR(x2, xFlags, ed, 7);
+                        EORw_REG_LSR(x2, xFlags, ed, 15);
                         BFIw(xFlags, x2, F_OF, 1);
                     }
                     break;
@@ -1492,7 +1502,10 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
         case 0xE6:                      /* OUT Ib, AL */
         case 0xE7:                      /* OUT Ib, AX */
             return dynarec64_00(dyn, addr-1, ip, ninst, rex, ok, need_epilog);
-
+        case 0xE8:                      /* CALL Imm */
+        case 0xE9:                      /* Jmp Imm */
+        case 0xEB:                      /* Jmp Imm8 */
+            return dynarec64_00(dyn, addr-1, ip, ninst, rex, ok, need_epilog);
         case 0xEC:                      /* IN AL, DX */
         case 0xED:                      /* IN AX, DX */
         case 0xEE:                      /* OUT DX, AL */
@@ -1600,6 +1613,7 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     BFIw(x2, xRDX, 16, 16);
                     if(BOX64ENV(dynarec_div0)) {
                         CBNZw_MARK3(ed);
+                        MARK2;
                         GETIP_(ip);
                         STORE_XEMU_CALL(xRIP);
                         CALL_S(const_native_div0, -1);
@@ -1609,6 +1623,10 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         MARK3;
                     }
                     UDIVw(x3, x2, ed);
+                    if(BOX64ENV(dynarec_div0)) {
+                        SUBw_UXTH(x5, x3, x3);
+                        CBNZw_MARK2(x5);
+                    }
                     MSUBw(x4, x3, ed, x2);  // x4 = x2 mod ed (i.e. x2 - x3*ed)
                     BFIz(xRAX, x3, 0, 16);
                     BFIz(xRDX, x4, 0, 16);
@@ -1634,6 +1652,7 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     GETSEW(x1, 0);
                     if(BOX64ENV(dynarec_div0)) {
                         CBNZw_MARK3(ed);
+                        MARK2;
                         GETIP_(ip);
                         STORE_XEMU_CALL(xRIP);
                         CALL_S(const_native_div0, -1);
@@ -1645,6 +1664,10 @@ uintptr_t dynarec64_66(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     UXTHw(x2, xRAX);
                     BFIw(x2, xRDX, 16, 16);
                     SDIVw(x3, x2, ed);
+                    if(BOX64ENV(dynarec_div0)) {
+                        SUBw_SXTH(x5, x3, x3);
+                        CBNZw_MARK2(x5);
+                    }
                     MSUBw(x4, x3, ed, x2);  // x4 = x2 mod ed (i.e. x2 - x3*ed)
                     BFIz(xRAX, x3, 0, 16);
                     BFIz(xRDX, x4, 0, 16);

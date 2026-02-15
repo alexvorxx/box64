@@ -1430,6 +1430,32 @@ typedef struct my_GDBusObjectManagerClientClass_s
   void* padding[8];
 } my_GDBusObjectManagerClientClass_t;
 
+typedef struct my_GDBusInterfaceSkeleton_s
+{
+  my_GObject_t parent;
+  void*        priv;
+} my_GDBusInterfaceSkeleton_t;
+
+typedef struct my_GDBusInterfaceVTable_s
+{
+  void (*method_call)(void* conn, void* sender, void* path, void* int_name, void* name, void* param, void* inv, void* data);
+  void* (*get_property)(void* conn, void* sender, void* path, void* int_name, void* prop_name, void* error, void* data);
+  int (*set_property)(void* conn, void* sender, void* path, void* int_name, void* prop_name, void* value, void* error, void* data);
+  void* padding[8];
+} my_GDBusInterfaceVTable_t;
+
+typedef struct my_GDBusInterfaceSkeletonClass_s
+{
+  my_GObjectClass_t parent;
+  void* (*get_info)       (void* interface_);
+  my_GDBusInterfaceVTable_t* (*get_vtable)     (void* interface_);
+  void* (*get_properties) (void* interface_);
+  void  (*flush)          (void* interface_);
+  void*  vfunc_padding[8];
+  int   (*g_authorize_method) (void* interface_, void* invocation);
+  void*  signal_padding[8];
+} my_GDBusInterfaceSkeletonClass_t;
+
 typedef struct my_AtkObject_s
 {
   my_GObject_t  parent;
@@ -2365,6 +2391,8 @@ my_GTypeValueTable_t* findFreeGTypeValueTable(my_GTypeValueTable_t* fcts);
 my_GTypeInfo_t* findFreeGTypeInfo(my_GTypeInfo_t* fcts, size_t parent);
 my_GtkTypeInfo_t* findFreeGtkTypeInfo(my_GtkTypeInfo_t* fcts, size_t parent);
 void* find_class_init_Fct(void* fct, size_t parent);
+// defined in wrappedgio2.c
+my_GDBusInterfaceVTable_t* findFreeGDBusInterfaceVTable(my_GDBusInterfaceVTable_t* fcts);
 
 void InitGTKClass(bridge_t *bridge);
 void FiniGTKClass(void);
@@ -2424,6 +2452,7 @@ GTKCLASS(GtkCellRenderer2)          \
 GTKCLASS(GtkCellRendererText2)      \
 GTKCLASS(MetaFrames2)               \
 GTKCLASS(GDBusObjectManagerClient)  \
+GTKCLASS(GDBusInterfaceSkeleton)    \
 GTKCLASS(AtkObject)                 \
 GTKCLASS(AtkUtil)                   \
 GTKCLASS(GstObject)                 \

@@ -52,6 +52,7 @@ typedef void (*vFpppppppuippp_t)(void*, void*, void*, void*, void*, void*, void*
 	GO(g_task_return_pointer, vFppp_t) \
 	GO(g_task_set_task_data, vFppp_t) \
 	GO(g_bus_get, vFippp_t) \
+	GO(g_action_map_add_action_entries, vFppip_t) \
 	GO(g_simple_async_result_run_in_thread, vFppip_t) \
 	GO(g_dbus_connection_close, vFpppp_t) \
 	GO(g_dbus_connection_flush, vFpppp_t) \

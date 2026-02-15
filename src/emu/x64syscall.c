@@ -204,6 +204,8 @@ static const scwrap_t syscallwrap[] = {
     #ifdef __NR_mknod
     [133] = {__NR_mknod, 3},
     #endif
+    [137] = {__NR_statfs, 2},
+    [138] = {__NR_fstatfs, 2},
     [140] = {__NR_getpriority, 2},
     [145] = {__NR_sched_getscheduler, 1},
     [148] = {__NR_sched_rr_get_interval, 2},
@@ -1166,7 +1168,7 @@ long EXPORT my_syscall(x64emu_t *emu)
         #endif
         #ifndef NOALIGN
         case 257:
-            syscall(__NR_openat, S_ESI, (void*)R_RDX, of_convert(S_ECX), R_R8d);
+            return syscall(__NR_openat, S_ESI, (void*)R_RDX, of_convert(S_ECX), R_R8d);
         #endif
         case 262:
             return my_fstatat(emu, S_RSI, (char*)R_RDX, (void*)R_RCX, S_R8d);
@@ -1198,7 +1200,7 @@ long EXPORT my_syscall(x64emu_t *emu)
         #endif
         #ifndef NOALIGN
         case 291:   // sys__epoll_create1
-            return epoll_create1(of_convert(S_EDI));
+            return epoll_create1(of_convert(S_ESI));
         #endif
         case 317:   // sys_seccomp
             return 0;  // ignoring call

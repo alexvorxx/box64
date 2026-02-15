@@ -842,6 +842,7 @@
 #() iFppbpu_ -> iFppB
 #() iFpbpu_u -> iFpBu
 #() iFpbpu_p -> iFpBp
+#() iEhprLL_ -> iEhpB
 #() iFXLbpp_ -> iFXLB
 #() iFXbLC_i -> iFXBi
 #() uFpubpu_ -> uFpuB
@@ -2384,6 +2385,8 @@ wrappedlibasound:
   - snd_pcm_mmap_begin
 wrappedlibc:
 - vEv:
+- vFv:
+  - __cxa_pure_virtual
 - vFi:
   - exit
 - vEp:

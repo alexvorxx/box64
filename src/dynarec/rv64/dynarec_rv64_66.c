@@ -447,8 +447,12 @@ uintptr_t dynarec64_66(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0x68:
             INST_NAME("PUSH Iw");
             u16 = F16;
-            MOV32w(x2, u16);
-            PUSH1_16(x2);
+            if (!u16) {
+                PUSH1_16(xZR);
+            } else {
+                MOV32w(x2, u16);
+                PUSH1_16(x2);
+            }
             break;
         case 0x69:
         case 0x6B:
@@ -488,8 +492,12 @@ uintptr_t dynarec64_66(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
         case 0x6A:
             INST_NAME("PUSH Ib");
             i16 = F8S;
-            MOV32w(x2, (uint16_t)i16);
-            PUSH1_16(x2);
+            if (!i16) {
+                PUSH1_16(xZR);
+            } else {
+                MOV32w(x2, (uint16_t)i16);
+                PUSH1_16(x2);
+            }
             break;
         case 0x6C:
         case 0x6E:
@@ -864,7 +872,7 @@ uintptr_t dynarec64_66(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 u64 = F64;
             MOV64y(x1, u64);
             if (rex.seg) {
-                grab_segdata(dyn, addr, ninst, x3, rex.seg, 0);
+                grab_segdata(dyn, addr, ninst, x3, rex.seg);
                 ADDxREGy(x1, x3, x1, x1);
             }
             lock = (rex.seg) ? 0 : isLockAddress(u64);
@@ -882,7 +890,7 @@ uintptr_t dynarec64_66(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 u64 = F64;
             MOV64y(x1, u64);
             if (rex.seg) {
-                grab_segdata(dyn, addr, ninst, x3, rex.seg, 0);
+                grab_segdata(dyn, addr, ninst, x3, rex.seg);
                 ADDxREGy(x1, x3, x1, x1);
             }
             lock = (rex.seg) ? 0 : isLockAddress(u64);

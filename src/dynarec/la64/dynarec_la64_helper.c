@@ -75,11 +75,11 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
                     }
                 } else {
                     if (rex.seg && !(tmp && ((tmp < -2048) || (tmp > maxval) || !i12))) {
-                        grab_segdata(dyn, addr, ninst, ret, rex.seg, 0);
+                        grab_segdata(dyn, addr, ninst, ret, rex.seg);
                         seg_done = 1;
                         *fixaddress = tmp;
                     } else if (rex.seg && tmp >= -2048 && tmp < 2048) {
-                        grab_segdata(dyn, addr, ninst, ret, rex.seg, 0);
+                        grab_segdata(dyn, addr, ninst, ret, rex.seg);
                         if (tmp) ADDI_D(ret, ret, tmp);
                         seg_done = 1;
                     } else
@@ -105,7 +105,7 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
             if (rex.is32bits) {
                 int tmp = F32S;
                 if (rex.seg && tmp >= -2048 && tmp < 2048) {
-                    grab_segdata(dyn, addr, ninst, ret, rex.seg, 0);
+                    grab_segdata(dyn, addr, ninst, ret, rex.seg);
                     if (tmp) ADDI_D(ret, ret, tmp);
                     seg_done = 1;
                 } else
@@ -230,7 +230,7 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
         if (scratch == ret)
             scratch = ret + 1;
         SCRATCH_USAGE(1);
-        grab_segdata(dyn, addr, ninst, scratch, rex.seg, 0);
+        grab_segdata(dyn, addr, ninst, scratch, rex.seg);
         // seg offset is 64bits, so no truncation here
         ADDxREGy(hint, scratch, ret, hint);
         ret = hint;
@@ -260,61 +260,56 @@ uintptr_t geted16(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop
             case 1: offset = F8S; break;
             case 2: offset = F16S; break;
         }
-        if (offset && offset >= -2048 && offset <= 2047) {
+        if (i12 && offset && offset >= -2048 && offset <= 2047) {
             *fixaddress = offset;
             offset = 0;
         }
+        int reg;
         switch (m & 7) {
             case 0: // R_BX + R_SI
-                BSTRPICK_D(ret, xRBX, 15, 0);
-                BSTRPICK_D(scratch, xRSI, 15, 0);
-                ADD_D(ret, ret, scratch);
-                SCRATCH_USAGE(1);
+                ADD_D(ret, xRBX, xRSI);
+                reg = ret;
+                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                 break;
             case 1: // R_BX + R_DI
-                BSTRPICK_D(ret, xRBX, 15, 0);
-                BSTRPICK_D(scratch, xRDI, 15, 0);
-                ADD_D(ret, ret, scratch);
-                SCRATCH_USAGE(1);
+                ADD_D(ret, xRBX, xRDI);
+                reg = ret;
+                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                 break;
             case 2: // R_BP + R_SI
-                BSTRPICK_D(ret, xRBP, 15, 0);
-                BSTRPICK_D(scratch, xRSI, 15, 0);
-                ADD_D(ret, ret, scratch);
-                SCRATCH_USAGE(1);
+                ADD_D(ret, xRBP, xRSI);
+                reg = ret;
+                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                 break;
             case 3: // R_BP + R_DI
-                BSTRPICK_D(ret, xRBP, 15, 0);
-                BSTRPICK_D(scratch, xRDI, 15, 0);
-                ADD_D(ret, ret, scratch);
-                SCRATCH_USAGE(1);
+                ADD_D(ret, xRBP, xRDI);
+                reg = ret;
+                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
                 break;
             case 4: // R_SI
-                BSTRPICK_D(ret, xRSI, 15, 0);
-                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
+                reg = xRSI;
                 break;
             case 5: // R_DI
-                BSTRPICK_D(ret, xRDI, 15, 0);
-                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
+                reg = xRDI;
                 break;
             case 6: // R_BP
-                BSTRPICK_D(ret, xRBP, 15, 0);
-                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
+                reg = xRBP;
                 break;
             case 7: // R_BX
-                BSTRPICK_D(ret, xRBX, 15, 0);
-                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
+                reg = xRBX;
                 break;
         }
+        BSTRPICK_D(ret, reg, 15, 0);
+        if (!IS_GPR(ret)) SCRATCH_USAGE(1);
         if (offset) {
             if (offset >= -2048 && offset < 2048) {
                 ADDI_D(ret, ret, offset);
-                if (!IS_GPR(ret)) SCRATCH_USAGE(1);
             } else {
                 MOV64x(scratch, offset);
                 ADD_D(ret, ret, scratch);
                 SCRATCH_USAGE(1);
             }
+            BSTRPICK_D(ret, ret, 15, 0);
         }
     }
 
@@ -322,7 +317,7 @@ uintptr_t geted16(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop
         if (scratch == ret)
             scratch = ret + 1;
         SCRATCH_USAGE(1);
-        grab_segdata(dyn, addr, ninst, scratch, rex.seg, 0);
+        grab_segdata(dyn, addr, ninst, scratch, rex.seg);
         // seg offset is 64bits, so no truncation here
         if (IS_GPR(ret)) {
             ADD_D(hint, ret, scratch);
@@ -350,6 +345,7 @@ void jump_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int reg, int ninst)
     }
     TABLE64C(x2, const_epilog);
     SMEND();
+    CHECK_DFNONE(0);
     BR(x2);
 }
 
@@ -369,6 +365,7 @@ void jump_to_epilog_fast(dynarec_la64_t* dyn, uintptr_t ip, int reg, int ninst)
     }
     TABLE64C(x2, const_epilog_fast);
     SMEND();
+    CHECK_DFNONE(0);
     BR(x2);
 }
 
@@ -408,6 +405,7 @@ void jump_to_next(dynarec_la64_t* dyn, uintptr_t ip, int reg, int ninst, int is3
     if (is32bits)
         ip &= 0xffffffffLL;
 
+    CHECK_DFNONE(0);
     int dest;
     if (reg) {
         if (reg != xRIP) {
@@ -437,12 +435,12 @@ void jump_to_next(dynarec_la64_t* dyn, uintptr_t ip, int reg, int ninst, int is3
 #endif
 }
 
-void ret_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, rex_t rex)
+void ret_to_next(dynarec_la64_t* dyn, uintptr_t ip, int ninst, rex_t rex)
 {
     MAYUSE(dyn);
     MAYUSE(ninst);
-    MESSAGE(LOG_DUMP, "Ret to epilog\n");
-    POP1z(xRIP);
+    MESSAGE(LOG_DUMP, "Ret to next\n");
+    CHECK_DFNONE(0);
     MVz(x1, xRIP);
     SMEND();
     if (BOX64DRENV(dynarec_callret)) {
@@ -461,43 +459,10 @@ void ret_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, rex_t rex)
     CLEARIP();
 }
 
-void retn_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, rex_t rex, int n)
+void iret_to_next(dynarec_la64_t* dyn, uintptr_t ip, int ninst, int is32bits, int is64bits)
 {
-    MAYUSE(dyn);
     MAYUSE(ninst);
-    MESSAGE(LOG_DUMP, "Retn to epilog\n");
-    POP1z(xRIP);
-    if (n > 0x7ff) {
-        MOV64x(x1, n);
-        ADDz(xRSP, xRSP, x1);
-    } else {
-        ADDIz(xRSP, xRSP, n);
-    }
-    MVz(x1, xRIP);
-    SMEND();
-    if (BOX64DRENV(dynarec_callret)) {
-        // pop the actual return address from LA64 stack
-        LD_D(xRA, xSP, 0);    // native addr
-        LD_D(x6, xSP, 8);     // x86 addr
-        ADDI_D(xSP, xSP, 16); // pop
-        BNE(x6, xRIP, 2 * 4); // is it the right address?
-        BR(xRA);
-        // not the correct return address, regular jump, but purge the stack first, it's unsync now...
-        ADDI_D(xSP, xSavedSP, -16);
-    }
-
-    NOTEST(x2);
-    int dest = indirect_lookup(dyn, ninst, rex.is32bits, x2, x3);
-    BR(dest);
-    CLEARIP();
-}
-
-void iret_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, int is64bits)
-{
-    // #warning TODO: is64bits
-    MAYUSE(ninst);
-    MESSAGE(LOG_DUMP, "IRet to epilog\n");
-    NOTEST(x2);
+    MESSAGE(LOG_DUMP, "IRet to next\n");
     if (is64bits) {
         POP1(xRIP);
         POP1(x2);
@@ -510,11 +475,12 @@ void iret_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, int is64bits)
 
     ST_H(x2, xEmu, offsetof(x64emu_t, segs[_CS]));
     // clean EFLAGS
+    RESTORE_EFLAGS(x1);
     MOV32w(x1, 0x3E7FD7);   // also mask RF
     AND(xFlags, xFlags, x1);
     ORI(xFlags, xFlags, 0x2);
     SPILL_EFLAGS();
-    SET_DFNONE();
+    CHECK_DFNONE(0);
     // POP RSP
     if (is64bits) {
         POP1(x3); // rsp
@@ -528,19 +494,17 @@ void iret_to_epilog(dynarec_la64_t* dyn, uintptr_t ip, int ninst, int is64bits)
     // set new RSP
     MV(xRSP, x3);
     // Ret....
-    // epilog on purpose, CS might have changed!
-    if (dyn->need_reloc)
-        TABLE64C(x2, const_epilog);
-    else
-        MOV64x(x2, getConst(const_epilog));
-    SMEND();
-    BR(x2);
+    rex_t dummy = { 0 };
+    dummy.is32bits = is32bits;
+    dummy.w = is64bits;
+    ret_to_next(dyn, ip, ninst, dummy);
     CLEARIP();
 }
 
 void call_c(dynarec_la64_t* dyn, int ninst, la64_consts_t fnc, int reg, int ret, int saveflags, int savereg, int arg1, int arg2, int arg3, int arg4, int arg5, int arg6)
 {
     MAYUSE(fnc);
+    CHECK_DFNONE(1);
     if (savereg == 0)
         savereg = x87pc;
     if (saveflags) {
@@ -564,13 +528,13 @@ void call_c(dynarec_la64_t* dyn, int ninst, la64_consts_t fnc, int reg, int ret,
         ST_D(xRIP, xEmu, offsetof(x64emu_t, ip));
     }
     TABLE64C(reg, fnc);
-    MV(A0, xEmu);
     if (arg1) MV(A1, arg1);
     if (arg2) MV(A2, arg2);
     if (arg3) MV(A3, arg3);
     if (arg4) MV(A4, arg4);
     if (arg5) MV(A5, arg5);
     if (arg6) MV(A6, arg6);
+    MV(A0, xEmu);
     JIRL(xRA, reg, 0);
     if (ret >= 0) {
         MV(ret, A0);
@@ -609,6 +573,7 @@ void call_c(dynarec_la64_t* dyn, int ninst, la64_consts_t fnc, int reg, int ret,
 void call_n(dynarec_la64_t* dyn, int ninst, void* fnc, int w)
 {
     MAYUSE(fnc);
+    CHECK_DFNONE(1);
     fpu_pushcache(dyn, ninst, x3, 1);
     ST_D(xRSP, xEmu, offsetof(x64emu_t, regs[_SP]));
     ST_D(xRBP, xEmu, offsetof(x64emu_t, regs[_BP]));
@@ -643,12 +608,11 @@ void call_n(dynarec_la64_t* dyn, int ninst, void* fnc, int w)
     // SET_NODF();
 }
 
-void grab_segdata(dynarec_la64_t* dyn, uintptr_t addr, int ninst, int reg, int segment, int modreg)
+void grab_segdata(dynarec_la64_t* dyn, uintptr_t addr, int ninst, int reg, int segment)
 {
     (void)addr;
     int64_t j64;
     MAYUSE(j64);
-    if (modreg) return;
     MESSAGE(LOG_DUMP, "Get %s Offset\n", (segment == _FS) ? "FS" : "GS");
     LD_D(reg, xEmu, offsetof(x64emu_t, segs_offs[segment]));
     MESSAGE(LOG_DUMP, "----%s Offset\n", (segment == _FS) ? "FS" : "GS");
@@ -1800,18 +1764,18 @@ void emit_pf(dynarec_la64_t* dyn, int ninst, int s1, int s3, int s4)
 void fpu_reset_cache(dynarec_la64_t* dyn, int ninst, int reset_n)
 {
     MESSAGE(LOG_DEBUG, "Reset Caches with %d\n", reset_n);
-#if STEP > 1
-    // for STEP 2 & 3, just need to refrest with current, and undo the changes (push & swap)
+    #if STEP > 1
+    // for STEP 2 & 3, just need to refresh with current, and undo the changes (push & swap)
     dyn->lsx = dyn->insts[ninst].lsx;
-#else
-    dyn->lsx = dyn->insts[reset_n].lsx;
-#endif
     lsxcacheUnwind(&dyn->lsx);
+#else
+dyn->lsx = dyn->insts[reset_n].lsx;
+#endif
 #if STEP == 0
-    if (dyn->need_dump) dynarec_log(LOG_NONE, "New x87stack=%d\n", dyn->lsx.x87stack);
+    if(dyn->need_dump && dyn->lsx.x87stack) dynarec_log(LOG_NONE, "New x87stack=%d at ResetCache in inst %d with %d\n", dyn->lsx.x87stack, ninst, reset_n);
 #endif
 #if defined(HAVE_TRACE) && (STEP > 2)
-    if (dyn->need_dump)
+    if (dyn->need_dump && 0) // disable for now
         if (memcmp(&dyn->lsx, &dyn->insts[reset_n].lsx, sizeof(lsx_cache_t))) {
             MESSAGE(LOG_DEBUG, "Warning, difference in lsxcache: reset=");
             for (int i = 0; i < 24; ++i)
@@ -2270,24 +2234,36 @@ static void flagsCacheTransform(dynarec_la64_t* dyn, int ninst, int s1)
     int jmp = dyn->insts[ninst].x64.jmp_insts;
     if (jmp < 0)
         return;
-    if (dyn->f.dfnone || ((dyn->insts[jmp].f_exit.dfnone && !dyn->insts[jmp].f_entry.dfnone) && !dyn->insts[jmp].x64.use_flags)) // flags are fully known, nothing we can do more
+    if (dyn->insts[jmp].f_exit == dyn->insts[jmp].f_entry) // flags will be fully known, nothing we can do more
         return;
     MESSAGE(LOG_DUMP, "\tFlags fetch ---- ninst=%d -> %d\n", ninst, jmp);
-    int go = (dyn->insts[jmp].f_entry.dfnone && !dyn->f.dfnone && !dyn->insts[jmp].df_notneeded) ? 1 : 0;
-    switch (dyn->insts[jmp].f_entry.pending) {
-        case SF_UNKNOWN:
-            go = 0;
-            break;
-        default:
-            if (go && !(dyn->insts[jmp].x64.need_before & X_PEND) && (dyn->f.pending != SF_UNKNOWN)) {
-                // just clear df flags
-                go = 0;
-                ST_W(xZR, xEmu, offsetof(x64emu_t, df));
+    int go_fetch = 0;
+    switch (dyn->insts[jmp].f_entry) {
+        case status_unk:
+            if (dyn->insts[ninst].f_exit == status_none_pending) {
+                FORCE_DFNONE();
             }
             break;
+        case status_set:
+            if (dyn->insts[ninst].f_exit == status_none_pending) {
+                FORCE_DFNONE();
+            }
+            if (dyn->insts[ninst].f_exit == status_unk)
+                go_fetch = 1;
+            break;
+        case status_none_pending:
+            if (dyn->insts[ninst].f_exit != status_none)
+                go_fetch = 1;
+            break;
+        case status_none:
+            if (dyn->insts[ninst].f_exit == status_none_pending) {
+                FORCE_DFNONE();
+            } else
+                go_fetch = 1;
+            break;
     }
-    if (go) {
-        if (dyn->f.pending != SF_PENDING) {
+    if (go_fetch) {
+        if (dyn->f == status_unk) {
             LD_WU(s1, xEmu, offsetof(x64emu_t, df));
             j64 = (GETMARKF2) - (dyn->native_size);
             BEQZ(s1, j64);
@@ -2295,6 +2271,7 @@ static void flagsCacheTransform(dynarec_la64_t* dyn, int ninst, int s1)
         CALL_(const_updateflags, -1, 0, 0, 0);
         MARKF2;
     }
+    MESSAGE(LOG_DUMP, "\t---- Flags fetch\n");
 }
 
 void CacheTransform(dynarec_la64_t* dyn, int ninst, int cacheupd, int s1, int s2, int s3)
