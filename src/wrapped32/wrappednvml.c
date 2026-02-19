@@ -6,15 +6,14 @@
 
 #include "wrappedlibs.h"
 
-#include "debug.h"
-#include "wrapper.h"
+#include "wrapper32.h"
 #include "bridge.h"
 #include "librarian/library_private.h"
 #include "x64emu.h"
 
-const char* nvmlName = "libnvidia-ml.so.1";
+static const char* nvmlName = "libnvidia-ml.so.1";
 #define ALTNAME "libnvidia-ml.so"
 
 #define LIBNAME nvml
 
-#include "wrappedlib_init.h"
+#include "wrappedlib_init32.h"

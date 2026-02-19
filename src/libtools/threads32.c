@@ -263,6 +263,8 @@ void* my32_prepare_thread(x64emu_t *emu, void* f, void* arg, int ssize, void** p
     int stacksize = (ssize)?ssize:(2*1024*1024);    //default stack size is 2Mo
     //void* stack = malloc(stacksize);
     void* stack = mmap64(NULL, stacksize, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS|MAP_32BIT, -1, 0);
+    if(stack==MAP_FAILED)
+        return NULL;
     emuthread_t *et = (emuthread_t*)box_calloc(1, sizeof(emuthread_t));
     x64emu_t *emuthread = NewX64Emu(emu->context, (uintptr_t)f, (uintptr_t)stack, stacksize, 1);
     SetupX64Emu(emuthread, emu);
@@ -519,7 +521,7 @@ static void del_cond(void* cond)
         return;
     mutex_lock(&my_context->mutex_thread);
     khint_t k = kh_get(mapcond, mapcond, (uintptr_t)cond);
-    if(k==kh_end(mapcond)) {
+    if(k!=kh_end(mapcond)) {
         box_free(kh_value(mapcond, k));
         kh_del(mapcond, mapcond, k);
     }
@@ -866,7 +868,7 @@ EXPORT int my32_pthread_attr_setaffinity_np(x64emu_t* emu, void* attr, uint32_t 
         cpusetsize = sizeof(cpu_set_t);
     } 
 
-    int ret = pthread_attr_setaffinity_np(attr, cpusetsize, cpuset);
+    int ret = pthread_attr_setaffinity_np(get_attr(attr), cpusetsize, cpuset);
     if(ret<0) {
         printf_log(LOG_INFO, "Warning, pthread_attr_setaffinity_np(%p, %d, %p) errored, with errno=%d\n", attr, cpusetsize, cpuset, errno);
     }
