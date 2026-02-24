@@ -403,6 +403,8 @@ def readFiles(files: Iterable[Filename]) -> Tuple[JumbledGlobals, JumbledRedirec
 							 or match("sdl1mixer", "sdl2mixer") \
 							 or match("sdl1net", "sdl2net") \
 							 or match("sdl1ttf", "sdl2ttf") \
+							 or match("sdl1ttf", "sdl3ttf") \
+							 or match("sdl2ttf", "sdl3ttf") \
 							 or match("libgl", "libegl") \
 							 or match("libgl", "glesv2") \
 							 or match("libgl", "libglxnvidia") \
@@ -415,7 +417,8 @@ def readFiles(files: Iterable[Filename]) -> Tuple[JumbledGlobals, JumbledRedirec
 							 or match("libc", "tbbmallocproxy") \
 							 or match("libc", "androidshmem") \
 							 or match("crypto", "libssl3") \
-							 or match("tcmallocminimal", "tbbmallocproxy"):
+							 or match("tcmallocminimal", "tbbmallocproxy") \
+							 or match("iconv", "libunistring2"):
 								continue
 							
 							# Note: this test is very (too) simple. If it ever raises, comment

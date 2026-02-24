@@ -650,6 +650,17 @@ void Free1Library(library_t **the_lib, x64emu_t* emu)
         needed = copy_neededlib(needed);
     // free elf
     if(lib_type==LIB_EMULATED) {
+        // remove the atfork associated to the elf header
+        if(my_context)
+            for(int i=my_context->atfork_sz-1; i>=0; --i) {
+                if(my_context->atforks[i].handle == lib->e.elf) {
+                    // find one, remove it by copying above data and decrementing atfork_sz
+                    int next = i+1;
+                    if(next!=my_context->atfork_sz)
+                        memmove(my_context->atforks+i, my_context->atforks+next, (my_context->atfork_sz-next)*sizeof(atfork_fnc_t));
+                    --my_context->atfork_sz;
+                }
+            }
         FreeElfHeader(&lib->e.elf);
     }
 

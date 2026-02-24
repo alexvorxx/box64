@@ -290,14 +290,10 @@ int my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigin
     // stack tracking
     x64_stack_t *new_ss = my_context->onstack[sig]?(x64_stack_t*)pthread_getspecific(sigstack_key):NULL;
     int used_stack = 0;
-    if(new_ss) {
-        if(new_ss->ss_flags == SS_ONSTACK) { // already using it!
-            frame = ((uintptr_t)emu->regs[_SP].q[0] - 128ULL) & ~0x0fULL;
-        } else {
-            frame = (uintptr_t)(((uintptr_t)new_ss->ss_sp + new_ss->ss_size - 16ULL) & ~0x0fULL);
-            used_stack = 1;
-            new_ss->ss_flags = SS_ONSTACK;
-        }
+    if(new_ss && (new_ss->ss_flags!=SS_ONSTACK)) {  // alt stack and not already using it
+        frame = (uintptr_t)(((uintptr_t)new_ss->ss_sp + new_ss->ss_size - 16ULL) & ~0x0fULL);
+        used_stack = 1;
+        new_ss->ss_flags = SS_ONSTACK;
     } else {
         frame = frame&~15ULL;
         frame -= 0x200ULL; // redzone

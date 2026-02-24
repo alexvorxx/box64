@@ -1153,6 +1153,7 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             // empty MMX, FPU now usable
             emu->top = 0;
             emu->fpu_stack = 0;
+            emu->fpu_tags = TAGS_EMPTY;
             break;
 
         case 0x7E:                       /* MOVD Ed, Gm */
@@ -1806,9 +1807,11 @@ uintptr_t Run0F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             switch((nextop>>3)&7) {
                 case 1:     /* CMPXCHG8B Eq / CMPXCHG16B Eq */
                     if(rex.w) {
+                        #ifndef TEST_INTERPRETER
                         if(((uintptr_t)ED)&0xf) {
                             EmitSignal(emu, X64_SIGSEGV, (void*)R_RIP, 0xbad0); // GPF
                         }
+                        #endif
                         tmp64u = ED->q[0];
                         tmp64u2= ED->q[1];
                         if(R_RAX == tmp64u && R_RDX == tmp64u2) {

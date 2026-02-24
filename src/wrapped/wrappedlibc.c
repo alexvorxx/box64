@@ -2957,7 +2957,7 @@ EXPORT int32_t my___register_atfork(x64emu_t *emu, void* prepare, void* parent, 
     my_context->atforks[i].prepare = (uintptr_t)prepare;
     my_context->atforks[i].parent = (uintptr_t)parent;
     my_context->atforks[i].child = (uintptr_t)child;
-    my_context->atforks[i].handle = handle;
+    my_context->atforks[i].handle = FindElfAddress(my_context, (uintptr_t)handle);
     return 0;
 }
 
