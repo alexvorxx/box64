@@ -392,13 +392,8 @@ void emit_cmp32_0(dynarec_la64_t* dyn, int ninst, rex_t rex, uint8_t nextop, int
 
     CLEAR_FLAGS(s3);
     IFX(X_SF) {
-        if (rex.w) {
-            BGE(s1, xZR, 8);
-        } else {
-            SRLI_D(s3, s1, 31);
-            BEQZ(s3, 8);
-        }
-        ORI(xFlags, xFlags, 1 << F_SF);
+        BSTRPICK_D(s3, s1, rex.w ? 63 : 31, rex.w ? 63 : 31);
+        BSTRINS_D(xFlags, s3, F_SF, F_SF);
     }
     int res = s1;
     IFX (X_ZF | X_PF) {

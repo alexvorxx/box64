@@ -1228,6 +1228,15 @@ static void cache_check(const rbtree_t *tree) {
     printf_log(LOG_NONE, "<valid cached node> \n");
 }
 
+void rbtree_walk(const rbtree_t *tree, void (*cb)(uintptr_t start, uintptr_t end, uint64_t data, void* userdata), void* userdata) {
+    if (!tree || !tree->root) return;
+    rbnode *node = tree->leftmost;
+    while (node) {
+        cb(node->start, node->end, node->data, userdata);
+        node = succ_node(node);
+    }
+}
+
 void rbtree_print(const rbtree_t *tree) {
     if (!tree) {
         printf_log(LOG_NONE, "<NULL>\n");

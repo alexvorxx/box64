@@ -113,6 +113,19 @@ static int round_to_native(int round) {
 }
 #define TO_NATIVE(R) round_to_native(R)
 
+static int round_from_native(int round) {
+    switch(round) {
+        case FE_TONEAREST:  return X64_FE_TONEAREST;
+        case FE_DOWNWARD:   return X64_FE_DOWNWARD;
+        case FE_UPWARD:     return X64_FE_UPWARD;
+        case FE_TOWARDZERO: return X64_FE_TOWARDZERO;
+        default:
+            //should warn
+            return round;
+    }
+}
+#define FROM_NATIVE(R) round_from_native(R)
+
 static int x86_to_native_excepts(int e) {
     int n = 0;
     if (e & 0x01) n |= FE_INVALID;
@@ -198,7 +211,7 @@ EXPORT int my_fegetround(x64emu_t* emu)
     if (BOX64ENV(sync_rounding)) {
         return emu->cw.x16 & 0xc00;
     } else {
-        return fegetround();
+        return FROM_NATIVE(fegetround());
     }
 }
 

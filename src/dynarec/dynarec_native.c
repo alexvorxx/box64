@@ -381,7 +381,7 @@ uintptr_t native_pass2(dynarec_native_t* dyn, uintptr_t addr, int alternate, int
 uintptr_t native_pass3(dynarec_native_t* dyn, uintptr_t addr, int alternate, int is32bits, int inst_max);
 
 dynablock_t* CreateEmptyBlock(uintptr_t addr, int is32bits, int is_new) {
-    size_t sz = 4*sizeof(void*) + sizeof(dynablock_t);
+    size_t sz = JMPNEXT_SIZE + sizeof(dynablock_t);
     void* actual_p = (void*)AllocDynarecMap(addr, sz, is_new);
     void* p = actual_p + sizeof(void*);
     if(actual_p==NULL) {
@@ -389,7 +389,7 @@ dynablock_t* CreateEmptyBlock(uintptr_t addr, int is32bits, int is_new) {
         CancelBlock64(0);
         return NULL;
     }
-    dynablock_t* block = (dynablock_t*)(actual_p+4*sizeof(void*));
+    dynablock_t* block = (dynablock_t*)(actual_p+JMPNEXT_SIZE);
     memset(block, 0, sizeof(dynablock_t));
     // fill the block
     block->x64_addr = (void*)addr;
@@ -401,10 +401,10 @@ dynablock_t* CreateEmptyBlock(uintptr_t addr, int is32bits, int is_new) {
     block->jmpnext = p;
     block->is32bits = is32bits;
     *(dynablock_t**)actual_p = block;
-    *(void**)(p+2*sizeof(void*)) = native_epilog;
-    CreateJmpNext(block->jmpnext, p+2*sizeof(void*));
+    *(void**)(p+JMPNEXT_SIZE-2*sizeof(void*)) = native_epilog;
+    CreateJmpNext(block->jmpnext, p+JMPNEXT_SIZE-2*sizeof(void*));
     // all done...
-    ClearCache(actual_p+sizeof(void*), 3*sizeof(void*));   // need to clear the cache before execution...
+    ClearCache(actual_p+sizeof(void*), JMPNEXT_SIZE-sizeof(void*));   // need to clear the cache before execution...
     return block;
 }
 
@@ -416,10 +416,10 @@ dynablock_t* FillBlock64(uintptr_t addr, int alternate, int is32bits, int inst_m
         0x0008..8+4*n   : actual Native instructions, (n is the total number)
         A ..    A+8*n   : Table64: n 64bits values
         B ..    B+7     : dynablock_t* : self (as part of JmpNext, that simulate another block)
-        B+8 ..  B+15    : 2 Native code for jmpnext (or jmp epilog in case of empty block)
-        B+16 .. B+23    : jmpnext (or jmp_epilog) address. jumpnext is used when the block needs testing
-        B+24 .. B+31    : empty (in case an architecture needs more than 2 opcodes)
-        B+32 .. B+32+sz : instsize (compressed array with each instruction length on x64 and native side)
+        B+8 ..  B+8+m   : Native code for jmpnext (or jmp epilog in case of empty block), m depends on arch
+        B+J-8.. B+J-1   : jmpnext (or jmp_epilog) address. jumpnext is used when the block needs testing
+                           (J = JMPNEXT_SIZE, varies by architecture)
+        B+J ..  B+J+sz  : instsize (compressed array with each instruction length on x64 and native side)
         C ..    C+sz    : arch: arch specific info (likes flags info) per inst (can be absent)
 
     */
@@ -660,7 +660,7 @@ dynablock_t* FillBlock64(uintptr_t addr, int alternate, int is32bits, int inst_m
     size_t sep_size = helper.sep_size*sizeof(sep_t);
     size_t reloc_size = helper.reloc_size*sizeof(uint32_t);
     // ok, now allocate mapped memory, with executable flag on
-    size_t sz = sizeof(void*) + native_size + helper.table64size*sizeof(uint64_t) + 4*sizeof(void*) + insts_rsize + arch_size + callret_size + sep_size;
+    size_t sz = sizeof(void*) + native_size + helper.table64size*sizeof(uint64_t) + JMPNEXT_SIZE + insts_rsize + arch_size + callret_size + sep_size;
     size_t dynablock_align = (sz&7)?(8 -(sz&7)):0;    // align dynablock
     sz += dynablock_align + sizeof(dynablock_t) + reloc_size;
     //           dynablock_t*     block (arm insts)            table64               jmpnext code       instsize     arch         callrets         sep  dynablock           relocs
@@ -673,7 +673,7 @@ dynablock_t* FillBlock64(uintptr_t addr, int alternate, int is32bits, int inst_m
     void* p = (void*)(((uintptr_t)actual_p) + sizeof(void*));
     void* tablestart = p + native_size;
     void* next = tablestart + helper.table64size*sizeof(uint64_t);
-    void* instsize = next + 4*sizeof(void*);
+    void* instsize = next + JMPNEXT_SIZE;
     void* arch = instsize + insts_rsize;
     void* callrets = arch + arch_size;
     void* seps = callrets + callret_size;
@@ -761,9 +761,9 @@ dynablock_t* FillBlock64(uintptr_t addr, int alternate, int is32bits, int inst_m
         void* p = (block->block + helper.sep[i].nat_offs - sizeof(void*));
         *(dynablock_t**)p = block;
     }
-    *(void**)(next+3*sizeof(void*)) = native_next;
-    CreateJmpNext(block->jmpnext, next+3*sizeof(void*));
-    ClearCache(block->jmpnext, 4*sizeof(void*));
+    *(void**)(next+JMPNEXT_SIZE-sizeof(void*)) = native_next;
+    CreateJmpNext(block->jmpnext, next+JMPNEXT_SIZE-sizeof(void*));
+    ClearCache(block->jmpnext, JMPNEXT_SIZE-sizeof(void*));
     //block->x64_addr = (void*)start;
     block->x64_size = end-start;
     // all done...

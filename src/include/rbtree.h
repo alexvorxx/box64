@@ -328,4 +328,13 @@ uintptr_t rb_get_leftmost(rbtree_t* tree);
  */
 void rbtree_print(const rbtree_t* tree);
 
+/**
+ * @brief Walk the tree in order and call a callback for each node.
+ * 
+ * @param tree Pointer to the red-black tree to walk.
+ * @param cb Callback function receiving (start, end, data, userdata) for each node.
+ * @param userdata Opaque pointer passed to the callback.
+ */
+void rbtree_walk(const rbtree_t* tree, void (*cb)(uintptr_t start, uintptr_t end, uint64_t data, void* userdata), void* userdata);
+
 #endif // RBTREE_H

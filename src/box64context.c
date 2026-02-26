@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <inttypes.h>
 
 #include "os.h"
 #include "box64context.h"
@@ -245,6 +246,41 @@ box64context_t *NewBox64Context(int argc)
 
 void freeALProcWrapper(box64context_t* context);
 void freeCUDAProcWrapper(box64context_t* context);
+
+#ifdef DYNAREC
+//#define DYNAREC_HIST    // uncomment to print dynablock size histogram at exit
+#ifdef DYNAREC_HIST
+#define HIST_BUCKETS 12
+static const uintptr_t bucket_limits[HIST_BUCKETS] = {
+    8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, (uintptr_t)-1
+};
+static const char* bucket_labels[HIST_BUCKETS] = {
+    "1-8", "9-16", "17-32", "33-64", "65-128", "129-256",
+    "257-512", "513-1024", "1025-2048", "2049-4096", "4097-8192", "8193+"
+};
+typedef struct {
+    uint64_t count[HIST_BUCKETS];
+    uint64_t total_blocks;
+    uint64_t total_bytes;
+    uintptr_t max_size;
+} hist_data_t;
+static void db_size_walk_cb(uintptr_t start, uintptr_t end, uint64_t data, void* userdata) {
+    (void)end;
+    hist_data_t* h = (hist_data_t*)userdata;
+    uintptr_t size = start;  // key = x64_size
+    uint64_t n = data;       // value = count of blocks
+    for (int i = 0; i < HIST_BUCKETS; i++) {
+        if (size <= bucket_limits[i]) {
+            h->count[i] += n;
+            break;
+        }
+    }
+    h->total_blocks += n;
+    h->total_bytes += size * n;
+    if (size > h->max_size) h->max_size = size;
+}
+#endif
+#endif
 EXPORTDYN
 void FreeBox64Context(box64context_t** context)
 {
@@ -342,7 +378,21 @@ void FreeBox64Context(box64context_t** context)
     FreeMapSymbols(&ctx->uniques);
 
 #ifdef DYNAREC
-    //dynarec_log(LOG_INFO, "BOX64 Dynarec at exit: Max DB=%d, rightmost=%d\n", ctx->max_db_size, rb_get_rightmost(ctx->db_sizes));
+#ifdef DYNAREC_HIST
+    {
+        hist_data_t hist = {0};
+        rbtree_walk(ctx->db_sizes, db_size_walk_cb, &hist);
+        if(hist.total_blocks) {
+            printf_log(LOG_INFO, "BOX64 Dynarec block size histogram: %" PRIu64 " blocks, %" PRIu64 " total x86 bytes, max=%" PRIuPTR "\n",
+                hist.total_blocks, hist.total_bytes, hist.max_size);
+            for(int i = 0; i < HIST_BUCKETS; i++) {
+                if(hist.count[i])
+                    printf_log(LOG_INFO, "  %10s: %" PRIu64 " blocks (%.1f%%)\n",
+                        bucket_labels[i], hist.count[i], hist.count[i] * 100.0 / hist.total_blocks);
+            }
+        }
+    }
+#endif
     rbtree_delete(ctx->db_sizes);
 #endif
 
