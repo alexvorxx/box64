@@ -155,16 +155,22 @@ int AllocLoadElfMemory32(box64context_t* context, elfheader_t* head, int mainbin
     void* image = NULL;
     if(!head->vaddr) {
         sz += head->align;
-        raw = mmap64(from_ptrv(offs), sz, 0, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE, -1, 0);
+        raw = mmap64(from_ptrv(offs), sz, 0, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE|MAP_FIXED, -1, 0);
         image = (void*)(((uintptr_t)raw+max_align)&~max_align);
     } else {
-        image = raw = mmap64(from_ptrv(head->vaddr), sz, 0, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE, -1, 0);
         if(from_ptr(head->vaddr)&(box64_pagesize-1)) {
-            // load address might be lower
-            if((uintptr_t)image == (from_ptr(head->vaddr)&~(box64_pagesize-1))) {
+            // load address is not page-aligned, round down and increase size
+            uintptr_t aligned_addr = from_ptr(head->vaddr) & ~(box64_pagesize-1);
+            size_t extra = from_ptr(head->vaddr) - aligned_addr;
+            raw = mmap64((void*)aligned_addr, sz + extra, 0, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE|MAP_FIXED, -1, 0);
+            if(raw != MAP_FAILED && (uintptr_t)raw == aligned_addr) {
                 image = from_ptrv(head->vaddr);
-                sz += ((uintptr_t)image)-((uintptr_t)raw);
+                sz += extra;
+            } else {
+                image = raw;
             }
+        } else {
+            image = raw = mmap64(from_ptrv(head->vaddr), sz, 0, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE|MAP_FIXED, -1, 0);
         }
     }
     if(image!=MAP_FAILED && !head->vaddr && image!=from_ptrv(offs)) {
@@ -308,8 +314,6 @@ int AllocLoadElfMemory32(box64context_t* context, elfheader_t* head, int mainbin
                         return 1;
                     }
                 }
-                if(!(prot&PROT_WRITE) && (paddr==(paddr&~(box64_pagesize-1)) && (asize==ALIGN(asize))))
-                    mprotect((void*)paddr, asize, prot);
             }
 #ifdef DYNAREC
             if(BOX64ENV(dynarec) && (e->p_flags & PF_X)) {
@@ -335,6 +339,20 @@ int AllocLoadElfMemory32(box64context_t* context, elfheader_t* head, int mainbin
             // zero'd difference between filesz and memsz
             if(e->p_filesz != e->p_memsz)
                 memset(dest+e->p_filesz, 0, e->p_memsz - e->p_filesz);
+        }
+    }
+    // deferred mprotect: apply final protections after all segments are loaded
+    // this avoids the case where mprotect on a shared host page (e.g. 64KB) strips
+    // PROT_WRITE before a later segment that shares the same page has been read into memory
+    for (int j = 0; j < n; j++) {
+        if(!(head->multiblocks[j].flags & PF_W)) {
+            uintptr_t start = head->multiblocks[j].paddr & ~(box64_pagesize-1);
+            uintptr_t end = ALIGN(head->multiblocks[j].paddr + head->multiblocks[j].asize);
+            for(uintptr_t page = start; page < end; page += box64_pagesize) {
+                uint32_t prot = getProtection(page);
+                if(prot && !(prot & PROT_WRITE))
+                    mprotect((void*)page, box64_pagesize, prot & ~PROT_CUSTOM);
+            }
         }
     }
     // record map

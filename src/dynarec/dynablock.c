@@ -331,8 +331,8 @@ static dynablock_t* internalDBGetBlock(x64emu_t* emu, uintptr_t addr, uintptr_t 
                 rb_inc(my_context->db_sizes, block->x64_size, block->x64_size+1);
             }
             for(int i=0; i<block->sep_size; ++i) {
-                uint32_t x64_offs = block->sep[i].x64_offs;
-                uint32_t nat_offs = block->sep[i].nat_offs;
+                uintptr_t x64_offs = block->sep[i].x64_offs;
+                uintptr_t nat_offs = block->sep[i].nat_offs;
                 if(addJumpTableIfDefault64(block->x64_addr+x64_offs, (block->dirty || block->always_test)?block->jmpnext:(block->block+nat_offs)))
                     block->sep[i].active = 1;
                 else
@@ -404,9 +404,12 @@ dynablock_t* DBGetBlock(x64emu_t* emu, uintptr_t addr, int create, int is32bits)
             } else {
                 dynarec_log(LOG_DEBUG, "Validating block %p from %p:%p (hash:%X, always_test:%d) for %p\n", db, db->x64_addr, db->x64_addr+db->x64_size-1, db->hash, db->always_test, (void*)addr);
                 if(db->always_test) {
-                    if(db->always_test==2)
+                    if(db->always_test==2) {
                         db->always_test = 0;
-                    protectDB((uintptr_t)db->x64_addr, db->x64_size);
+                        protectDB((uintptr_t)db->x64_addr, db->x64_size);
+                    }
+                    // always_test==1 (NEVERCLEAN): skip protectDB, the page has mixed
+                    // code+data and mprotect would strip writability from data regions
                 } else {
                     #ifdef ARCH_NOP
                     if(db->callret_size) {
@@ -417,14 +420,15 @@ dynablock_t* DBGetBlock(x64emu_t* emu, uintptr_t addr, int create, int is32bits)
                     }
                     #endif
                     protectDBJumpTable((uintptr_t)db->x64_addr, db->x64_size, db->block, db->jmpnext);
-                    for(int i=0; i<db->sep_size; ++i) {
-                        uint32_t x64_offs = db->sep[i].x64_offs;
-                        uint32_t nat_offs = db->sep[i].nat_offs;
-                        if(addJumpTableIfDefault64(db->x64_addr+x64_offs, (db->always_test)?db->jmpnext:(db->block+nat_offs)))
-                            db->sep[i].active = 1;
-                        else
-                            db->sep[i].active = 0;
-                    }
+                    if(!db->always_test)
+                        for(int i=0; i<db->sep_size; ++i) {
+                            uint32_t x64_offs = db->sep[i].x64_offs;
+                            uint32_t nat_offs = db->sep[i].nat_offs;
+                            if(setJumpTableIfRef64(db->x64_addr+x64_offs, (db->always_test)?db->jmpnext:(db->block+nat_offs), db->jmpnext))
+                                db->sep[i].active = 1;
+                            else
+                                db->sep[i].active = 0;
+                        }
                 }
             }
         }

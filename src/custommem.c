@@ -1985,9 +1985,9 @@ int addJumpTableIfDefault64(void* addr, void* jmp)
     idx0 = (((uintptr_t)addr)                )&JMPTABLE_MASK0;
 
     #ifdef JMPTABL_SHIFT4
-    return (native_lock_storeifref(create_jmptbl(0, idx0, idx1, idx2, idx3, idx4), jmp, native_next)==jmp)?1:0;
+    return (native_lock_storeifref2(create_jmptbl(0, idx0, idx1, idx2, idx3, idx4), jmp, native_next)==native_next)?1:0;
     #else
-    return (native_lock_storeifref(create_jmptbl(0, idx0, idx1, idx2, idx3), jmp, native_next)==jmp)?1:0;
+    return (native_lock_storeifref2(create_jmptbl(0, idx0, idx1, idx2, idx3), jmp, native_next)==native_next)?1:0;
     #endif
 }
 void setJumpTableDefault64(void* addr)
@@ -2033,9 +2033,9 @@ int setJumpTableDefaultIfRef64(void* addr, void* jmp)
         return 0;
     idx0 = (((uintptr_t)addr)    )&JMPTABLE_MASK0;
     #ifdef JMPTABL_SHIFT4
-    return (native_lock_storeifref(create_jmptbl(0, idx0, idx1, idx2, idx3, idx4), native_next, jmp)==native_next)?1:0;
+    return (native_lock_storeifref2(create_jmptbl(0, idx0, idx1, idx2, idx3, idx4), native_next, jmp)==jmp)?1:0;
     #else
-    return (native_lock_storeifref(create_jmptbl(0, idx0, idx1, idx2, idx3), native_next, jmp)==native_next)?1:0;
+    return (native_lock_storeifref2(create_jmptbl(0, idx0, idx1, idx2, idx3), native_next, jmp)==jmp)?1:0;
     #endif
 }
 void setJumpTableDefaultRef64(void* addr, void* jmp)
@@ -2058,7 +2058,7 @@ void setJumpTableDefaultRef64(void* addr, void* jmp)
     if(box64_jmptbl3[idx3][idx2][idx1] == box64_jmptbldefault0)
         return;
     idx0 = (((uintptr_t)addr)    )&JMPTABLE_MASK0;
-    native_lock_storeifref(&box64_jmptbl3[idx3][idx2][idx1][idx0], native_next, jmp);
+    native_lock_storeifref2(&box64_jmptbl3[idx3][idx2][idx1][idx0], native_next, jmp);
 }
 int setJumpTableIfRef64(void* addr, void* jmp, void* ref)
 {
@@ -2071,9 +2071,9 @@ int setJumpTableIfRef64(void* addr, void* jmp, void* ref)
     idx1 = (((uintptr_t)addr)>>JMPTABL_START1)&JMPTABLE_MASK1;
     idx0 = (((uintptr_t)addr)    )&JMPTABLE_MASK0;
     #ifdef JMPTABL_SHIFT4
-    return (native_lock_storeifref(create_jmptbl(0, idx0, idx1, idx2, idx3, idx4), jmp, ref)==jmp)?1:0;
+    return (native_lock_storeifref2(create_jmptbl(0, idx0, idx1, idx2, idx3, idx4), jmp, ref)==ref)?1:0;
     #else
-    return (native_lock_storeifref(create_jmptbl(0, idx0, idx1, idx2, idx3), jmp, ref)==jmp)?1:0;
+    return (native_lock_storeifref2(create_jmptbl(0, idx0, idx1, idx2, idx3), jmp, ref)==ref)?1:0;
     #endif
 }
 int isJumpTableDefault64(void* addr)
@@ -2139,7 +2139,7 @@ uintptr_t getJumpTableAddress64(uintptr_t addr)
     #endif
 }
 
-dynablock_t* getDB(uintptr_t addr)
+dynablock_t* getDBBlock(uintptr_t addr, void** jblock)
 {
     uintptr_t idx3, idx2, idx1, idx0;
     #ifdef JMPTABL_SHIFT4
@@ -2154,27 +2154,23 @@ dynablock_t* getDB(uintptr_t addr)
     #else
     uintptr_t ret = (uintptr_t)box64_jmptbl3[idx3][idx2][idx1][idx0];
     #endif
+    if(jblock) *jblock = (void*)ret;
 
     return *(dynablock_t**)(ret - sizeof(void*));
 }
 
+dynablock_t* getDB(uintptr_t addr)
+{
+    return getDBBlock(addr, NULL);
+}
+
 int getNeedTest(uintptr_t addr)
 {
-    uintptr_t idx3, idx2, idx1, idx0;
-    #ifdef JMPTABL_SHIFT4
-    uintptr_t idx4 = (((uintptr_t)addr)>>JMPTABL_START4)&JMPTABLE_MASK4;
-    #endif
-    idx3 = ((addr)>>JMPTABL_START3)&JMPTABLE_MASK3;
-    idx2 = ((addr)>>JMPTABL_START2)&JMPTABLE_MASK2;
-    idx1 = ((addr)>>JMPTABL_START1)&JMPTABLE_MASK1;
-    idx0 = ((addr)                )&JMPTABLE_MASK0;
-    #ifdef JMPTABL_SHIFT4
-    uintptr_t ret = (uintptr_t)box64_jmptbl4[idx4][idx3][idx2][idx1][idx0];
-    #else
-    uintptr_t ret = (uintptr_t)box64_jmptbl3[idx3][idx2][idx1][idx0];
-    #endif
-    dynablock_t* db = *(dynablock_t**)(ret - sizeof(void*));
-    return db?((ret!=(uintptr_t)db->block)?1:0):0;
+    void* jblock = NULL;
+    dynablock_t* db = getDBBlock(addr, &jblock);
+    if(!db) return 0;
+    if(jblock==db->jmpnext) return 1;
+    return 0;
 }
 
 uintptr_t getJumpAddress64(uintptr_t addr)
@@ -2192,6 +2188,31 @@ uintptr_t getJumpAddress64(uintptr_t addr)
     #else
     return (uintptr_t)box64_jmptbl3[idx3][idx2][idx1][idx0];
     #endif
+}
+
+// Helper: check if any sub-range in a host page has PROT_WRITE that is NOT part of the
+// dynarec-protected range [prot_start, prot_end). This detects mixed code+data host pages
+// on systems with large pages (e.g. 64KB) where mprotect to remove PROT_WRITE would also
+// strip writability from data regions, causing EFAULT on kernel writes (e.g. read() syscall).
+// Must be called with LOCK_PROT() held.
+static int hostPageHasExternalWrite_locked(uintptr_t host_page, uintptr_t prot_start, uintptr_t prot_end)
+{
+    uintptr_t scan = host_page;
+    uintptr_t host_end = host_page + box64_pagesize;
+    while(scan < host_end) {
+        uint32_t p = 0;
+        uintptr_t bend = 0;
+        rb_get_end(memprot, scan, &p, &bend);
+        if(bend > host_end)
+            bend = host_end;
+        if(p && (p & PROT_WRITE) && !(p & PROT_DYN)) {
+            if(scan < prot_start || bend > prot_end) {
+                return 1;
+            }
+        }
+        scan = bend;
+    }
+    return 0;
 }
 
 // Remove the Write flag from an adress range, so DB can be executed safely
@@ -2216,8 +2237,19 @@ void protectDBJumpTable(uintptr_t addr, size_t size, void* jump, void* ref)
         if(!(dyn&PROT_NEVERPROT)) {
             prot&=~PROT_CUSTOM;
             if(prot&PROT_WRITE) {
-                if(!dyn) 
-                    mprotect((void*)cur, bend-cur, prot&~PROT_WRITE);
+                if(!dyn) {
+                    if(box64_pagesize > 4096) {
+                        uintptr_t host_page = cur & ~(box64_pagesize-1);
+                        if(hostPageHasExternalWrite_locked(host_page, addr, addr+size)) {
+                            dynarec_log(LOG_INFO, "protectDBJumpTable: mixed code+data host page %p, using always_test instead of mprotect\n", (void*)host_page);
+                            prot |= PROT_NEVERCLEAN;
+                        } else {
+                            mprotect((void*)cur, bend-cur, prot&~PROT_WRITE);
+                        }
+                    } else {
+                        mprotect((void*)cur, bend-cur, prot&~PROT_WRITE);
+                    }
+                }
                 prot |= PROT_DYNAREC;
             } else 
                 prot |= PROT_DYNAREC_R;
@@ -2253,8 +2285,24 @@ void protectDB(uintptr_t addr, uintptr_t size)
         if(!(dyn&PROT_NEVERPROT)) {
             prot&=~PROT_CUSTOM;
             if(prot&PROT_WRITE) {
-                if(!dyn) 
-                    mprotect((void*)cur, bend-cur, prot&~PROT_WRITE);
+                if(!dyn) {
+                    // On large-page systems, check if removing PROT_WRITE from this host page
+                    // would also affect writable data regions sharing the same host page.
+                    // If so, use PROT_NEVERCLEAN (always_test mode) instead of mprotect,
+                    // because kernel syscalls (e.g. read()) cannot be caught via SEGV and
+                    // would return EFAULT if the buffer is on a non-writable page.
+                    if(box64_pagesize > 4096) {
+                        uintptr_t host_page = cur & ~(box64_pagesize-1);
+                        if(hostPageHasExternalWrite_locked(host_page, addr, addr+size)) {
+                            dynarec_log(LOG_INFO, "protectDB: mixed code+data host page %p, using always_test instead of mprotect\n", (void*)host_page);
+                            prot |= PROT_NEVERCLEAN;
+                        } else {
+                            mprotect((void*)cur, bend-cur, prot&~PROT_WRITE);
+                        }
+                    } else {
+                        mprotect((void*)cur, bend-cur, prot&~PROT_WRITE);
+                    }
+                }
                 prot |= PROT_DYNAREC;
             } else 
                 prot |= PROT_DYNAREC_R;

@@ -69,6 +69,7 @@ if(LARCH64)
     set(ARM_DYNAREC OFF CACHE BOOL "")
     set(RV64_DYNAREC OFF CACHE BOOL "")
     set(LARCH64_DYNAREC ON CACHE BOOL "")
+    set(PPC64LE_DYNAREC OFF CACHE BOOL "")
     set(BAD_PKILL ON CACHE BOOL "")
     if(LARCH64_ABI_1)
         message(STATUS "Build for Loongarch64 ABI 1.0 system")
@@ -81,6 +82,7 @@ if(RV64)
     set(ARM_DYNAREC OFF CACHE BOOL "")
     set(RV64_DYNAREC ON CACHE BOOL "")
     set(LARCH64_DYNAREC OFF CACHE BOOL "")
+    set(PPC64LE_DYNAREC OFF CACHE BOOL "")
 endif()
 if(PPC64LE)
     set(LD80BITS OFF CACHE BOOL "")
@@ -88,6 +90,7 @@ if(PPC64LE)
     set(ARM_DYNAREC OFF CACHE BOOL "")
     set(RV64_DYNAREC OFF CACHE BOOL "")
     set(LARCH64_DYNAREC OFF CACHE BOOL "")
+    set(PPC64LE_DYNAREC OFF CACHE BOOL "")
 endif()
 if(RK3399 OR RK3588 OR ODROIDN2 OR RPI3ARM64 OR RPI4ARM64 OR RPI5ARM64 OR RK3326 OR TEGRAX1 OR TEGRA_T194 OR TEGRA_T234 OR NVIDIA_GB10 OR PHYTIUM OR SD845 OR SD865 OR SD888 OR SD8G2 OR SDORYON1 OR SD8EG5 OR LX2160A OR M1 OR ARM64 OR ADLINK)
     set(LD80BITS OFF CACHE BOOL "")
@@ -95,6 +98,7 @@ if(RK3399 OR RK3588 OR ODROIDN2 OR RPI3ARM64 OR RPI4ARM64 OR RPI5ARM64 OR RK3326
     set(ARM_DYNAREC ON CACHE BOOL "")
     set(RV64_DYNAREC OFF CACHE BOOL "")
     set(LARCH64_DYNAREC OFF CACHE BOOL "")
+    set(PPC64LE_DYNAREC OFF CACHE BOOL "")
 endif()
 if(RK3399 OR ODROIDN2 OR RPI3ARM64 OR RPI4ARM64 OR RPI5ARM64)
     set(SAVE_MEM ON CACHE BOOL "")
@@ -122,6 +126,7 @@ option(NOALIGN "Set to ON if host device doesn't need re-align (i.e. i386)" ${NO
 option(ARM_DYNAREC "Set to ON to use ARM Dynamic Recompilation" ${ARM_DYNAREC})
 option(RV64_DYNAREC "Set to ON to use RISC-V Dynamic Recompilation" ${RV64_DYNAREC})
 option(LARCH64_DYNAREC "Set to ON to use LOONGARCH64 Dynamic Recompilation" ${LARCH64_DYNAREC})
+option(PPC64LE_DYNAREC "Set to ON to use PPC64LE Dynamic Recompilation" ${PPC64LE_DYNAREC})
 option(STATICBUILD "Set to ON to have a static build (Warning, not working)" ${STATICBUILD})
 option(NO_LIB_INSTALL "Set ON to not install a few x86_64 libs that are used by many program" ${NO_LIB_INSTALL})
 option(NO_CONF_INSTALL "Set ON to not install config files" ${NO_CONF_INSTALL})
@@ -251,6 +256,8 @@ elseif(RV64)
     set(ASMFLAGS  -pipe -march=rv64gc)
 elseif(PPC64LE)
     add_definitions(-DPPC64LE)
+    set(CFLAGS -pipe -mcpu=power9)
+    set(ASMFLAGS  -pipe -mcpu=power9)
 elseif(LX2160A)
     add_definitions(-DLX2160A)
     set(CFLAGS -pipe -march=armv8-a+crypto+crc -mcpu=cortex-a72+crypto)
@@ -292,6 +299,9 @@ if(STATICBUILD)
     set(BUILD_SHARED_LIBS OFF)
     set(CMAKE_EXE_LINKER_FLAGS -static)
     set(HAVE_TRACE OFF)
+    if(PPC64LE)
+        add_definitions(-fno-stack-protector)
+    endif()
 endif()
 if(BOX32)
     add_definitions(-DBOX32)
@@ -656,6 +666,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibncursesw6.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibnuma.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibogg.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibomp.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibpanel.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibpci.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibpcre.c"
@@ -756,6 +767,8 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedsdl2mixer.c"
     "${BOX64_ROOT}/src/wrapped/wrappedsdl2net.c"
     "${BOX64_ROOT}/src/wrapped/wrappedsdl2ttf.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedsdl3.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedsdl3ttf.c"
     "${BOX64_ROOT}/src/wrapped/wrappedselinux.c"
     "${BOX64_ROOT}/src/wrapped/wrappedsmime3.c"
     "${BOX64_ROOT}/src/wrapped/wrappedsmpeg2.c"
@@ -845,7 +858,7 @@ if(NOT CI)
         OUTPUT "${BOX64_ROOT}/src/wrapped/generated/functions_list.txt"
         COMMAND "${PYTHON_EXECUTABLE}" "${BOX64_ROOT}/rebuild_wrappers.py"
         "${BOX64_ROOT}"
-        "PANDORA" "HAVE_LD80BITS" "NOALIGN" "HAVE_TRACE" "ANDROID" "TERMUX" "STATICBUILD" "LA64" "--"
+        "PANDORA" "HAVE_LD80BITS" "NOALIGN" "HAVE_TRACE" "ANDROID" "TERMUX" "STATICBUILD" "LA64" "PPC64LE" "--"
         ${WRAPPEDS_HEAD}
         MAIN_DEPENDENCY "${BOX64_ROOT}/rebuild_wrappers.py"
         DEPENDS ${WRAPPEDS} ${WRAPPEDS_HEAD}
@@ -928,6 +941,7 @@ if(BOX32)
         "${BOX64_ROOT}/src/wrapped32/wrappedmount.c"
         "${BOX64_ROOT}/src/wrapped32/wrappeddbus.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedcurl.c"
+        "${BOX64_ROOT}/src/wrapped32/wrappednvml.c"
     )
     endif()
     string(REPLACE ".c" "_private.h" MODROOT ${BOX64_ROOT})
@@ -1287,8 +1301,12 @@ string(COMPARE EQUAL "${CMAKE_SYSTEM_PROCESSOR}" "i686"  _x86)
 string(COMPARE EQUAL "${CMAKE_SYSTEM_PROCESSOR}" "x86_64"  _x86_64)
 string(COMPARE EQUAL "${CMAKE_SYSTEM_PROCESSOR}" "aarch64"  _aarch64)
 string(COMPARE EQUAL "${CMAKE_SYSTEM_PROCESSOR}" "riscv64"  _riscv64)
+string(COMPARE EQUAL "${CMAKE_SYSTEM_PROCESSOR}" "ppc64le"  _ppc64le)
+if(NOT _ppc64le)
+  string(COMPARE EQUAL "${CMAKE_SYSTEM_PROCESSOR}" "powerpc64le"  _ppc64le)
+endif()
 
-if(_x86_64 OR _aarch64)
+if(_x86_64 OR _aarch64 OR _ppc64le)
   add_definitions(-DCONFIG_64BIT)
 endif()
 
@@ -1457,6 +1475,8 @@ if(_aarch64)
 	endif()
 elseif(_riscv64)
     set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "riscv64")
+elseif(_ppc64le)
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "ppc64el")
 elseif(_x86_64)
     set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "x86_64")
 else()

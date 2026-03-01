@@ -172,6 +172,9 @@ static const scwrap_t syscallwrap[] = {
     #ifdef __NR_unlink
     [87] = {__NR_unlink, 1},
     #endif
+    #ifdef __NR_symlink
+    [88] = {__NR_symlink, 2},
+    #endif
     //[89] = {__NR_readlink, 3},  // not always existing, better use the wrapped version anyway
     [96] = {__NR_gettimeofday, 2},
     #ifdef __NR_getrlimit
@@ -756,6 +759,13 @@ void EXPORT x64Syscall_linux(x64emu_t *emu)
                 S_RAX = -errno;
             break;
         #endif
+        #ifndef __NR_symlink
+        case 88: //sys_symlink
+            S_RAX = symlink((void*)R_RDI, (void*)R_RSI);
+            if(S_RAX==-1)
+                S_RAX = -errno;
+            break;
+        #endif
         case 89: // sys_readlink
             S_RAX = my_readlink(emu,(void*)R_RDI, (void*)R_RSI, (size_t)R_RDX);
             if(S_RAX==-1)
@@ -1123,6 +1133,10 @@ long EXPORT my_syscall(x64emu_t *emu)
         #ifndef __NR_unlink
         case 87: //sys_unlink
             return unlink((void*)R_RSI);
+        #endif
+        #ifndef __NR_symlink
+        case 88: //sys_symlink
+            return symlink((void*)R_RSI, (void*)R_RDX);
         #endif
         case 89: // sys_readlink
             return my_readlink(emu,(void*)R_RSI, (void*)R_RDX, (size_t)R_RCX);

@@ -2733,9 +2733,14 @@ uintptr_t dynarec64_00(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int ni
                 } else {
                     SETFLAGS(X_ALL, SF_SET_NODF, NAT_FLAGS_NOFUSION); // Hack to set flags in "don't care" state
                 }
-                GETIP(ip, x7); // priviledged instruction, IP not updated
+                if(rex.is32bits && u8==0x04) {
+                    GETIP(addr, x7);
+                } else {
+                    GETIP(ip, x7); // priviledged instruction, IP not updated
+                }
                 STORE_XEMU_CALL();
-                CALL(const_native_priv, -1, 0, 0);
+                MOV32w(x1, u8);
+                CALL(const_native_int, -1, x1, 0);
                 LOAD_XEMU_CALL();
                 jump_to_epilog(dyn, 0, xRIP, ninst);
                 *need_epilog = 0;
