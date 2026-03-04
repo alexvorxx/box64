@@ -666,6 +666,8 @@ void setupTrace()
 void endMallocHook();
 #endif
 
+void finiPendingDLOpenedNoUnload(x64emu_t* emu);
+
 void endBox64()
 {
     if(!my_context || box64_quit)
@@ -685,9 +687,30 @@ void endBox64()
     //void closeAllDLOpened();
     //closeAllDLOpened();    // close residual dlopened libs. Disabled, seems like a bad idea, better to unload with proper dependancies
     RunElfFini(my_context->elfs[0], emu);
+    printf_log(LOG_DEBUG, "Finished calling fini for dlopened libs\n");
+    finiPendingDLOpenedNoUnload(emu);   // call fini for dlopened libs, but don't unload them, as they might be needed by the main elf fini
     // unload needed libs
     needed_libs_t* needed = my_context->elfs[0]->needed;
     printf_log(LOG_DEBUG, "Unloaded main elf: Will Dec RefCount of %d libs\n", needed?needed->size:0);
+    int workers = get_active_emu_workers();
+    if (workers > 0) {
+        const int sleep_us = 10000;   // 10ms
+        const int max_wait_ms = 2000; // 2s
+        int waited_ms = 0;
+
+        printf_log(LOG_INFO, "endBox64: waiting emu workers to exit (n=%d)\n", workers);
+        while ((workers = get_active_emu_workers()) > 0 && waited_ms < max_wait_ms) {
+            usleep(sleep_us);
+            waited_ms += sleep_us / 1000;
+        }
+
+        if (workers > 0) {
+            printf_log(LOG_INFO,
+                "endBox64: %d emu workers still alive after %dms, skip unload/free to avoid UAF crash\n",
+                workers, waited_ms);
+            return;
+        }
+    }
     if(needed)
         for(int i=0; i<needed->size; ++i)
             DecRefCount(&needed->libs[i], emu);

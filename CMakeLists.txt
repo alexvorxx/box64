@@ -569,6 +569,8 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedatomic.c"
     "${BOX64_ROOT}/src/wrapped/wrappedatspi.c"
     "${BOX64_ROOT}/src/wrapped/wrappedayatanaappindicator3.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedayatanaindicator3.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedayatanaido3.c"
     "${BOX64_ROOT}/src/wrapped/wrappedavahiclient.c"
     "${BOX64_ROOT}/src/wrapped/wrappedavahicommon.c"
     "${BOX64_ROOT}/src/wrapped/wrappedbz2.c"
@@ -687,6 +689,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibvawayland.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibvax11.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibvdpau.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibvpx.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibvorbis.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibx11.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibx11xcb.c"
@@ -931,6 +934,7 @@ if(BOX32)
         "${BOX64_ROOT}/src/wrapped32/wrappedcairo.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedlibdrm.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedlibvdpau.c"
+        "${BOX64_ROOT}/src/wrapped32/wrappedlibvorbis.c"
         "${BOX64_ROOT}/src/wrapped32/wrappednsl.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedlibcups.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedgbm.c"
@@ -942,6 +946,8 @@ if(BOX32)
         "${BOX64_ROOT}/src/wrapped32/wrappeddbus.c"
         "${BOX64_ROOT}/src/wrapped32/wrappedcurl.c"
         "${BOX64_ROOT}/src/wrapped32/wrappednvml.c"
+         "${BOX64_ROOT}/src/wrapped32/wrappedpulsesimple.c"
+         "${BOX64_ROOT}/src/wrapped32/wrappedlibogg.c"
     )
     endif()
     string(REPLACE ".c" "_private.h" MODROOT ${BOX64_ROOT})

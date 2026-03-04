@@ -466,6 +466,13 @@ Path to the rc file to load.
 
  * XXXX: Load the rc file XXXX, default rc files will not be loaded. 
 
+### BOX64_RDTSC_INV
+
+Report Invariant TSC bit in CPUID for Intel CPU type.
+
+ * 0: Do not report Invariant TSC for Intel CPU type (default). [Default]
+ * 1: Report Invariant TSC bit in CPUID leaf 0x80000007 for Intel CPU type. 
+
 ### BOX64_RESERVE_HIGH
 
 Reserve high memory area for the program, always enabled on Box32.
@@ -865,6 +872,13 @@ Do not load Vulkan libraries.
 
  * 0: Load Vulkan libraries. [Default]
  * 1: Do not load Vulkan libraries, both native and x86_64. 
+
+### BOX64_NOVULKANOVERLAY
+
+Do not load x64 Vulkan overlay.
+
+ * 0: Do try to Load x64 Vulkan overlay. [Default]
+ * 1: Do not load x64 Vulkan overlay. 
 
 ### BOX64_PREFER_EMULATED
 
