@@ -90,7 +90,7 @@ if(PPC64LE)
     set(ARM_DYNAREC OFF CACHE BOOL "")
     set(RV64_DYNAREC OFF CACHE BOOL "")
     set(LARCH64_DYNAREC OFF CACHE BOOL "")
-    set(PPC64LE_DYNAREC OFF CACHE BOOL "")
+    set(PPC64LE_DYNAREC ON CACHE BOOL "")
 endif()
 if(RK3399 OR RK3588 OR ODROIDN2 OR RPI3ARM64 OR RPI4ARM64 OR RPI5ARM64 OR RK3326 OR TEGRAX1 OR TEGRA_T194 OR TEGRA_T234 OR NVIDIA_GB10 OR PHYTIUM OR SD845 OR SD865 OR SD888 OR SD8G2 OR SDORYON1 OR SD8EG5 OR LX2160A OR M1 OR ARM64 OR ADLINK)
     set(LD80BITS OFF CACHE BOOL "")
@@ -357,6 +357,12 @@ elseif(LARCH64_DYNAREC)
     add_definitions(-DLA64)
     enable_language(ASM)
     include_directories("${BOX64_ROOT}/src/dynarec/la64")
+    set(DYNAREC ON)
+elseif(PPC64LE_DYNAREC)
+    add_definitions(-DDYNAREC)
+    add_definitions(-DPPC64LE)
+    enable_language(ASM)
+    include_directories("${BOX64_ROOT}/src/dynarec/ppc64le")
     set(DYNAREC ON)
 else()
     set(DYNAREC OFF)
@@ -790,6 +796,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedwaylandegl.c"
     "${BOX64_ROOT}/src/wrapped/wrappedxinerama.c"
     "${BOX64_ROOT}/src/wrapped/wrappedxkbcommon.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedxkbfile.c"
     "${BOX64_ROOT}/src/wrapped/wrappedxkbcommonx11.c"
     "${BOX64_ROOT}/src/wrapped/wrappedxkbregistry.c"
     "${BOX64_ROOT}/src/wrapped/wrappedxml2.c"
@@ -1164,6 +1171,33 @@ if(LARCH64_DYNAREC)
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_de.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_df.c"
     )
+endif()
+
+if(PPC64LE_DYNAREC)
+    set(DYNAREC_SRC
+        ${DYNAREC_SRC}
+
+        "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_functions.c"
+        "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_arch.c"
+        "${BOX64_ROOT}/src/dynarec/ppc64le/ppc64le_printer.c"
+        "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_jmpnext.c"
+        "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_consts.c"
+    )
+    set(DYNAREC_ASM
+        ${DYNAREC_ASM}
+        "${BOX64_ROOT}/src/dynarec/ppc64le/ppc64le_prolog.S"
+        "${BOX64_ROOT}/src/dynarec/ppc64le/ppc64le_epilog.S"
+        "${BOX64_ROOT}/src/dynarec/ppc64le/ppc64le_next.S"
+        "${BOX64_ROOT}/src/dynarec/ppc64le/ppc64le_lock.S"
+    )
+
+     set(DYNAREC_PASS
+     "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_helper.c"
+     "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_00.c"
+     "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_66.c"
+     "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_f0.c"
+     "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_66f0.c"
+      )
 endif()
 
 
@@ -1680,6 +1714,13 @@ add_test(Boundary ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
     -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref33.txt
     -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
 
+#if(NOT CI)
+#    add_test(AppImage ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
+#        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test01-x64.AppImage -D TEST_OUTPUT=tmpfileAppImage.txt
+#        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref01.txt
+#        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
+#endif()
+
 else()
 
 add_test(bootSyscall ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
@@ -1824,6 +1865,10 @@ add_test(lock ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
 #
 #set_tests_properties(avx_intrinsics PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTNAN=0;BOX64_DYNAREC_FASTROUND=0 BOX64_AVX=2")
 
+#add_test(AppImage ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
+#    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/hcl-X64.AppImage -D TEST_ARGS2=--help -D TEST_OUTPUT=tmpfileAppImage.txt
+#    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/refAppImage.txt
+#    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
 
 endif()
 
