@@ -812,6 +812,8 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedicui18n66.c"
     "${BOX64_ROOT}/src/wrapped/wrappedicuuc67.c"
     "${BOX64_ROOT}/src/wrapped/wrappedicui18n67.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedicuuc68.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedicui18n68.c"
     "${BOX64_ROOT}/src/wrapped/wrappedicuuc72.c"
     "${BOX64_ROOT}/src/wrapped/wrappedicui18n72.c"
     "${BOX64_ROOT}/src/wrapped/wrappedicuuc73.c"
@@ -1197,6 +1199,7 @@ if(PPC64LE_DYNAREC)
      "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_66.c"
      "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_f0.c"
      "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_66f0.c"
+     "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_emit_math.c"
       )
 endif()
 

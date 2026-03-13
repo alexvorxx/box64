@@ -41,7 +41,7 @@ const char* regname[] = { "RAX", "RCX", "RDX", "RBX", "RSP", "RBP", "RSI", "RDI"
 
 #define MAX_MEMORY_REGIONS 32
 #define MAX_MEMORY_DATA      32
-#define MAX_MEMORY_DATA_SIZE 256
+#define MAX_MEMORY_DATA_SIZE 4096
 
 struct {
     uint64_t start;
@@ -95,8 +95,8 @@ static void loadTest(const char** filepath, const char* include_path)
     }
 
     // read file line by line
-    char line[1024];
-    char json[4096] = { 0 };
+    char line[4096];
+    char json[8192] = { 0 };
     bool in_config = false;
     while (fgets(line, sizeof(line), file)) {
         if (!strcmp(line, "%ifdef CONFIG\n")) {
@@ -297,7 +297,7 @@ static void loadTest(const char** filepath, const char* include_path)
     }
 
     close(mkstemp(binname));
-    const char* ld_cmd[] = { X86_64_LD, objname, "-Ttext=0x10000", "-w", "-m", box64_is32bits ? "elf_i386" : "elf_x86_64", "-o", binname, NULL };
+    const char* ld_cmd[] = { X86_64_LD, objname, "-Ttext=0x10000", "-n", "-w", "-m", box64_is32bits ? "elf_i386" : "elf_x86_64", "-o", binname, NULL };
 
     fork_result = fork();
     if (fork_result == 0) {
@@ -348,7 +348,7 @@ int unittest(int argc, const char** argv)
         include_path = argv[4];
     }
 
-    box64_pagesize = 4096;
+    box64_pagesize = sysconf(_SC_PAGESIZE);
     LoadEnvVariables();
     InitializeSystemInfo();
     ftrace = stdout;

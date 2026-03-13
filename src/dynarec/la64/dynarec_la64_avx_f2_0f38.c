@@ -92,22 +92,20 @@ uintptr_t dynarec64_AVX_F2_0F38(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t i
             GETGD;
             GETED(0);
             GETVD;
-            if ((gd == xRDX) || (gd == ed) || (gd == vd))
-                gb1 = x3;
-            else
-                gb1 = gd;
             if (rex.w) {
+                if ((gd == xRDX) || (gd == ed) || (gd == vd))
+                    gb1 = x3;
+                else
+                    gb1 = gd;
                 MULH_DU(gb1, xRDX, ed);
                 if (gd != vd) { MUL_D(vd, xRDX, ed); }
                 if (gb1 == x3) {
-                    OR(gd, gb1, gb1);
+                    MV(gd, gb1);
                 }
             } else {
-                MULH_WU(gb1, xRDX, ed);
-                if (gd != vd) { MUL_W(vd, xRDX, ed); }
-            }
-            if (gb1 == x3) {
-                BSTRINS_D(gd, gb1, 31, 0);
+                MULW_D_WU(x3, xRDX, ed);
+                if (gd != vd) { ZEROUP2(vd, x3); }
+                SRLI_D(gd, x3, 32);
             }
             break;
         case 0xF7:

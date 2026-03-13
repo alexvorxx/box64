@@ -12,6 +12,7 @@ on:
       - "**/*.py"
       - "CMakeLists.txt"
       - "**/*.yml"
+      - "**/*.def"
   pull_request:
     types: [assigned, opened, synchronize, reopened]
     paths:
@@ -21,6 +22,7 @@ on:
       - "**/*.py"
       - "CMakeLists.txt"
       - "**/*.yml"
+      - "**/*.def"
 
 jobs:
   build:

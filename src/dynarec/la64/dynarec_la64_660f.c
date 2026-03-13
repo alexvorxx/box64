@@ -809,6 +809,25 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     GETGX(q0, 1);
                     VMUL_W(q0, q0, q1);
                     break;
+                case 0x41:
+                    INST_NAME("PHMINPOSUW Gx, Ex");
+                    nextop = F8;
+                    GETEX(v1, 0, 0);
+                    GETGX(v0, 1);
+                    q0 = fpu_get_scratch(dyn);
+                    q1 = fpu_get_scratch(dyn);
+                    q2 = fpu_get_scratch(dyn);
+                    // v1[a,b,c,d,e,f,g,h]
+                    VSHUF4I_W(q0, v1, 0b01001110); // q0[e,f,g,h,a,b,c,d]
+                    VMIN_HU(q1, v1, q0);           // q1[ae,bf,cg,dh ...]
+                    VSHUF4I_H(q2, q1, 0b10110001); // q2[bf,ae,dh,cg ...]
+                    VMIN_HU(q1, q1, q2);           // q1[aebf,aebf,cgdh,cgdh ...]
+                    VSHUF4I_H(q0, q1, 0b01001110); // q0[cgdh,cgdh,aebf,aebf]
+                    VMIN_HU(q2, q0, q1);           // all lane is min(abcdefgh)
+                    VSEQ_H(q0, q2, v1);            // get mask(0xffff)
+                    VFRSTPI_H(q2, q0, 1);          // find first neg(0xffff),insert index to q2
+                    XVPICKVE_W(v0, q2, 0);
+                    break;
                 case 0xDB:
                     INST_NAME("AESIMC Gx, Ex"); // AES-NI
                     nextop = F8;
@@ -1379,7 +1398,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         ADDI_D(x1, xEmu, offsetof(x64emu_t, xmm[ed]));
                         ed = x1;
                     } else {
-                        addr = geted(dyn, addr, ninst, nextop, &ed, x1, x2, &fixedaddress, rex, NULL, 0, 1);
+                        addr = geted(dyn, addr, ninst, nextop, &ed, x1, x5, &fixedaddress, rex, NULL, 0, 1);
                     }
                     u8 = F8;
                     MOV32w(x3, u8);
@@ -2368,17 +2387,17 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     u8 = F8;
                     u8 &= (rex.w ? 0x3f : 0x0f);
                     if (cpuext.lbt) {
-                        SRLI_D(x3, ed, u8);
-                        X64_SET_EFLAGS(x3, X_CF);
+                        SRLI_D(x5, ed, u8);
+                        X64_SET_EFLAGS(x5, X_CF);
                     } else {
-                        BSTRPICK_D(x3, ed, u8, u8);
-                        BSTRINS_D(xFlags, x3, F_CF, F_CF);
+                        BSTRPICK_D(x5, ed, u8, u8);
+                        BSTRINS_D(xFlags, x5, F_CF, F_CF);
                     }
                     if (u8 <= 11) {
                         ORI(ed, ed, (1LL << u8));
                     } else {
-                        ADDI_D(x3, xZR, -1);
-                        BSTRINS_D(ed, x3, u8, u8);
+                        ADDI_D(x5, xZR, -1);
+                        BSTRINS_D(ed, x5, u8, u8);
                     }
                     EWBACK;
                     break;
@@ -2394,11 +2413,11 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     u8 = F8;
                     u8 &= (rex.w ? 0x3f : 0x0f);
                     if (cpuext.lbt) {
-                        SRLI_D(x3, ed, u8);
-                        X64_SET_EFLAGS(x3, X_CF);
+                        SRLI_D(x5, ed, u8);
+                        X64_SET_EFLAGS(x5, X_CF);
                     } else {
-                        BSTRPICK_D(x3, ed, u8, u8);
-                        BSTRINS_D(xFlags, x3, F_CF, F_CF);
+                        BSTRPICK_D(x5, ed, u8, u8);
+                        BSTRINS_D(xFlags, x5, F_CF, F_CF);
                     }
                     BSTRINS_D(ed, xZR, u8, u8);
                     EWBACK;
@@ -2415,11 +2434,11 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     u8 = F8;
                     u8 &= (rex.w ? 0x3f : 0x0f);
                     if (cpuext.lbt) {
-                        SRLI_D(x3, ed, u8);
-                        X64_SET_EFLAGS(x3, X_CF);
+                        SRLI_D(x5, ed, u8);
+                        X64_SET_EFLAGS(x5, X_CF);
                     } else {
-                        BSTRPICK_D(x3, ed, u8, u8);
-                        BSTRINS_D(xFlags, x3, F_CF, F_CF);
+                        BSTRPICK_D(x5, ed, u8, u8);
+                        BSTRINS_D(xFlags, x5, F_CF, F_CF);
                     }
                     if (u8 <= 11) {
                         XORI(ed, ed, (1LL << u8));
