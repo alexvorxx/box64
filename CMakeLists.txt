@@ -668,6 +668,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibice.c"
     "${BOX64_ROOT}/src/wrapped/wrappedliblapack.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibm.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlibmvec.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibncurses.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibncurses6.c"
     "${BOX64_ROOT}/src/wrapped/wrappedlibncursesw.c"
@@ -782,6 +783,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedsmime3.c"
     "${BOX64_ROOT}/src/wrapped/wrappedsmpeg2.c"
     "${BOX64_ROOT}/src/wrapped/wrappedssl3.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedsystemd.c"
     "${BOX64_ROOT}/src/wrapped/wrappedtbbbind.c"
     "${BOX64_ROOT}/src/wrapped/wrappedtbbmalloc.c"
     "${BOX64_ROOT}/src/wrapped/wrappedtbbmallocproxy.c"
@@ -1200,6 +1202,7 @@ if(PPC64LE_DYNAREC)
      "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_f0.c"
      "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_66f0.c"
      "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_emit_math.c"
+     "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_emit_logic.c"
       )
 endif()
 
