@@ -2703,12 +2703,57 @@ EXPORT char** my___environ = NULL;  // all aliases
 
 EXPORT int32_t my_execv(x64emu_t* emu, const char* path, char* const argv[])
 {
+    int ret;
+    int n = 0;
     int self = isProcSelf(path, "exe");
     int x64 = FileIsX64ELF(path);
     int x86 = my_context->box86path?FileIsX86ELF(path):0;
     int script = (my_context->bashpath && FileIsShell(path))?1:0;
     printf_log(LOG_DEBUG, "execv(\"%s\", %p) is x64=%d x86=%d script=%d self=%d\n", path, argv, x64, x86, script, self);
-    #if 1
+    while (argv[n])
+        ++n;
+    if (BOX64ENV(steam_vulkan) && n == 3 && !strcmp(argv[0], "sh") && !strcmp(argv[1], "-c") && strstr(argv[2], "steamwebhelper.sh")) {
+        char** newargv = (char**)box_calloc(n + 1, sizeof(char*));
+        for (int i = 0; i <= n; ++i)
+            newargv[i] = argv[i];
+        // For some reason, Steam UI on RISC-V/LoongArch does not have hardware accel.
+        // To workaround this, we insert `--enable-features=Vulkan` to the exec of steamwebhelper to force Vulkan.
+        // For cases where there is an existing `--enable-features=` string:
+        static const char* vulkanstr1 = "Vulkan,";
+        static const char* searchstr1 = "--enable-features=";
+        // For cases where there is no existing `--enable-features=` string:
+        static const char* vulkanstr2 = "--enable-features=Vulkan ";
+        static const char* searchstr2 = "--disable-features=";
+
+        size_t bufsize = strlen(newargv[2]) + strlen(vulkanstr1);
+        char* pos = strstr(newargv[2], searchstr1);
+        if (!pos) {
+            size_t bufsize = strlen(newargv[2]) + strlen(vulkanstr2);
+            pos = strstr(newargv[2], searchstr2);
+            if (!pos) goto do_exec;
+
+            char* newstr = (char*)box_calloc(bufsize + 1, 1);
+            size_t insertat = pos - newargv[2];
+            strncpy(newstr, newargv[2], insertat);
+            newstr[insertat] = '\0';
+            strcat(newstr, vulkanstr2);
+            strcat(newstr, newargv[2] + insertat);
+            newargv[2] = newstr;
+            goto do_exec;
+        }
+        char* newstr = (char*)box_calloc(bufsize + 1, 1);
+        size_t insertat = pos - newargv[2] + strlen(searchstr1);
+        strncpy(newstr, newargv[2], insertat);
+        newstr[insertat] = '\0';
+        strcat(newstr, vulkanstr1);
+        strcat(newstr, newargv[2] + insertat);
+        newargv[2] = newstr;
+    do_exec:
+        ret = execv(path, (void*)newargv);
+        box_free(newargv);
+        return ret;
+    }
+#if 1
     if (x64 || x86 || script || self) {
         int skip_first = 0;
         if(strlen(path)>=strlen("wine64-preloader") && strcmp(path+strlen(path)-strlen("wine64-preloader"), "wine64-preloader")==0)
@@ -2743,7 +2788,7 @@ EXPORT int32_t my_execv(x64emu_t* emu, const char* path, char* const argv[])
         box_free(newargv);
         return ret;
     }
-    #endif
+#endif
     return execv(path, argv);
 }
 
@@ -2921,7 +2966,7 @@ EXPORT int32_t my_execvp(x64emu_t* emu, const char* path, char* const argv[])
     return execvp(path, argv);
 }
 // execvp should use PATH to search for the program first
-EXPORT int32_t my_execvpe(x64emu_t* emu, const char* path, char* const argv[], char* const envp[])
+EXPORT int32_t my_execvpe(x64emu_t* emu, const char* path, char* argv[], char* const envp[])
 {
     // need to use BOX64_PATH / PATH here...
     char* fullpath = ResolveFileSoft(path, &my_context->box64_path);
@@ -2930,8 +2975,93 @@ EXPORT int32_t my_execvpe(x64emu_t* emu, const char* path, char* const argv[], c
     int x64 = FileIsX64ELF(fullpath);
     int x86 = my_context->box86path?FileIsX86ELF(fullpath):0;
     int script = (my_context->bashpath && FileIsShell(fullpath))?1:0;
-    printf_log(LOG_DEBUG, "execvpe(\"%s\", %p, %p), IsX86=%d / fullpath=\"%s\"\n", path, argv, envp, x64, fullpath);
+    printf_log(LOG_DEBUG, "execvpe(\"%s\", %p[%s,%s,%s], %p), IsX86=%d / fullpath=\"%s\"\n", path, argv, (argv && argv[0])?argv[0]:"(nil)", (argv && argv[0] && argv[1])?argv[1]:"(nil)", (argv && argv[0] && argv[1] && argv[2])?argv[2]:"(nil)", envp, x64, fullpath);
     // hack to update the environ var if needed
+    if(!x64 && !x86 && !script && !self && !strcmp(path, "/bin/sh") && argv) {
+        if(argv[0] && argv[1] && !strcmp(argv[1], "-c") && argv[2] && !argv[3]) {
+            // it's a "/bin/sh -c XXX" type of command line, with XXXX being the whole command line...
+            // because XXXX can contains things like "VAR=something" type of definition, getting the program to be launched can be tricky
+            char* prog = NULL;
+            char buff[MAX_PATH*3] = {0};
+            char buffsrlc[MAX_PATH*3] = {0};
+            char* multiarg2 = NULL;
+            int n = 0;
+            while(argv[n]) ++n;
+            if(FileExist(argv[2], IS_FILE))
+                prog = argv[2];
+            else {
+                #define SRLC "/usr/bin/steam-runtime-launch-client"
+                if(strstr(argv[2], SRLC) && !FileExist(SRLC, IS_FILE)) {
+                    char* runtime = getenv("BOX64_PRESSURE_ENV_PATH");
+                    char* srlc = strstr(argv[2], SRLC);
+                    if(runtime && ((srlc==argv[2]) || (*(srlc-1)==' '))) {
+                        strncpy(buffsrlc, argv[2], sizeof(buffsrlc)-1);
+                        *strstr(buffsrlc, SRLC) = '\0';
+                        strncat(buffsrlc, runtime, sizeof(buffsrlc)-1);
+                        strncat(buffsrlc, "/steam-runtime-launch-client", sizeof(buffsrlc)-1);
+                        strncat(buffsrlc, srlc+strlen(SRLC), sizeof(buffsrlc)-1);
+                        argv[2] = buffsrlc;
+                        printf_log(LOG_DEBUG, "Changed path of %s\n", SRLC);
+                    } else 
+                        printf_log(LOG_INFO, "Warning, trying to launch " SRLC " without BOX64_PRESSURE_ENV_PATH set\n");
+                }
+                #undef SRLC
+                strncpy(buff, argv[2], sizeof(buff)-1);
+                char* p = GetSpaceSeparator(buff);
+                char* prev = buff;
+                while(p && !prog) {
+                    char* next = p;
+                    while(*next==' ') ++next;
+                    char* p2 = strchr(prev, '=');
+                    if(!p2 || (p2>p)) {
+                        // found it
+                        multiarg2 = next;
+                        *p = '\0';
+                        prog = prev;
+                        prev = next;
+                        if(!strlen(prog) || !strcmp(prog, "mangohud")) {
+                            //nope, nothing found, rollback
+                            prog = NULL;
+                            multiarg2 = NULL;
+                            *p = ' ';
+                        }
+                    } else {
+                        // nope, there is a = in the middle (will not work if equal is escaped tho)
+                        prev = next;
+                    }
+                    p = GetSpaceSeparator(next);
+                }
+            }
+            // should check if start with '/' and resolve else
+            if(prog && FileExist(prog, IS_FILE)) {
+                x64 = FileIsX64ELF(prog);
+                x86 = my_context->box86path?FileIsX86ELF(prog):0;
+                script = (my_context->bashpath && FileIsShell(prog))?1:0;
+            }
+            if(x64 || x86 || script) {
+                char buff2[MAX_PATH*4] = {0};
+                // rebuild argv[2]
+                if(multiarg2) {
+                    // get the front stuffs first
+                    strncpy(buff2, argv[2], sizeof(buff2)-1);
+                    *strstr(buff2, prog) = '\0';
+                    strncat(buff2, " ", sizeof(buff2)-1);
+                    strncat(buff2, x86?emu->context->box86path:emu->context->box64path, sizeof(buff2)-1);
+                    strncat(buff2, " ", sizeof(buff2)-1);
+                    strncat(buff2, prog, sizeof(buff2)-1);
+                    strncat(buff2, " ", sizeof(buff2)-1);
+                    strncat(buff2, multiarg2, sizeof(buff2)-1);
+                } else {
+                    strcpy(buff2, x86?emu->context->box86path:emu->context->box64path);
+                    strncat(buff2, " ", sizeof(buff2)-1);
+                    strncat(buff2, argv[2], sizeof(buff2)-1);
+                }
+                argv[2] = buff2;
+                printf_log(LOG_DEBUG, "Will launch %s instead\n", argv[2]);
+                return execvpe(path, argv, envp);
+            }
+        }
+    }
     if(envp == my_context->envv && environ) {
         envp = environ;
     }

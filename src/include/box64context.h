@@ -74,6 +74,7 @@ typedef struct needed_libs_s {
     int         init_size;
     char**      names;
     library_t** libs;
+    path_collection_t* rpath;
     int         nb_done;
 } needed_libs_t;
 
@@ -144,6 +145,9 @@ typedef struct box64context_s {
 
     kh_threadstack_t    *stacksizes;    // stack sizes attributes for thread (temporary)
     bridge_t            *system;        // other bridges
+    #ifdef DYNAREC
+    bridge_t            *alternates;    // jump code for alternates
+    #endif
     uintptr_t           exit_bridge;    // exit bridge value
     uintptr_t           vsyscall;       // vsyscall bridge value
     uintptr_t           vsyscalls[3];   // the 3 x86 VSyscall pseudo bridges (mapped at 0xffffffffff600000+)
