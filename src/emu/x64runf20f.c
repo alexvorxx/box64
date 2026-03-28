@@ -173,7 +173,8 @@ uintptr_t RunF20F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                     nextop = F8;
                     _GETEB(0);
                     GETGD;
-                    GD->dword[0] ^=  EB->byte[0];
+                    tmp8u = EB->byte[0];
+                    GD->dword[0] ^= tmp8u;
                     for (int i = 0; i < 8; i++) {
                         if (GD->dword[0] & 1)
                             GD->dword[0] = (GD->dword[0] >> 1) ^ 0x82f63b78;
@@ -186,8 +187,9 @@ uintptr_t RunF20F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                     nextop = F8;
                     _GETED(0);
                     GETGD;
+                    tmp64u = ED->q[0];
                     for(int j=0; j<4*(rex.w+1); ++j) {
-                        GD->dword[0] ^=  ED->byte[j];
+                        GD->dword[0] ^= (tmp64u >> (j * 8)) & 0xff;
                         for (int i = 0; i < 8; i++) {
                             if (GD->dword[0] & 1)
                                 GD->dword[0] = (GD->dword[0] >> 1) ^ 0x82f63b78;
@@ -380,10 +382,15 @@ uintptr_t RunF20F(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
         ,,STEP3
     )                               /* 0x80 -> 0x8F Jxx */
 
-    case 0xA5:  // ignore F2 prefix
+    case 0xA4:  // ignore F2 prefix
+    case 0xA5:
+    case 0xAC:
+    case 0xAD:
+    case 0xAF:
     case 0xB7:
     case 0xBA:
     case 0xBC:  // this one is still BSR, not TZCNT
+    case 0xC1:
         #ifdef TEST_INTERPRETER 
         return Test0F(test, rex, addr-1, step);
         #else

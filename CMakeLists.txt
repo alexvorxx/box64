@@ -839,6 +839,9 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibtiff5.c"
     "${BOX64_ROOT}/src/wrapped/wrappedbrotlidec.c"
     "${BOX64_ROOT}/src/wrapped/wrappedzstd.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedproxy.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedssh4.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedsmbclient.c"
 )
 endif()
 if(ANDROID)
@@ -1204,6 +1207,7 @@ if(PPC64LE_DYNAREC)
      "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_emit_math.c"
      "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_emit_logic.c"
      "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_emit_tests.c"
+     "${BOX64_ROOT}/src/dynarec/ppc64le/dynarec_ppc64le_emit_shift.c"
       )
 endif()
 

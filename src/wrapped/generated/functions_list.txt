@@ -1348,6 +1348,7 @@
 #() iFppul
 #() iFppuL
 #() iFppup
+#() iFppUi
 #() iFppUU
 #() iFppUp
 #() iFppdi
@@ -2062,6 +2063,7 @@
 #() iFppIII
 #() iFppWpp
 #() iFppuwp
+#() iFppuii
 #() iFppuip
 #() iFppuuu
 #() iFppuuf
@@ -2077,6 +2079,7 @@
 #() iFpplii
 #() iFppllp
 #() iFpplpp
+#() iFppLii
 #() iFppLiL
 #() iFppLup
 #() iFppLLi
@@ -2654,6 +2657,7 @@
 #() iFppiiii
 #() iFppiiip
 #() iFppiipi
+#() iFppiipL
 #() iFppiipp
 #() iFppiuii
 #() iFppiupp
@@ -2702,6 +2706,7 @@
 #() iFpppipu
 #() iFpppipp
 #() iFpppuii
+#() iFpppuip
 #() iFpppuuu
 #() iFpppuup
 #() iFpppuLp
@@ -2757,6 +2762,7 @@
 #() uFpupupp
 #() uFpupppp
 #() uFppiiii
+#() uFppiuup
 #() uFppCCCC
 #() uFppuuup
 #() uFppuupu
@@ -4224,7 +4230,10 @@ wrappedcairo:
 - uFppp:
   - cairo_surface_write_to_png_stream
 - iFpppp:
+  - cairo_device_set_user_data
+  - cairo_font_face_set_user_data
   - cairo_pattern_set_user_data
+  - cairo_scaled_font_set_user_data
   - cairo_set_user_data
   - cairo_surface_set_user_data
 - pFppdd:
@@ -6386,6 +6395,7 @@ wrappedlibssl3:
   - SSL_set_verify
 - vFppp:
   - SSL_CTX_set_alpn_select_cb
+  - SSL_CTX_set_cert_cb
   - SSL_CTX_set_cert_verify_callback
   - SSL_CTX_set_next_proto_select_cb
 - lFpip:
@@ -6695,6 +6705,7 @@ wrappedpng16:
 - pFppppppp:
   - png_create_read_struct_2
   - png_create_write_struct_2
+wrappedproxy:
 wrappedpsl5:
 wrappedpulse:
 - vFp:
@@ -7132,6 +7143,11 @@ wrappedselinux:
   - selinux_get_callback
 - vFip:
   - selinux_set_callback
+wrappedsmbclient:
+- vFpp:
+  - smbc_setFunctionAuthDataWithContext
+- iFpi:
+  - smbc_init
 wrappedsmime3:
 - iFpp:
   - SEC_PKCS12DecoderValidateBags
@@ -7156,6 +7172,7 @@ wrappedsmpeg2:
 - pFppii:
   - SMPEG_new_rwops
 wrappedsoftokn3:
+wrappedssh4:
 wrappedssl3:
 wrappedsystemd:
 wrappedtbbbind:

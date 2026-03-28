@@ -106,7 +106,7 @@ void* LinkNext(x64emu_t* emu, uintptr_t addr, void* x2, uintptr_t* x3)
 }
 #endif
 
-void DynaCall(x64emu_t* emu, uintptr_t addr)
+void DynaCall(x64emu_t* emu, uintptr_t addr, int no_alt)
 {
     uint64_t old_rsp = R_RSP;
     uint64_t old_rbx = R_RBX;
@@ -131,7 +131,7 @@ void DynaCall(x64emu_t* emu, uintptr_t addr)
     emu->df = d_none;
     if(emu->flags.quitonlongjmp)
         emu->flags.need_jmpbuf = 1;
-    EmuRun(emu, 1);
+    EmuRun(emu, 1, no_alt);
     emu->quit = 0;  // reset Quit flags...
     emu->df = d_none;
     if(emu->flags.quitonlongjmp && emu->flags.longjmp) {
@@ -164,7 +164,7 @@ static dynablock_t* fastDBGetBlock(x64emu_t* emu, uintptr_t addr, int create, in
 }
 #endif
 
-void EmuRun(x64emu_t* emu, int use_dynarec)
+void EmuRun(x64emu_t* emu, int use_dynarec, int no_alt)
 {
     // prepare setjump for signal handling
     JUMPBUFF jmpbuf[1] = {0};
@@ -201,7 +201,10 @@ void EmuRun(x64emu_t* emu, int use_dynarec)
         }
         if(emu->flags.need_jmpbuf)
             emu->flags.need_jmpbuf = 0;
-        R_RIP = (uintptr_t)getAlternate((void*)R_RIP);
+        if(no_alt)
+            { no_alt = 0; skip = 1;}    // the Dynarec will shadow the Entry Point, so using Intperter to enter the function
+        else
+            R_RIP = (uintptr_t)getAlternate((void*)R_RIP);
 #ifdef DYNAREC
         if(!BOX64ENV(dynarec) || !use_dynarec)
 #endif
@@ -226,15 +229,15 @@ void EmuRun(x64emu_t* emu, int use_dynarec)
             }
             dynablock_t* block = (skip || ACCESS_FLAG(F_TF))?NULL:fastDBGetBlock(emu, R_RIP, 1, is32bits);
             if(!block || !block->block || !block->done || ACCESS_FLAG(F_TF)) {
-                skip = 0;
-                // no block, of block doesn't have DynaRec content (yet, temp is not null)
+                // no block, or block doesn't have DynaRec content (yet, temp is not null)
                 // Use interpreter (should use single instruction step...)
                 if(BOX64ENV(dynarec_log)) {
                     if(ACCESS_FLAG(F_TF))
                         dynarec_log(LOG_INFO, "%04d|Running Interpreter @%p, emu=%p because TF is on\n", GetTID(), (void*)R_RIP, emu);
                     else
-                        dynarec_log(LOG_DEBUG, "%04d|Running Interpreter @%p, emu=%p\n", GetTID(), (void*)R_RIP, emu);
+                        dynarec_log(LOG_DEBUG, "%04d|Running Interpreter @%p, emu=%p (skip=%d)\n", GetTID(), (void*)R_RIP, emu, skip);
                 }
+                skip = 0;
                 if (BOX64ENV(dynarec_test))
                     emu->test.clean = 0;
                 Run(emu, 1);
@@ -278,5 +281,5 @@ void EmuRun(x64emu_t* emu, int use_dynarec)
 
 void DynaRun(x64emu_t *emu)
 {
-    EmuRun(emu, 1);
+    EmuRun(emu, 1, 0);
 }
