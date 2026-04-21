@@ -207,10 +207,16 @@
 #define SMDMB() DMB_ISH()
 #endif
 
+#ifndef PREFLAGSNEEDED
+#define PREFLAGSNEEDED()
+#endif
+
 #define AREFLAGSNEEDED()    \
+    PREFLAGSNEEDED()        \
     if((dyn->insts[ninst].x64.need_before&~X_PEND) && (!ninst || dyn->insts[ninst-1].x64.has_callret)) {    \
         READFLAGS(dyn->insts[ninst].x64.need_before&~X_PEND);                                               \
-    }
+    }                                                                                                       \
+    ADDITIONNAL_CHECKS()
 
 // Insert a Secondary Entry Point if it's asked, but only on block that are from file mapped memory (so some binary file)
 //  and that are not flagged as always_test (as this could slow down a bit, and the block is unsafe), unless SEP level 2 is asked

@@ -78,6 +78,9 @@ uintptr_t dynarec64_AVX_0F38(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, 
                 BNEZ(gd, 8);
                 ORI(xFlags, xFlags, 1 << F_ZF);
             }
+            if (BOX64DRENV(dynarec_safeflags)) {
+                IFX (X_PF) emit_pf(dyn, ninst, gd, x2, x5);
+            }
             SPILL_EFLAGS();
             break;
         case 0xF3:
@@ -199,7 +202,7 @@ uintptr_t dynarec64_AVX_0F38(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, 
             break;
 
         case 0xF7:
-            INST_NAME("BEXTR Gd, Vd, Ed");
+            INST_NAME("BEXTR Gd, Ed, Vd");
             nextop = F8;
             SETFLAGS(X_ALL, SF_SET, NAT_FLAGS_NOFUSION);
             GETGD;

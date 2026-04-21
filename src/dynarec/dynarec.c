@@ -104,6 +104,31 @@ void* LinkNext(x64emu_t* emu, uintptr_t addr, void* x2, uintptr_t* x3)
     //dynablock_t *father = block->father?block->father:block;
     return jblock;
 }
+void* LinkNextInvalid(x64emu_t* emu, uintptr_t addr, void* x2, uintptr_t* x3)
+{
+    // like LinkNext, but invalid the db found first
+    int is32bits = (R_CS == 0x23);
+    dynablock_t* db = getDB(addr);
+    if(db) {
+        if(db->previous && !db->dirty && X31_hash_code(db->previous->x64_addr, db->previous->x64_size)==db->previous->hash)
+            db = DBSwitchPrevious(emu, db, addr, 1);
+        else
+            db = DBSwapInvalid(emu, db, addr, is32bits, 1);
+        if(db && db->done && db->block) {
+            void* jblock = db->block;
+            if(db->sep_size && (uintptr_t)db->x64_addr!=addr) {
+                jblock = NULL; // not sure how this would happens here, but lets put the case it starts on SEP anyway
+                for(int i=0; i<db->sep_size && !jblock; ++i) {
+                    if(addr==(uintptr_t)db->x64_addr + db->sep[i].x64_offs)
+                        jblock = db->block + db->sep[i].nat_offs;
+                }
+            }
+            if(jblock)
+                return jblock;
+        }
+    }
+    return LinkNext(emu, addr, x2, x3);
+}
 #endif
 
 void DynaCall(x64emu_t* emu, uintptr_t addr, int no_alt)
@@ -162,6 +187,21 @@ static dynablock_t* fastDBGetBlock(x64emu_t* emu, uintptr_t addr, int create, in
         ret = DBGetBlock(emu, R_RIP, 1, is32bits);
     return ret;
 }
+
+#ifdef HAVE_ALTJUMP
+static dynablock_t* getDBnoAlt(x64emu_t* emu, uintptr_t addr, int is32bits)
+{
+    dynablock_t* ret = getAlternateData((void*)addr);
+    if(ret == (void*)-1LL)
+        return NULL;
+    if(!ret) {
+        ret = CreateDBnoAlt(emu, addr, is32bits);
+        setAlternateData((void*)addr, ret);
+    }
+    dynarec_log(LOG_DEBUG, "Will use No-Alt block %p for Alt %p\n", ret, (void*)addr);
+    return ret;
+}
+#endif
 #endif
 
 void EmuRun(x64emu_t* emu, int use_dynarec, int no_alt)
@@ -202,7 +242,14 @@ void EmuRun(x64emu_t* emu, int use_dynarec, int no_alt)
         if(emu->flags.need_jmpbuf)
             emu->flags.need_jmpbuf = 0;
         if(no_alt)
-            { no_alt = 0; skip = 1;}    // the Dynarec will shadow the Entry Point, so using Intperter to enter the function
+            {
+                // the Dynarec will shadow the Entry Point, so using Intperter to enter the function
+                #if defined(DYNAREC) && defined(HAVE_ALTJUMP)
+                if(!BOX64ENV(dynarec))
+                #endif
+                    no_alt = 0;
+                skip = 1;
+            }
         else
             R_RIP = (uintptr_t)getAlternate((void*)R_RIP);
 #ifdef DYNAREC
@@ -228,6 +275,12 @@ void EmuRun(x64emu_t* emu, int use_dynarec, int no_alt)
                 }
             }
             dynablock_t* block = (skip || ACCESS_FLAG(F_TF))?NULL:fastDBGetBlock(emu, R_RIP, 1, is32bits);
+            #ifdef HAVE_ALTJUMP
+            if(skip && no_alt) {
+                block = getDBnoAlt(emu, R_RIP, is32bits);
+                no_alt = 0;
+            }
+            #endif
             if(!block || !block->block || !block->done || ACCESS_FLAG(F_TF)) {
                 // no block, or block doesn't have DynaRec content (yet, temp is not null)
                 // Use interpreter (should use single instruction step...)

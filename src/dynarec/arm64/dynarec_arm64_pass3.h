@@ -14,7 +14,7 @@
 
 #define MESSAGE(A, ...)                                                   \
     do {                                                                  \
-        if (dyn->need_dump) dynarec_log(LOG_NONE, __VA_ARGS__); \
+        if (dyn->need_dump) dynarec_log_prefix(0, LOG_NONE, __VA_ARGS__); \
     } while (0)
 #define ENDPREFIX   dyn->insts[ninst].size2 = 0
 #define NEW_INST        \
@@ -54,7 +54,7 @@
             dyn->sep[dyn->sep_size].nat_offs =  dyn->native_size;               \
             ++dyn->sep_size;                                                    \
         }                                                                       \
-        if(BOX64DRENV(dynarec_callret)>1) {                                     \
+        if((A) && (BOX64DRENV(dynarec_callret)>1) && !dyn->always_test) {       \
             dyn->callrets[dyn->callret_size].type = 0;                          \
             dyn->callrets[dyn->callret_size++].offs = dyn->native_size;         \
             EMIT(ARCH_NOP);                                                     \

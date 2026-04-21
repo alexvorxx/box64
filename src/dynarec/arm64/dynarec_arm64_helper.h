@@ -841,30 +841,10 @@
     ORRw_REG_LSL(s3, s3, s1, 8);                                            \
     STRH_U12(s3, xEmu, offsetof(x64emu_t, sw))
 
-// Generate FCOMI with s1 and s2 scratch regs (the VCMP is already done)
-#define FCOMI(s1, s2)                                                       \
-    IFX(X_OF|X_AF|X_SF) {                                                   \
-        MOV32w(s2, 0b100011010101);                                         \
-        BICw_REG(xFlags, xFlags, s2);                                       \
-        IFX(X_CF|X_PF|X_ZF) {                                               \
-            MOV32w(s2, 0b01000101);                                         \
-        }                                                                   \
-    } else {                                                                \
-        IFX(X_CF|X_PF|X_ZF) {                                               \
-            MOV32w(s2, 0b01000101);                                         \
-            BICw_REG(xFlags, xFlags, s2);                                   \
-        }                                                                   \
-    }                                                                       \
-    IFX(X_CF|X_PF|X_ZF) {                                                   \
-        CSETw(s1, cMI); /* 1 if less than, 0 else */                        \
-        /*s2 already set */     /* unordered */                             \
-        CSELw(s1, s2, s1, cVS);                                             \
-        MOV32w(s2, 0b01000000); /* zero */                                  \
-        CSELw(s1, s2, s1, cEQ);                                             \
-        /* greater than leave 0 */                                          \
-        ORRw_REG(xFlags, xFlags, s1);                                       \
-    }                                                                       \
-    SET_DFNONE();                                                           \
+// Generate FCOMI with s1 and s2 scratch regs (the VCMP is not done)
+#define FCOMIS(s1, s2, d1, d2)  emit_fcomi(dyn, ninst, s1, s2, 1, d1, d2)
+#define FCOMID(s1, s2, d1, d2)  emit_fcomi(dyn, ninst, s1, s2, 0, d1, d2)
+#define FCOMI(s1, s2, isfloat, d1, d2)  emit_fcomi(dyn, ninst, s1, s2, isfloat, d1, d2)
 
 #ifndef IF_UNALIGNED
 #define IF_UNALIGNED(A)    if(dyn->insts[ninst].unaligned)
@@ -1097,6 +1077,11 @@
     dyn->doublepop = 0;
 #define ARCH_RESET()
 
+#undef PREFLAGSNEEDED
+#define PREFLAGSNEEDED()                                                                                        \
+    if(dyn->always_test && ninst && (dyn->insts[ninst].sep || (ninst && dyn->insts[ninst-1].x64.has_callret)))  \
+        checkCRC(dyn, ninst);
+
 #if STEP < 2
 #define GETIP(A) MOV64x(xRIP, A)
 #define GETIP_(A) MOV64x(xRIP, A)
@@ -1307,6 +1292,7 @@
 #define emit_shld16     STEPNAME(emit_shld16)
 
 #define emit_pf         STEPNAME(emit_pf)
+#define emit_fcomi      STEPNAME(emit_fcomi)
 
 #define x87_do_push         STEPNAME(x87_do_push)
 #define x87_do_push_empty   STEPNAME(x87_do_push_empty)
@@ -1339,6 +1325,7 @@
 #define doPreload         STEPNAME(doPreload)
 #define doEnterBlock      STEPNAME(doEnterBlock)
 #define doLeaveBlock      STEPNAME(doLeaveBlock)
+#define checkCRC          STEPNAME(checkCRC)
 
 #define fpu_pushcache   STEPNAME(fpu_pushcache)
 #define fpu_popcache    STEPNAME(fpu_popcache)
@@ -1354,6 +1341,7 @@
 #define avx_purge_ymm   STEPNAME(avx_purge_ymm)
 
 #define CacheTransform       STEPNAME(CacheTransform)
+#define additionnal_checks   STEPNAME(additionnal_checks)
 
 #define arm64_move32        STEPNAME(arm64_move32)
 #define arm64_move64        STEPNAME(arm64_move64)
@@ -1479,6 +1467,7 @@ void emit_shld16c(dynarec_arm_t* dyn, int ninst, int s1, int s2, uint32_t c, int
 void emit_shld16(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s5, int s3, int s4);
 
 void emit_pf(dynarec_arm_t* dyn, int ninst, int s1, int s4);
+void emit_fcomi(dynarec_arm_t* dyn, int ninst, int s1, int s2, int isfloat, int d1, int d2);
 
 // x87 helper
 // cache of the local stack counter, to avoid update at every call, return old internal stack counter
@@ -1519,6 +1508,7 @@ int sse_setround(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3);
 void avx_purge_ymm(dynarec_arm_t* dyn, int ninst, uint16_t mask, int s1);
 
 void CacheTransform(dynarec_arm_t* dyn, int ninst, int cacheupd);
+void additionnal_checks(dynarec_arm_t* dyn, int ninst);
 
 void arm64_move32(dynarec_arm_t* dyn, int ninst, int reg, uint32_t val);
 void arm64_move64(dynarec_arm_t* dyn, int ninst, int reg, uint64_t val);
@@ -1611,6 +1601,8 @@ void doPreload(dynarec_arm_t* dyn, int ninst);
 void doEnterBlock(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3);
 // Leave a block (atomic decrement of in_used)
 void doLeaveBlock(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3);
+// in case of allways_test, this insert a check of crc of the dynablock (and exit to ArmNext if wrong)
+void checkCRC(dynarec_arm_t* dyn, int ninst);
 
 uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
 uintptr_t dynarec64_0F(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int ninst, rex_t rex, int* ok, int* need_epilog);
@@ -1765,13 +1757,21 @@ uintptr_t dynarec64_AVX_F3_0F38(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip
         break;                                              \
     case B+0xA:                                             \
         INST_NAME(T1 "P " T2);                              \
+        IFNATIVE(NF_PF_V) {                                 \
+        GO( , cVC, cVS, X_PF)                               \
+        } else {                                            \
         GO( TSTw_mask(xFlags, 0b011110, 0)                  \
             , cEQ, cNE, X_PF)                               \
+        }                                                   \
         break;                                              \
     case B+0xB:                                             \
         INST_NAME(T1 "NP " T2);                             \
+        IFNATIVE(NF_PF_V) {                                 \
+        GO( , cVS, cVC, X_PF)                               \
+        } else {                                            \
         GO( TSTw_mask(xFlags, 0b011110, 0)                  \
             , cNE, cEQ, X_PF)                               \
+        }                                                   \
         break;                                              \
     case B+0xC:                                             \
         INST_NAME(T1 "L " T2);                              \

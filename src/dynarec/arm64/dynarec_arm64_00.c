@@ -2936,6 +2936,8 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                     LDRx_REG(x3, x1, x2);
                     //LDRx_U12(x3, x1, offsetof(box64context_t, signals[X64_SIGTRAP]));
                     CMPSx_U12(x3, 0);
+                    // commit df before branch, CALL_S in int3 path has FORCE_DFNONE
+                    CHECK_DFNONE(0);
                     B_MARK(cEQ);
                     GETIP(addr);  // update RIP
                     STORE_XEMU_CALL(xRIP);
@@ -3823,17 +3825,14 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         // Push actual return address
                         if(addr < (dyn->start+dyn->isize)) {
                             // there is a next...
-                            if(BOX64DRENV(dynarec_callret)>1)
+                            if(BOX64DRENV(dynarec_callret)>1 && !dyn->always_test)
                                 j64 = CALLRET_GETRET();
                             else
                                 j64 = (dyn->insts)?(dyn->insts[ninst].epilog-(dyn->native_size)):0;
                             ADR_S20(x4, j64);
                             MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
                         } else {
-                            if(BOX64DRENV(dynarec_callret)>1)
-                                j64 = CALLRET_GETRET();
-                            else
-                                j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
+                            j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
                             ADR_S20(x4, j64);
                             MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
                         }
@@ -4534,7 +4533,7 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                         // Push actual return address
                         if(addr < (dyn->start+dyn->isize)) {
                             // there is a next...
-                            if(BOX64DRENV(dynarec_callret)>1)
+                            if(BOX64DRENV(dynarec_callret)>1 && !dyn->always_test)
                                 j64 = CALLRET_GETRET();
                             else
                                 j64 = (dyn->insts)?(dyn->insts[ninst].epilog-(dyn->native_size)):0;
@@ -4589,14 +4588,17 @@ uintptr_t dynarec64_00(dynarec_arm_t* dyn, uintptr_t addr, uintptr_t ip, int nin
                             // Push actual return address. Note that CS will not be tested, but that should be ok?
                             if(can_continue) {
                                 // there is a next...
-                                if(BOX64DRENV(dynarec_callret)>1)
+                                if(BOX64DRENV(dynarec_callret)>1 && !dyn->always_test)
                                     j64 = CALLRET_GETRET();
                                 else
                                     j64 = (dyn->insts)?(dyn->insts[ninst].epilog-(dyn->native_size)):0;
                                 ADR_S20(x4, j64);
                                 MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
                             } else {
-                                j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
+                                if(BOX64DRENV(dynarec_callret)>1 && !dyn->always_test)
+                                    j64 = CALLRET_GETRET();
+                                else
+                                    j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
                                 ADR_S20(x4, j64);
                                 MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
                             }

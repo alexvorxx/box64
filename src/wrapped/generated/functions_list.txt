@@ -271,6 +271,7 @@
 #() CFpL
 #() CFpp
 #() WFpi
+#() WFpW
 #() WFpp
 #() uFEp
 #() uFii
@@ -320,6 +321,7 @@
 #() fFfp
 #() fFpi
 #() fFpu
+#() fFpf
 #() fFpL
 #() fFpp
 #() fFbu
@@ -381,6 +383,7 @@
 #() pFWW
 #() pFui
 #() pFuu
+#() pFud
 #() pFul
 #() pFuL
 #() pFup
@@ -497,7 +500,6 @@
 #() vFllp
 #() vFlpp
 #() vFLup
-#() vFLpi
 #() vFLpL
 #() vFLpp
 #() vFpcu
@@ -643,6 +645,7 @@
 #() iFpuC
 #() iFpuu
 #() iFpuU
+#() iFpuf
 #() iFpul
 #() iFpuL
 #() iFpup
@@ -758,6 +761,7 @@
 #() uFpff
 #() uFpli
 #() uFplu
+#() uFpLi
 #() uFpLu
 #() uFpLL
 #() uFpLp
@@ -774,6 +778,7 @@
 #() uFbuU
 #() uFbup
 #() UFpup
+#() UFpUU
 #() UFppi
 #() UFbCC
 #() UFbCu
@@ -926,6 +931,7 @@
 #() pFpui
 #() pFpuu
 #() pFpuf
+#() pFpud
 #() pFpul
 #() pFpuL
 #() pFpup
@@ -1367,6 +1373,7 @@
 #() iFpppC
 #() iFpppu
 #() iFpppU
+#() iFpppd
 #() iFpppL
 #() iFpppp
 #() iFpONN
@@ -1400,7 +1407,9 @@
 #() uFEppp
 #() uFiiii
 #() uFiiuu
+#() uFiipp
 #() uFifff
+#() uFippp
 #() uFuipi
 #() uFuuuu
 #() uFuupp
@@ -1421,7 +1430,9 @@
 #() uFLpUp
 #() uFLppp
 #() uFpiii
+#() uFpiiu
 #() uFpiip
+#() uFpiup
 #() uFpipi
 #() uFpipu
 #() uFpipL
@@ -1488,6 +1499,7 @@
 #() UFbuuW
 #() UFbuuu
 #() UFbuup
+#() dFppdd
 #() dFpppp
 #() lFEipV
 #() lFEpip
@@ -1529,6 +1541,7 @@
 #() LFippp
 #() LFuipL
 #() LFpipl
+#() LFpipL
 #() LFpCii
 #() LFpupL
 #() LFplLL
@@ -1562,6 +1575,7 @@
 #() pFEpip
 #() pFEpiV
 #() pFEpCL
+#() pFEplp
 #() pFEppi
 #() pFEppu
 #() pFEppp
@@ -1598,6 +1612,7 @@
 #() pFDipp
 #() pFlfff
 #() pFLiip
+#() pFLupp
 #() pFLLup
 #() pFLLLL
 #() pFLLpp
@@ -1615,7 +1630,6 @@
 #() pFpipi
 #() pFpipu
 #() pFpipd
-#() pFpipL
 #() pFpipp
 #() pFpCip
 #() pFpCuu
@@ -1978,6 +1992,7 @@
 #() iFpiuwp
 #() iFpiuuu
 #() iFpiuLi
+#() iFpiupi
 #() iFpiupp
 #() iFpiUpi
 #() iFpiLip
@@ -2028,6 +2043,7 @@
 #() iFpUiip
 #() iFpffff
 #() iFpffpp
+#() iFpdddd
 #() iFplupp
 #() iFplluu
 #() iFpLiup
@@ -2122,8 +2138,8 @@
 #() uFiuuuu
 #() uFiuppi
 #() uFipupp
-#() uFipLpp
 #() uFuiiii
+#() uFupLpp
 #() uFULCLL
 #() uFULWLL
 #() uFULuLL
@@ -2141,6 +2157,7 @@
 #() uFpuupu
 #() uFpuupp
 #() uFpupuu
+#() uFpupLp
 #() uFpuppp
 #() uFpULuU
 #() uFpUppp
@@ -2161,6 +2178,7 @@
 #() uFppLLu
 #() uFppLLp
 #() uFppLpu
+#() uFppLpL
 #() uFppLpp
 #() uFpppip
 #() uFpppuu
@@ -2192,6 +2210,7 @@
 #() fFlplpl
 #() fFppppL
 #() dFlplpl
+#() dFppddd
 #() dFppppL
 #() lFEippL
 #() lFEuipp
@@ -2600,6 +2619,7 @@
 #() iFpiCCpu
 #() iFpiuuup
 #() iFpiuupp
+#() iFpiupip
 #() iFpipipi
 #() iFpipipp
 #() iFpipupp
@@ -2758,8 +2778,10 @@
 #() uFpuuupp
 #() uFpuuppp
 #() uFpuUppp
+#() uFpupuup
 #() uFpupupu
 #() uFpupupp
+#() uFpupppu
 #() uFpupppp
 #() uFppiiii
 #() uFppiuup
@@ -2870,6 +2892,7 @@
 #() pFpuuuup
 #() pFpuuupu
 #() pFpupuui
+#() pFpupuuu
 #() pFpupuup
 #() pFpuppip
 #() pFpupppp
@@ -3114,9 +3137,10 @@
 #() iFpWCiWCi
 #() iFpWppppW
 #() iFpWppppp
+#() iFpuiiuuu
 #() iFpuiCuCp
-#() iFpuiuupp
 #() iFpuuuuup
+#() iFpuuuupp
 #() iFpupuupp
 #() iFpupuLpL
 #() iFpupupui
@@ -3137,7 +3161,6 @@
 #() iFpLppiip
 #() iFppiiiii
 #() iFppiiiip
-#() iFppiiuup
 #() iFppiiLll
 #() iFppiipii
 #() iFppiipiL
@@ -3242,6 +3265,7 @@
 #() pFWpppppp
 #() pFuuuiiip
 #() pFuupupup
+#() pFudddduu
 #() pFfiiiiid
 #() pFduuulul
 #() pFpiiiiid
@@ -3274,6 +3298,7 @@
 #() pFppipLpp
 #() pFppuipii
 #() pFppuippp
+#() pFppuuuuu
 #() pFppuuupu
 #() pFppuuupp
 #() pFppuLLip
@@ -3423,6 +3448,7 @@
 #() iFpippuupp
 #() iFpCCWWpWu
 #() iFpWCuWCuu
+#() iFpuiiipip
 #() iFpuiipppp
 #() iFpuippLpp
 #() iFpuCiuuuu
@@ -3430,6 +3456,7 @@
 #() iFpuuipppp
 #() iFpuuuiiii
 #() iFpuuuuuup
+#() iFpuuuuppp
 #() iFpuuupupu
 #() iFpuupuupp
 #() iFpuuppiip
@@ -3449,7 +3476,6 @@
 #() iFpLppLpip
 #() iFpLpppupu
 #() iFpLpppppp
-#() iFppiiipip
 #() iFppillppp
 #() iFppipiipi
 #() iFppIIIppp
@@ -3529,7 +3555,9 @@
 #() pFpipiuiip
 #() pFpuuuuupp
 #() pFpuuuupup
+#() pFpudddduu
 #() pFpuLdiiLi
+#() pFpupupuuu
 #() pFpupLLLpp
 #() pFpupppppp
 #() pFplpppppp
@@ -3620,6 +3648,7 @@
 #() vFpplpppppi
 #() vFpppiiiiii
 #() vFpppiiiipp
+#() vFpppuuuuuu
 #() vFpppUupppU
 #() vFpppffffff
 #() vFppppiiiii
@@ -3633,6 +3662,7 @@
 #() iFEppuppppp
 #() iFEpppupppp
 #() iFEppplPPPP
+#() iFEpppLpLpp
 #() iFEppppLppp
 #() iFEpppppupp
 #() iFEppppppuu
@@ -3686,6 +3716,7 @@
 #() uFEpppufppp
 #() uFuulpiuiuf
 #() uFpuupuppuu
+#() uFpLiipLLLp
 #() uFppLpLuppp
 #() uFppppppppp
 #() UFbCuWCCuuu
@@ -3712,6 +3743,7 @@
 #() pFpiiiiuuuu
 #() pFpLpLLipui
 #() pFpLppLLiLi
+#() pFppupupuuu
 #() pFppupppppp
 #() pFpppiiiiii
 #() pFpppuipppp
@@ -3785,6 +3817,7 @@
 #() iFEpupppLppL
 #() iFEppiiiippp
 #() iFEppLuppupp
+#() iFEppppLpppp
 #() iFEppppppipp
 #() iFEpppppppip
 #() iFiuuupppppu
@@ -3886,6 +3919,7 @@
 #() iFuppipipippi
 #() iFpiiLLiiipip
 #() iFpippupppppp
+#() iFpuuiiuuiiuu
 #() iFpuppppppppp
 #() iFpLipiiiippp
 #() iFpLLpiiuuiiL
@@ -3893,7 +3927,6 @@
 #() iFppuupLiupii
 #() iFppuppLLpupp
 #() iFppLLupppLpp
-#() iFpppiiuuiiuu
 #() iFpppippppppp
 #() iFpppppiiuupp
 #() uFEpLuupppLuV
@@ -3912,6 +3945,7 @@
 #() pFEppiiLpppip
 #() pFEppuiipuuii
 #() pFEpppppppppp
+#() pFpupppppuuuu
 #() pFpppppppuipp
 #() pFppppppppppp
 #() iWEpuipuppppp
@@ -3992,10 +4026,12 @@
 #() iFddddpppddpppp
 #() iFpiiuppppppppp
 #() iFpippuuuiipppp
+#() iFpupiwwWWwwWWu
 #() iFpLLlliiLppppp
 #() iFppppppLLLLupp
 #() iFppppppppppppp
 #() uFippuuuulllipp
+#() uFpiipupLpLpLpL
 #() uFpppppuupppppp
 #() UFbCuuwwWWWWuup
 #() LFEpLiiuuuiupLp
@@ -4146,7 +4182,6 @@
 #() iFEv -> iFE
 #() lFEv -> lFE
 #() pFEv -> pFE
-#() vFvLpi -> vFLpi
 #() iFEvpp -> iFEpp
 #() pFEppv -> pFEpp
 #() iFEpvpp -> iFEppp
@@ -4299,6 +4334,14 @@ wrappedcrypto3:
   - CRYPTO_set_locking_callback
   - OSSL_PARAM_construct_end
 - pFp:
+  - BIO_meth_get_callback_ctrl
+  - BIO_meth_get_create
+  - BIO_meth_get_ctrl
+  - BIO_meth_get_destroy
+  - BIO_meth_get_gets
+  - BIO_meth_get_puts
+  - BIO_meth_get_read
+  - BIO_meth_get_write
   - OPENSSL_sk_new
   - X509V3_EXT_get
 - vFpp:
@@ -4307,6 +4350,7 @@ wrappedcrypto3:
   - X509_STORE_CTX_set_verify_cb
   - X509_STORE_set_verify_cb
 - iFpp:
+  - BIO_meth_set_callback_ctrl
   - BIO_meth_set_gets
   - UI_method_set_closer
   - UI_method_set_opener
@@ -4432,6 +4476,8 @@ wrappeddbus:
   - dbus_connection_register_fallback
   - dbus_connection_register_object_path
   - dbus_pending_call_set_notify
+- pFpppV:
+  - dbus_message_new_error_printf
 - uFppppp:
   - dbus_connection_try_register_fallback
   - dbus_connection_try_register_object_path
@@ -4592,6 +4638,8 @@ wrappedgio2:
   - g_simple_async_result_set_op_res_gpointer
   - g_task_return_pointer
   - g_task_set_task_data
+- pFplp:
+  - g_memory_input_stream_new_from_data
 - vFippp:
   - g_bus_get
 - vFppip:
@@ -5319,6 +5367,8 @@ wrappedlber:
 - iFppip:
   - ber_sockbuf_add_io
 wrappedlcms2:
+- vFpp:
+  - cmsSetLogErrorHandlerTHR
 wrappedldapr:
 - iFpppppupp:
   - ldap_sasl_interactive_bind_s
@@ -5946,12 +5996,20 @@ wrappedlibhogweed6:
   - nettle_dsa_generate_params
 - iFppppppp:
   - nettle_rsa_decrypt_tr
+- iFpppLpLpp:
+  - nettle_rsa_oaep_sha256_encrypt
+  - nettle_rsa_oaep_sha384_encrypt
+  - nettle_rsa_oaep_sha512_encrypt
 - iFppppLppp:
   - nettle_rsa_pss_sha256_sign_digest_tr
   - nettle_rsa_pss_sha384_sign_digest_tr
   - nettle_rsa_pss_sha512_sign_digest_tr
 - iFppppppuu:
   - nettle_rsa_generate_keypair
+- iFppppLpppp:
+  - nettle_rsa_oaep_sha256_decrypt
+  - nettle_rsa_oaep_sha384_decrypt
+  - nettle_rsa_oaep_sha512_decrypt
 wrappedlibibus:
 - vFpippp:
   - ibus_bus_current_input_context_async
@@ -6450,6 +6508,8 @@ wrappedlibvdpau:
   - vdp_device_create_x11
 wrappedlibvorbis:
 wrappedlibvpx:
+- iFpppp:
+  - vpx_codec_set_frame_buffer_functions
 wrappedlibx11:
 - vFp:
   - XcmsFreeCCC
@@ -6629,6 +6689,7 @@ wrappedlzma:
   - lzma_stream_buffer_decode
 wrappedmpg123:
 - iFpppp:
+  - mpg123_reader64
   - mpg123_replace_reader_handle
   - mpg123_replace_reader_handle_64
 wrappednotify:
@@ -7309,6 +7370,7 @@ wrappedvulkan:
   - vkDestroySamplerYcbcrConversionKHR
   - vkDestroySemaphore
   - vkDestroyShaderEXT
+  - vkDestroyShaderInstrumentationARM
   - vkDestroyShaderModule
   - vkDestroySurfaceKHR
   - vkDestroySwapchainKHR
@@ -7367,6 +7429,7 @@ wrappedvulkan:
   - vkCreateSamplerYcbcrConversion
   - vkCreateSamplerYcbcrConversionKHR
   - vkCreateSemaphore
+  - vkCreateShaderInstrumentationARM
   - vkCreateShaderModule
   - vkCreateSwapchainKHR
   - vkCreateTensorARM

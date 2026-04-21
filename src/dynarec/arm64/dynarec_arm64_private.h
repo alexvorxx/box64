@@ -14,6 +14,7 @@ typedef struct box64env_s box64env_t;
 #define NF_SF   (1<<1)
 #define NF_VF   (1<<2)
 #define NF_CF   (1<<3)
+#define NF_PF_V (1<<4)
 
 // Nothing happens to the native flags
 #define NAT_FLAG_OP_NONE        0
@@ -125,7 +126,8 @@ typedef struct instruction_arm64_s {
     uint8_t             will_read:1;     // [strongmem] will read from memory
     uint8_t             last_write:1;    // [strongmem] the last write in a SEQ
     uint8_t             lock:1;          // [strongmem] lock semantic
-    uint8_t             wfe:1;        // opcode uses sevl + wfe
+    uint8_t             wfe:1;           // opcode uses sevl + wfe
+    uint8_t             sep:1;           // opcode is a secondary entry point
     uint8_t             set_nat_flags;  // 0 or combinaison of native flags define
     uint8_t             use_nat_flags;  // 0 or combinaison of native flags define
     uint8_t             use_nat_flags_before;  // 0 or combinaison of native flags define
@@ -137,6 +139,7 @@ typedef struct instruction_arm64_s {
     unsigned            normal_carry:1;
     unsigned            normal_carry_before:1;
     unsigned            invert_carry:1; // this opcode force an inverted carry
+    unsigned            df_needed:1;
     unsigned            df_notneeded:1;
     unsigned            unaligned:1;    // this opcode can be re-generated for unaligned special case
     unsigned            x87precision:1; // this opcode can handle x87pc

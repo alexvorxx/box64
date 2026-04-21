@@ -90,19 +90,15 @@ static void json_fill_array(struct json_array_s* array, uint64_t* values)
     }
 }
 
-static void loadTest(const char** filepath, const char* include_path)
+static struct json_value_s* extractTestConfig(const char* filepath)
 {
-    FILE* file = fopen(*filepath, "r");
-    if (!file) {
-        printf_log(LOG_NONE, "Failed to open test file: %s\n", *filepath);
-        exit(1);
-    }
+    FILE* file = fopen(filepath, "r");
+    if (!file) return NULL;
 
-    // read file line by line
     char* line = NULL;
     size_t line_capacity = 0;
     char* json = calloc(4096, 1);
-    size_t json_capacity = 1;
+    size_t json_capacity = 4096;
     size_t json_length = 0;
     bool in_config = false;
 
@@ -119,14 +115,10 @@ static void loadTest(const char** filepath, const char* include_path)
             size_t chunk_length = (size_t)line_length;
             size_t needed = json_length + chunk_length + 1;
             if (needed > json_capacity) {
-                size_t new_capacity = json_capacity;
-                while (new_capacity < needed)
-                    new_capacity *= 2;
-
-                json = realloc(json, new_capacity);
-                json_capacity = new_capacity;
+                while (json_capacity < needed)
+                    json_capacity *= 2;
+                json = realloc(json, json_capacity);
             }
-
             memcpy(json + json_length, line, chunk_length);
             json_length += chunk_length;
             json[json_length] = '\0';
@@ -137,6 +129,139 @@ static void loadTest(const char** filepath, const char* include_path)
     fclose(file);
     struct json_value_s* config = json_parse(json, json_length);
     free(json);
+    return config;
+}
+
+#define MAX_TEST_VARS           32
+#define MAX_TEST_VAR_VALUES     16
+
+struct test_var_combos {
+    int num_vars;
+    char* names[MAX_TEST_VARS];
+    int num_values[MAX_TEST_VARS];
+    char* values[MAX_TEST_VARS][MAX_TEST_VAR_VALUES];
+    int total_combos;
+};
+
+static struct test_var_combos getTestVariableCombos(const char* filepath)
+{
+    struct test_var_combos combos = { 0 };
+    combos.total_combos = 1;
+
+    struct json_value_s* config = extractTestConfig(filepath);
+    if (!config || config->type != json_type_object) {
+        free(config);
+        return combos;
+    }
+
+    struct json_value_s* vars = json_find(config->payload, "Variables");
+    if (vars && vars->type == json_type_object) {
+        struct json_object_s* object = (struct json_object_s*)vars->payload;
+        struct json_object_element_s* element = object->start;
+        while (element && combos.num_vars < MAX_TEST_VARS) {
+            int v = combos.num_vars;
+            combos.names[v] = strdup(element->name->string);
+            if (element->value->type == json_type_string) {
+                struct json_string_s* value = (struct json_string_s*)element->value->payload;
+                combos.values[v][0] = strdup(value->string);
+                combos.num_values[v] = 1;
+            } else if (element->value->type == json_type_array) {
+                struct json_array_s* array = (struct json_array_s*)element->value->payload;
+                struct json_array_element_s* arr_elem = array->start;
+                int vi = 0;
+                while (arr_elem && vi < MAX_TEST_VAR_VALUES) {
+                    if (arr_elem->value->type == json_type_string) {
+                        struct json_string_s* val = (struct json_string_s*)arr_elem->value->payload;
+                        combos.values[v][vi] = strdup(val->string);
+                        vi++;
+                    }
+                    arr_elem = arr_elem->next;
+                }
+                combos.num_values[v] = vi;
+            }
+            if (combos.num_values[v] > 0) {
+                combos.total_combos *= combos.num_values[v];
+                combos.num_vars++;
+            } else {
+                free(combos.names[v]);
+            }
+            element = element->next;
+        }
+    }
+
+    free(config);
+    return combos;
+}
+
+static int isDynarecOff(struct test_var_combos* combos, int combo_index)
+{
+    int stride = 1;
+    for (int v = combos->num_vars - 1; v >= 0; v--) {
+        int idx = (combo_index / stride) % combos->num_values[v];
+        if (!strcmp(combos->names[v], "BOX64_DYNAREC") && !strcmp(combos->values[v][idx], "0"))
+            return 1;
+        stride *= combos->num_values[v];
+    }
+    return 0;
+}
+
+static int shouldSkipCombo(struct test_var_combos* combos, int combo_index)
+{
+    if (!isDynarecOff(combos, combo_index))
+        return 0;
+    int stride = 1;
+    for (int v = combos->num_vars - 1; v >= 0; v--) {
+        int idx = (combo_index / stride) % combos->num_values[v];
+        // when BOX64_DYNAREC=0, only keep the one where all BOX64_DYNAREC_* vars are at first value
+        if (!strncmp(combos->names[v], "BOX64_DYNAREC_", 14) && idx != 0)
+            return 1;
+        stride *= combos->num_values[v];
+    }
+    return 0;
+}
+
+static void applyTestVarCombo(struct test_var_combos* combos, int combo_index)
+{
+    int dynarec_off = isDynarecOff(combos, combo_index);
+    int stride = 1;
+    for (int v = combos->num_vars - 1; v >= 0; v--) {
+        int value_index = (combo_index / stride) % combos->num_values[v];
+        if (!dynarec_off || strncmp(combos->names[v], "BOX64_DYNAREC_", 14))
+            setenv(combos->names[v], combos->values[v][value_index], 1);
+        stride *= combos->num_values[v];
+    }
+}
+
+static void printTestVarCombo(struct test_var_combos* combos, int combo_index, int display_index, int display_total)
+{
+    int dynarec_off = isDynarecOff(combos, combo_index);
+    int indices[MAX_TEST_VARS];
+    int stride = 1;
+    for (int v = combos->num_vars - 1; v >= 0; v--) {
+        indices[v] = (combo_index / stride) % combos->num_values[v];
+        stride *= combos->num_values[v];
+    }
+    fprintf(stdout, "\033[44;37m[BOX64] Running combination %d/%d:", display_index, display_total);
+    for (int v = 0; v < combos->num_vars; v++) {
+        if (!dynarec_off || strncmp(combos->names[v], "BOX64_DYNAREC_", 14))
+            fprintf(stdout, " %s=%s", combos->names[v], combos->values[v][indices[v]]);
+    }
+    fprintf(stdout, "\033[0m\n");
+    fflush(stdout);
+}
+
+static void freeTestVarCombos(struct test_var_combos* combos)
+{
+    for (int v = 0; v < combos->num_vars; v++) {
+        free(combos->names[v]);
+        for (int i = 0; i < combos->num_values[v]; i++)
+            free(combos->values[v][i]);
+    }
+}
+
+static void loadTest(const char** filepath, const char* include_path)
+{
+    struct json_value_s* config = extractTestConfig(*filepath);
     if (!config || config->type != json_type_object) {
         printf_log(LOG_NONE, "Failed to parse JSON configuration.\n");
         exit(1);
@@ -383,18 +508,8 @@ static void setupZydis(box64context_t* context)
 #endif
 }
 
-int unittest(int argc, const char** argv)
+static int runSingleTest(const char* filepath, const char* include_path)
 {
-    if (argc < 3 || (strcmp(argv[1], "--test") && strcmp(argv[1], "-t"))) {
-        printf_log(LOG_NONE, "Usage: %s -t <filepath> [-i <include>]\n", argv[0]);
-        return 0;
-    }
-
-    const char* include_path = NULL;
-    if (argc > 4 && (!strcmp(argv[3], "-i") || !strcmp(argv[3], "--include"))) {
-        include_path = argv[4];
-    }
-
     box64_pagesize = sysconf(_SC_PAGESIZE);
     LoadEnvVariables();
     InitializeSystemInfo();
@@ -413,15 +528,19 @@ int unittest(int argc, const char** argv)
     if (!box64env.is_cputype_overridden && cputype) SET_BOX64ENV(cputype, cputype);
 
     PrintEnvVariables(&box64env, LOG_INFO);
-    my_context = NewBox64Context(argc - 1);
+    my_context = NewBox64Context(0);
 
-    loadTest(&argv[2], include_path); // will modify argv[2] to point to the binary file
-    my_context->fullpath = box_strdup(argv[2]);
+    loadTest(&filepath, include_path); // will modify filepath to point to the binary file
+    my_context->fullpath = box_strdup(filepath);
 
     FILE* f = fopen(my_context->fullpath, "rb");
     unlink(my_context->fullpath);
 
     elfheader_t* elf_header = LoadAndCheckElfHeader(f, my_context->fullpath, 1);
+    if (!elf_header) {
+        printf_log(LOG_NONE, "Error: failed to load ELF header from test binary\n");
+        exit(1);
+    }
     AddElfHeader(my_context, elf_header);
     CalcLoadAddr(elf_header);
     AllocLoadElfMemory(my_context, elf_header, 1);
@@ -504,6 +623,86 @@ int unittest(int argc, const char** argv)
     else
         printf_log(LOG_NONE, "Failed with %d errors\n", retcode);
 
-
     return retcode;
+}
+
+int unittest(int argc, const char** argv)
+{
+    const char* filepath = NULL;
+    const char* include_path = NULL;
+    int combo_number = -1;  // -1 means run all
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--test") || !strcmp(argv[i], "-t")) {
+            if (i + 1 < argc)
+                filepath = argv[++i];
+        } else if (!strcmp(argv[i], "--include") || !strcmp(argv[i], "-i")) {
+            if (i + 1 < argc)
+                include_path = argv[++i];
+        } else if (!strcmp(argv[i], "--number") || !strcmp(argv[i], "-n")) {
+            if (i + 1 < argc)
+                combo_number = atoi(argv[++i]);
+        }
+    }
+
+    if (!filepath) {
+        fprintf(stdout, "Usage: %s -t <filepath> [-i <include>] [-n <combo_number>]\n", argv[0]);
+        return 0;
+    }
+
+    struct test_var_combos combos = getTestVariableCombos(filepath);
+
+    int actual_total = 0;
+    for (int c = 0; c < combos.total_combos; c++) {
+        if (!shouldSkipCombo(&combos, c))
+            actual_total++;
+    }
+
+    if (combo_number != -1) {
+        if (combo_number < 1 || combo_number > actual_total) {
+            fprintf(stderr, "[BOX64] Error: combination number %d is out of range (valid: 1-%d)\n", combo_number, actual_total);
+            freeTestVarCombos(&combos);
+            return 1;
+        }
+    }
+
+    int retcode = 0;
+    int display_index = 0;
+    for (int c = 0; c < combos.total_combos; c++) {
+        if (shouldSkipCombo(&combos, c))
+            continue;
+        display_index++;
+        if (combo_number != -1 && display_index != combo_number)
+            continue;
+        if (actual_total > 1)
+            printTestVarCombo(&combos, c, display_index, actual_total);
+        pid_t pid = fork();
+        if (pid == 0) {
+            applyTestVarCombo(&combos, c);
+            freeTestVarCombos(&combos);
+            _exit(runSingleTest(filepath, include_path));
+        } else if (pid > 0) {
+            int status;
+            waitpid(pid, &status, 0);
+            if (WIFEXITED(status)) {
+                if (WEXITSTATUS(status) != 0) retcode++;
+            } else {
+                retcode++;
+            }
+        } else {
+            fprintf(stderr, "fork() failed\n");
+            retcode++;
+        }
+    }
+
+    int combos_run = (combo_number != -1) ? 1 : actual_total;
+    if (combos_run > 1) {
+        if (retcode == 0)
+            fprintf(stdout, "[BOX64] All %d combinations passed\n", combos_run);
+        else
+            fprintf(stdout, "[BOX64] %d out of %d combinations failed\n", retcode, combos_run);
+    }
+
+    freeTestVarCombos(&combos);
+    return retcode ? 1 : 0;
 }

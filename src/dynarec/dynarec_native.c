@@ -419,7 +419,7 @@ dynablock_t* CreateEmptyBlock(uintptr_t addr, int is32bits, int is_new) {
     return block;
 }
 
-dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new) {
+dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new, int noalt) {
     /*
         A Block must have this layout:
 
@@ -437,7 +437,7 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new)
     const uint32_t req_prot = (box64_pagesize==4096)?(PROT_EXEC|PROT_READ):PROT_READ;
     uintptr_t old_addr = addr;
     #ifdef HAVE_ALTJUMP
-    uintptr_t altjump = getAlternateJump((void*)addr, is32bits);
+    uintptr_t altjump = noalt?0:getAlternateJump((void*)addr, is32bits);
     if(altjump) {
         dynarec_log(LOG_INFO, "Building a Dynablock for %p with an alternate content at %p\n", (void*)addr, (void*)altjump);
         addr = altjump;
@@ -487,6 +487,9 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new)
     helper.next_cap = MAX_INSTS;
     helper.table64 = NULL;
     helper.env = GetCurEnvByAddr(addr);
+    if(getProtection(addr)&PROT_NEVERCLEAN) {
+        helper.always_test = 1;
+    }
     ResetTable64(&helper);
     helper.table64cap = 0;
     helper.end = addr + SizeFileMapped(addr);
@@ -740,7 +743,7 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new)
                 --imax;
                 if(dyn->need_dump || BOX64ENV(dynarec_log))dynarec_log(LOG_NONE, "Dynablock oversized, with %zu (max=%zd), recomputing cutting at %d from %d\n", native_size, MAXBLOCK_SIZE, imax, helper.size);
                 CancelBlock64(0);
-                return FillBlock64(old_addr, is32bits, imax, is_new);
+                return FillBlock64(old_addr, is32bits, imax, is_new, noalt);
             }
             insts_rsize = (helper.insts_size+2)*sizeof(instsize_t);
             insts_rsize = (insts_rsize+7)&~7;   // round the size...
@@ -789,6 +792,7 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new)
             helper.sep = (sep_t*)seps;
             block->prefixsize = helper.prefixsize;
             block->table64 = helper.table64;
+            helper.dynablock = block;
             if(callret_size)
                 memcpy(helper.callrets, static_callrets, helper.callret_size*sizeof(callret_t));
             helper.callret_size = 0;
@@ -831,7 +835,13 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new)
             block->isize = helper.size;
             block->block = p;
             block->jmpnext = next+sizeof(void*);
+            #ifdef ARCH_CRC_INLINE
+            block->always_test = 0;
+            block->autocrc = helper.always_test?1:0;
+            #else
             block->always_test = helper.always_test;
+            block->autocrc = 0;
+            #endif
             block->dirty = block->always_test;
             block->is32bits = is32bits;
             block->relocsize = helper.reloc_size*sizeof(uint32_t);
@@ -908,11 +918,13 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new)
         block->dirty = 1;
         //protectDB(addr, end-addr);
     }
-    if(getProtection(addr)&PROT_NEVERCLEAN) {
-        block->always_test = 1;
-    }
-    else if(is_inhotpage)
+#ifdef ARCH_CRC_INLINE
+    if(is_inhotpage && !block->autocrc)
         block->always_test = 2;
+#else
+    if(is_inhotpage)
+        block->always_test = 2;
+#endif
     if(block->always_test) {
         dynarec_log(LOG_INFO, "Note: block marked as always dirty %p:%ld\n", block->x64_addr, block->x64_size);
         #ifdef ARCH_NOP

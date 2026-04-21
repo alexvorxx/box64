@@ -10,6 +10,7 @@
 #include "box64context.h"
 #include "box64cpu.h"
 #include "emu/x64emu_private.h"
+#include "../dynablock_private.h"
 #include "x64emu.h"
 #include "box64stack.h"
 #include "callback.h"
@@ -37,6 +38,7 @@ uintptr_t dynarec64_00_3(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
     int64_t i64, j64;
     uint8_t u8;
     uint8_t gb1, gb2, eb1, eb2;
+    uint16_t u16;
     uint32_t u32;
     uint64_t u64;
     uint8_t wback, wb1, wb2, wb;
@@ -283,9 +285,16 @@ uintptr_t dynarec64_00_3(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             if (BOX64DRENV(dynarec_safeflags)) {
                 READFLAGS(X_PEND); // lets play safe here too
             }
-            fpu_purgecache(dyn, ninst, 1, x1, x2, x3); // using next, even if there no next
-            i32 = F16;
-            retn_to_epilog(dyn, ip, ninst, rex, i32);
+            BARRIER(BARRIER_FLOAT);
+            u16 = F16;
+            POP1z(xRIP);
+            if (u16 < 0x7ff)
+                ADDIz(xRSP, xRSP, u16);
+            else {
+                MOV32w(x1, u16);
+                ADDz(xRSP, xRSP, x1);
+            }
+            ret_to_next(dyn, ip, ninst, rex);
             *need_epilog = 0;
             *ok = 0;
             break;
@@ -295,8 +304,9 @@ uintptr_t dynarec64_00_3(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             if (BOX64DRENV(dynarec_safeflags)) {
                 READFLAGS(X_PEND); // so instead, force the deferred flags, so it's not too slow, and flags are not lost
             }
-            fpu_purgecache(dyn, ninst, 1, x1, x2, x3); // using next, even if there no next
-            ret_to_epilog(dyn, ip, ninst, rex);
+            BARRIER(BARRIER_FLOAT);
+            POP1z(xRIP);
+            ret_to_next(dyn, ip, ninst, rex);
             *need_epilog = 0;
             *ok = 0;
             break;
@@ -432,7 +442,45 @@ uintptr_t dynarec64_00_3(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             MVz(xRSP, xRBP);
             POP1z(xRBP);
             break;
-
+        case 0xCA:
+            INST_NAME("FAR RETN");
+            u16 = F16;
+            READFLAGS(X_PEND);
+            BARRIER(BARRIER_FLOAT);
+            if (rex.w) {
+                POP1(xRIP);
+                POP1(x3);
+            } else {
+                POP1_32(xRIP);
+                POP1_32(x3);
+            }
+            SH(x3, xEmu, offsetof(x64emu_t, segs[_CS]));
+            if (u16 < 2048)
+                ADDIz(xRSP, xRSP, u16);
+            else {
+                MOV32w(x1, u16);
+                ADDz(xRSP, xRSP, x1);
+            }
+            ret_to_next(dyn, ip, ninst, rex);
+            *need_epilog = 0;
+            *ok = 0;
+            break;
+        case 0xCB:
+            INST_NAME("FAR RET");
+            READFLAGS(X_PEND);
+            BARRIER(BARRIER_FLOAT);
+            if (rex.w) {
+                POP1(xRIP);
+                POP1(x3);
+            } else {
+                POP1_32(xRIP);
+                POP1_32(x3);
+            }
+            SH(x3, xEmu, offsetof(x64emu_t, segs[_CS]));
+            ret_to_next(dyn, ip, ninst, rex);
+            *need_epilog = 0;
+            *ok = 0;
+            break;
         case 0xCC:
             SETFLAGS(X_ALL, SF_SET_NODF, NAT_FLAGS_NOFUSION); // Hack, set all flags (to an unknown state...)
             SKIPTEST(x1);
@@ -559,7 +607,7 @@ uintptr_t dynarec64_00_3(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             INST_NAME("IRET");
             SETFLAGS(X_ALL, SF_SET_NODF, NAT_FLAGS_NOFUSION); // Not a hack, EFLAGS are restored
             BARRIER(BARRIER_FLOAT);
-            iret_to_epilog(dyn, ip, ninst, rex.w);
+            iret_to_next(dyn, ip, ninst, rex.is32bits, rex.w);
             *need_epilog = 0;
             *ok = 0;
             break;
@@ -1093,13 +1141,25 @@ uintptr_t dynarec64_00_3(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     }
                     fpu_purgecache(dyn, ninst, 1, x1, x3, x4);
                     PUSH1z(x2);
+                    int can_continue = (addr < (dyn->start + dyn->isize));
                     if (BOX64DRENV(dynarec_callret)) {
                         SET_HASCALLRET();
                         // Push actual return address
-                        j64 = (dyn->insts) ? (GETMARK - (dyn->native_size)) : 0;
-                        AUIPC(x4, ((j64 + 0x800) >> 12) & 0xfffff);
-                        ADDI(x4, x4, j64 & 0xfff);
-                        MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64 >> 2);
+                        if(can_continue) {
+                            // there is a next...
+                            if(BOX64DRENV(dynarec_callret)>1 && !dyn->always_test)
+                                j64 = CALLRET_GETRET();
+                            else
+                                j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
+                            AUIPC(x4, SPLIT20(j64));
+                            ADDI(x4, x4, SPLIT12(j64));
+                            MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
+                        } else {
+                            j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
+                            AUIPC(x4, SPLIT20(j64));
+                            ADDI(x4, x4, SPLIT12(j64));
+                            MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
+                        }
                         ADDI(xSP, xSP, -16);
                         SD(x4, xSP, 0);
                         SD(x2, xSP, 8);
@@ -1112,10 +1172,11 @@ uintptr_t dynarec64_00_3(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     else
                         j64 = addr + i32;
                     jump_to_next(dyn, j64, 0, ninst, rex.is32bits);
+                    CALLRET_RET(can_continue);
                     MARK;
-                    if (BOX64DRENV(dynarec_callret) && dyn->vector_sew != VECTOR_SEWNA)
+                    if (BOX64DRENV(dynarec_callret) && can_continue && dyn->vector_sew != VECTOR_SEWNA)
                         vector_vsetvli(dyn, ninst, x3, dyn->vector_sew, VECTOR_LMUL1, 1);
-                    if (BOX64DRENV(dynarec_callret) && addr >= (dyn->start + dyn->isize)) {
+                    if (BOX64DRENV(dynarec_callret) && !can_continue) {
                         // jumps out of current dynablock...
                         j64 = getJumpTableAddress64(addr);
                         if (dyn->need_reloc) {
@@ -1127,6 +1188,7 @@ uintptr_t dynarec64_00_3(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                         LD(x4, x4, 0);
                         BR(x4);
                     }
+                    CLEARIP();
                     break;
             }
             break;
@@ -1649,26 +1711,107 @@ uintptr_t dynarec64_00_3(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     GETIP_(addr, x7);
                     if (BOX64DRENV(dynarec_callret)) {
                         SET_HASCALLRET();
-                        j64 = (dyn->insts) ? (GETMARK - (dyn->native_size)) : 0;
-                        AUIPC(x4, ((j64 + 0x800) >> 12) & 0xfffff);
-                        ADDI(x4, x4, j64 & 0xfff);
-                        MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64 >> 2);
+                        // Push actual return address
+                        if(addr < (dyn->start+dyn->isize)) {
+                            // there is a next...
+                            if(BOX64DRENV(dynarec_callret)>1 && !dyn->always_test)
+                                j64 = CALLRET_GETRET();
+                            else
+                                j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
+                            AUIPC(x4, SPLIT20(j64));
+                            ADDI(x4, x4, SPLIT12(j64));
+                            MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
+                        } else {
+                            j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
+                            AUIPC(x4, SPLIT20(j64));
+                            ADDI(x4, x4, SPLIT12(j64));
+                            MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
+                        }
                         ADDI(xSP, xSP, -16);
                         SD(x4, xSP, 0);
                         SD(xRIP, xSP, 8);
                     }
                     PUSH1z(xRIP);
                     jump_to_next(dyn, 0, ed, ninst, rex.is32bits);
+                    int can_continue = (addr < (dyn->start + dyn->isize));
+                    CALLRET_RET(can_continue);
                     MARK;
-                    if (BOX64DRENV(dynarec_callret) && dyn->vector_sew != VECTOR_SEWNA)
+                    if (BOX64DRENV(dynarec_callret) && can_continue && dyn->vector_sew != VECTOR_SEWNA)
                         vector_vsetvli(dyn, ninst, x3, dyn->vector_sew, VECTOR_LMUL1, 1);
-                    if (BOX64DRENV(dynarec_callret) && addr >= (dyn->start + dyn->isize)) {
+                    if (BOX64DRENV(dynarec_callret) && !can_continue) {
                         // jumps out of current dynablock...
                         j64 = getJumpTableAddress64(addr);
-                        if (dyn->need_reloc) AddRelocTable64RetEndBlock(dyn, ninst, addr, STEP);
+                        if(dyn->need_reloc) AddRelocTable64RetEndBlock(dyn, ninst, addr, STEP);
                         TABLE64_(x4, j64);
                         LD(x4, x4, 0);
                         BR(x4);
+                    }
+                    CLEARIP();
+                    break;
+                case 3: // CALL FAR Ed
+                    if(MODREG) {
+                        DEFAULT;
+                    } else {
+                        INST_NAME("CALL FAR Ed");
+                        PASS2IF ((BOX64DRENV(dynarec_safeflags) > 1) || ((ninst && dyn->insts[ninst - 1].x64.set_flags) || ((ninst > 1) && dyn->insts[ninst - 2].x64.set_flags)), 1) {
+                            READFLAGS(X_PEND); // that's suspicious
+                        } else {
+                            SETFLAGS(X_ALL, SF_SET_NODF, NAT_FLAGS_NOFUSION); // Hack to put flag in "don't care" state
+                        }
+                        SMREAD();
+                        addr = geted(dyn, addr, ninst, nextop, &wback, x2, x1, &fixedaddress, rex, NULL, 0, 0);
+                        LDz(x1, wback, 0);
+                        ed = x1;
+                        LHU(x3, wback, rex.w?8:4);
+                        LHU(x5, xEmu, offsetof(x64emu_t, segs[_CS]));
+                        if (BOX64DRENV(dynarec_callret) && BOX64DRENV(dynarec_bigblock) > 1) {
+                            BARRIER(BARRIER_FULL);
+                        } else {
+                            BARRIER(BARRIER_FLOAT);
+                            *need_epilog = 0;
+                            *ok = 0;
+                        }
+                        GETIP_(addr, x7);
+                        if (BOX64DRENV(dynarec_callret)) {
+                            SET_HASCALLRET();
+                            // Push actual return address
+                            if(addr < (dyn->start+dyn->isize)) {
+                                // there is a next...
+                                if(BOX64DRENV(dynarec_callret)>1 && !dyn->always_test)
+                                    j64 = CALLRET_GETRET();
+                                else
+                                    j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
+                                AUIPC(x4, SPLIT20(j64));
+                                ADDI(x4, x4, SPLIT12(j64));
+                                MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
+                            } else {
+                                j64 = (dyn->insts)?(GETMARK-(dyn->native_size)):0;
+                                AUIPC(x4, SPLIT20(j64));
+                                ADDI(x4, x4, SPLIT12(j64));
+                                MESSAGE(LOG_NONE, "\tCALLRET set return to +%di\n", j64>>2);
+                            }
+                            ADDI(xSP, xSP, -16);
+                            SD(x4, xSP, 0);
+                            SD(xRIP, xSP, 8);
+                        }
+                        PUSH1z(x5);
+                        PUSH1z(xRIP);
+                        SH(x3, xEmu, offsetof(x64emu_t, segs[_CS]));
+                        jump_to_next(dyn, 0, ed, ninst, rex.is32bits);
+                        int can_continue = (addr < (dyn->start + dyn->isize));
+                        CALLRET_RET(can_continue);
+                        MARK;
+                        if (BOX64DRENV(dynarec_callret) && can_continue && dyn->vector_sew != VECTOR_SEWNA)
+                            vector_vsetvli(dyn, ninst, x3, dyn->vector_sew, VECTOR_LMUL1, 1);
+                        if (BOX64DRENV(dynarec_callret) && !can_continue) {
+                            // jumps out of current dynablock...
+                            j64 = getJumpTableAddress64(addr);
+                            if(dyn->need_reloc) AddRelocTable64RetEndBlock(dyn, ninst, addr, STEP);
+                            TABLE64_(x4, j64);
+                            LD(x4, x4, 0);
+                            BR(x4);
+                        }
+                        CLEARIP();
                     }
                     break;
                 case 4: // JMP Ed

@@ -213,6 +213,18 @@ void MarkRangeDynablock(dynablock_t* db, uintptr_t addr, uintptr_t size)
         MarkDynablock(db);
 }
 
+void MarkCRCRangeDynablock(dynablock_t* db, uintptr_t addr, uintptr_t size)
+{
+    // Mark will try to find *any* blocks that intersect the range to mark
+    if(!db)
+        return;
+    dynarec_log(LOG_DEBUG, "MarkCRCRangeDynablock %p-%p .. startdb=%p, sizedb=%p\n", (void*)addr, (void*)addr+size-1, (void*)db->x64_addr, (void*)db->x64_size);
+    if(IntervalIntersects((uintptr_t)db->x64_addr, (uintptr_t)db->x64_addr+db->x64_size-1, addr, addr+size+1)) {
+        MarkDynablock(db);  // mark as dirty
+        db->to_delete = 1;  // also invalid hash, so it will be deleted and replace
+    }
+}
+
 int FreeRangeDynablock(dynablock_t* db, uintptr_t addr, uintptr_t size)
 {
     if(!db)
@@ -233,6 +245,45 @@ void dynablock_leave_runtime(dynablock_t* db)
     __atomic_fetch_sub(&db->in_used, 1, __ATOMIC_ACQ_REL);
 }
 
+dynablock_t* CreateDBnoAlt(x64emu_t* emu, uintptr_t addr, int is32bits)
+{
+    #ifndef WIN32
+    static int critical_filled = 0;
+    static sigset_t critical_prot = {0};
+    sigset_t old_sig = {0};
+    if(!critical_filled) {
+        critical_filled = 1;
+        sigfillset(&critical_prot);
+        sigdelset(&critical_prot, SIGSEGV);
+        sigdelset(&critical_prot, SIGILL);
+        sigdelset(&critical_prot, SIGBUS);
+        sigdelset(&critical_prot, SIGINT);
+        sigdelset(&critical_prot, SIGABRT);
+        sigdelset(&critical_prot, SIGFPE);
+    }
+    #endif
+
+    pthread_sigmask(SIG_BLOCK, &critical_prot, &old_sig);
+
+    if(BOX64ENV(dynarec_wait)) {
+        mutex_lock(&my_context->mutex_dyndump);
+    } else {
+        if(mutex_trylock(&my_context->mutex_dyndump)) {   // FillBlock not available for now
+            pthread_sigmask(SIG_SETMASK, &old_sig, NULL);
+            return NULL;
+        }
+    }
+
+    dynarec_log(LOG_DEBUG, "Will call Fillblock64 for Alt %p\n", (void*)addr);
+    dynablock_t* block = FillBlock64(addr, is32bits, MAX_INSTS, 0, 1);
+
+    mutex_unlock(&my_context->mutex_dyndump);
+
+    pthread_sigmask(SIG_SETMASK, &old_sig, NULL);
+
+    return block;
+}
+
 /* 
     return NULL if block is not found / cannot be created. 
     Don't create if create==0
@@ -243,6 +294,11 @@ static dynablock_t* internalDBGetBlock(x64emu_t* emu, uintptr_t addr, int create
     if(BOX64ENV(nodynarec_delay) && (addr>=BOX64ENV(nodynarec_start)) && (addr<BOX64ENV(nodynarec_end)))
         return NULL;
     dynablock_t* block = getDB(addr);
+    if(block && block->to_delete) {
+        // just delete the block then, so we can create a new one right away
+        FreeDynablock(block, 1, 1);
+        block = NULL;
+    }
     if(block || !create) {
         if(block && getNeedTest(addr) && (getProtection(block->x64_readaddr)&req_prot)!=req_prot)
             block = NULL;
@@ -276,6 +332,11 @@ static dynablock_t* internalDBGetBlock(x64emu_t* emu, uintptr_t addr, int create
             }
         }
         block = getDB(addr);    // just in case
+        if(block && block->to_delete) {
+            // just delete the block then, so we can create a new one right away
+            FreeDynablock(block, 0, 1);
+            block = NULL;
+        }
         if(block) {
             if(block && getNeedTest(addr) && (getProtection_fast(block->x64_readaddr)&req_prot)!=req_prot)
                 block = NULL;
@@ -284,7 +345,7 @@ static dynablock_t* internalDBGetBlock(x64emu_t* emu, uintptr_t addr, int create
             return block;
         }
     }
-    block = FillBlock64(addr, is32bits, MAX_INSTS, is_new);
+    block = FillBlock64(addr, is32bits, MAX_INSTS, is_new, 0);
     if(!block) {
         dynarec_log(LOG_DEBUG, "Fillblock of block %p for %p returned an error\n", block, (void*)addr);
     }
@@ -330,7 +391,7 @@ dynablock_t* DBSwapInvalid(x64emu_t* emu, dynablock_t* db, uintptr_t addr, int i
     if(need_lock)
         mutex_lock(&my_context->mutex_dyndump);
     db->done = 0;   // invalidating the block
-    dynarec_log(LOG_DEBUG, "Invalidating alt block %p from %p:%p (hash:%X) for %p\n", db, db->x64_addr, db->x64_addr+db->x64_size, db->hash, (void*)addr);
+    dynarec_log(LOG_DEBUG, "Invalidating alt block %p from %p:%p (hash:%X, gone:%d, autocrc:%d, to_delete:%d) for %p\n", db, db->x64_addr, db->x64_addr+db->x64_size, db->hash, db->gone, db->autocrc, db->to_delete, (void*)addr);
     // Free db, it's now invalid!
     dynablock_t* old = InvalidDynablock(db, 0);
     if(old->previous) {
