@@ -136,10 +136,10 @@ static void* findGTaskThreadFuncFct(void* fct)
 
 // GDBusProxyTypeFunc
 #define GO(A)   \
-static uintptr_t my_GDBusProxyTypeFunc_fct_##A = 0;                                                           \
-static int my_GDBusProxyTypeFunc_##A(void* manager, void* path, void* name, void* data)                       \
-{                                                                                                             \
-    return (int)RunFunctionFmt(my_GDBusProxyTypeFunc_fct_##A, "pppp", manager, path, name, data); \
+static uintptr_t my_GDBusProxyTypeFunc_fct_##A = 0;                                                     \
+static uintptr_t my_GDBusProxyTypeFunc_##A(void* manager, void* path, void* name, void* data)           \
+{                                                                                                       \
+    return (uintptr_t)RunFunctionFmt(my_GDBusProxyTypeFunc_fct_##A, "pppp", manager, path, name, data); \
 }
 SUPER()
 #undef GO
@@ -229,9 +229,9 @@ static void* findGDBusSignalCallbackFct(void* fct)
 // GDBusMessageFilterFunction
 #define GO(A)   \
 static uintptr_t my_GDBusMessageFilterFunction_fct_##A = 0;                                                         \
-static void my_GDBusMessageFilterFunction_##A(void* connection, void* message, int incoming, void* data)            \
+static void* my_GDBusMessageFilterFunction_##A(void* connection, void* message, int incoming, void* data)            \
 {                                                                                                                   \
-    RunFunctionFmt(my_GDBusMessageFilterFunction_fct_##A, "ppip", connection, message, incoming, data); \
+    return (void*)RunFunctionFmt(my_GDBusMessageFilterFunction_fct_##A, "ppip", connection, message, incoming, data); \
 }
 SUPER()
 #undef GO
