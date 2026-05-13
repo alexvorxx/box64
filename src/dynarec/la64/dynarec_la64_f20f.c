@@ -98,12 +98,18 @@ uintptr_t dynarec64_F20F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             GETGX(v0, 1);
             GETED(0);
             d1 = fpu_get_scratch(dyn);
+            if (BOX64ENV(dynarec_fastround) <= 1) {
+                u8 = sse_setround(dyn, ninst, x2, x3);
+            }
             if (rex.w) {
                 MOVGR2FR_D(d1, ed);
                 FFINT_D_L(d1, d1);
             } else {
                 MOVGR2FR_W(d1, ed);
                 FFINT_D_W(d1, d1);
+            }
+            if (BOX64ENV(dynarec_fastround) <= 1) {
+                x87_restoreround(dyn, ninst, u8);
             }
             VEXTRINS_D(v0, d1, 0);
             break;
@@ -266,7 +272,13 @@ uintptr_t dynarec64_F20F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             GETGX(v0, 1);
             GETEXSD(d0, 0, 0);
             d1 = fpu_get_scratch(dyn);
+            if (BOX64ENV(dynarec_fastround) <= 1) {
+                u8 = sse_setround(dyn, ninst, x2, x3);
+            }
             FCVT_S_D(d1, d0);
+            if (BOX64ENV(dynarec_fastround) <= 1) {
+                x87_restoreround(dyn, ninst, u8);
+            }
             VEXTRINS_W(v0, d1, 0);
             break;
         case 0x5C:
@@ -414,6 +426,25 @@ uintptr_t dynarec64_F20F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                 VBITSEL_V(q0, q0, d1, d0);
             }
             break;
+
+        case 0xA3: // ignore F2 prefix
+        case 0xA4:
+        case 0xA5:
+        case 0xAB:
+        case 0xAC:
+        case 0xAD:
+        case 0xAF:
+        case 0xB3:
+        case 0xB7:
+        case 0xBA:
+        case 0xBB:
+        case 0xBC: // this one is still BSR, not TZCNT
+        case 0xBD: // and this one is still BSF, not LZCNT
+        case 0xBF:
+        case 0xC1:
+        case 0xCD:
+            return dynarec64_0F(dyn, addr - 1, ip, ninst, rex, ok, need_epilog);
+
         case 0xAE:
             nextop = F8;
             switch ((nextop >> 3) & 7) {

@@ -256,17 +256,17 @@
       },
       {
         "key": "1",
-        "description": "Build Dynarec block as big as possible.",
+        "description": "Build DynaRec block as big as possible.",
         "default": false
       },
       {
         "key": "2",
-        "description": "Build Dynarec block bigger, do not stop when block overlaps, but only for blocks in elf memory.",
+        "description": "Build DynaRec block bigger, do not stop when block overlaps, but only for blocks in elf memory.",
         "default": true
       },
       {
         "key": "3",
-        "description": "Build Dynarec block bigger, do not stop when block overlaps, for all type of memory, useful for wine programs.",
+        "description": "Build DynaRec block bigger, do not stop when block overlaps, for all type of memory, useful for wine programs.",
         "default": false
       }
     ]
@@ -314,7 +314,7 @@
   },
   {
     "name": "BOX64_DYNAREC_SEP",
-    "description": "Optimize CALL/RET further with Secondary Entry Points (SEP). Have no effect is CALLRET is not enabled",
+    "description": "Optimize CALL/RET further with Secondary Entry Points (SEP). Has no effect if CALLRET is not enabled",
     "category": "Performance",
     "wine": true,
     "options": [
@@ -325,7 +325,7 @@
       },
       {
         "key": "1",
-        "description": "Add SEP at CALLRET return, on meory that are from known binary files",
+        "description": "Add SEP at CALLRET return, on memory that are from known binary files",
         "default": true
       },
       {
@@ -366,12 +366,12 @@
       },
       {
         "key": "1",
-        "description": "Allow continue to run a dynablock that write data in the same page as code. It can gets faster in loading time of some game but can also get unexpected crashes.",
+        "description": "Allow continue to run a DynaBlock that write data in the same page as code. It can gets faster in loading time of some game but can also get unexpected crashes.",
         "default": false
       },
       {
         "key": "2",
-        "description": "Will also, when it detect an HotPage, flag that page as NEVERCLEAN, and so it will not be write protected but Block build from that page will always be tested. It can be faster that way (but soem SMC case might not be trapped).",
+        "description": "Will also, when it detects a HotPage, flag that page as NEVERCLEAN, and so it will not be write protected but blocks built from that page will always be tested. It can be faster that way (but some SMC case might not be trapped).",
         "default": false
       }
     ]
@@ -390,24 +390,6 @@
       {
         "key": "1",
         "description": "Do not detect hot page",
-        "default": false
-      }
-    ]
-  },
-  {
-    "name": "BOX64_DYNAREC_HOTPAGE_ALT",
-    "description": "Use alternative way to detect HotPages (legacy way).",
-    "category": "Performance",
-    "wine": false,
-    "options": [
-      {
-        "key": "0",
-        "description": "Detect hot page, using new method from v0.3.9+",
-        "default": true
-      },
-      {
-        "key": "1",
-        "description": "Use alternate method to detect HotPage (from v0.3.8 and earlier)",
         "default": false
       }
     ]
@@ -461,7 +443,7 @@
     "options": [
       {
         "key": "0xXXXXXXXX-0xYYYYYYYY",
-        "description": "Define the range where dynablock gets dumped (inclusive-exclusive).",
+        "description": "Define the range where DynaBlock gets dumped (inclusive-exclusive).",
         "default": false
       }
     ]
@@ -538,27 +520,27 @@
     "options": [
       {
         "key": "0",
-        "description": "Dynarec will not generate GDBJIT debuginfo.",
+        "description": "DynaRec will not generate GDBJIT debuginfo.",
         "default": true
       },
       {
         "key": "1",
-        "description": "Dynarec will generate GDBJIT debuginfo.",
+        "description": "DynaRec will generate GDBJIT debuginfo.",
         "default": false
       },
       {
         "key": "2",
-        "description": "Dynarec will generate detailed GDBJIT debuginfo with internal state.",
+        "description": "DynaRec will generate detailed GDBJIT debuginfo with internal state.",
         "default": false
       },
       {
         "key": "3",
-        "description": "Dynarec will register detailed GDBJIT debuginfo only for dynablocks that the guest program trap into, greatly improving performance.",
+        "description": "DynaRec will register detailed GDBJIT debuginfo only for DynaBlocks that the guest program trap into, greatly improving performance.",
         "default": false
       },
       {
         "key": "0xXXXXXXX-0xYYYYYYY",
-        "description": "Define the range where Dynarec will generate detailed GDBJIT debuginfo with internal state.",
+        "description": "Define the range where DynaRec will generate detailed GDBJIT debuginfo with internal state.",
         "default": false
       }
     ]
@@ -691,38 +673,38 @@
     "options": [
       {
         "key": "0",
-        "description": "Dynarec will not generate perf map.",
+        "description": "DynaRec will not generate perf map.",
         "default": true
       },
       {
         "key": "1",
-        "description": "Dynarec will generate perf map.",
+        "description": "DynaRec will generate perf map.",
         "default": false
       }
     ]
   },
   {
     "name": "BOX64_DYNAREC_PURGE",
-    "description": "Purge dynablocks that haven't been executed recently, based on tick age threshold (BOX64_DYNAREC_PURGE_AGE).",
-    "category": "Performance",
+    "description": "Purge DynaBlocks that haven't been executed recently, based on tick age threshold (BOX64_DYNAREC_PURGE_AGE).",
+    "category": "Fragile or Legacy",
     "wine": false,
     "options": [
       {
         "key": "0",
-        "description": "Dynarec will not purge old unused dynablocks.",
+        "description": "DynaRec will not purge old unused DynaBlocks.",
         "default": true
       },
       {
         "key": "1",
-        "description": "Dynarec will purge old unused dynablocks based on tick age.",
+        "description": "DynaRec will purge old unused DynaBlocks based on tick age.",
         "default": false
       }
     ]
   },
   {
     "name": "BOX64_DYNAREC_PURGE_AGE",
-    "description": "Tick age threshold for dynablock purging (requires BOX64_DYNAREC_PURGE=1).",
-    "category": "Performance",
+    "description": "Tick age threshold for DynaBlock purging (requires BOX64_DYNAREC_PURGE=1).",
+    "category": "Fragile or Legacy",
     "wine": false,
     "options": [
       {
@@ -824,12 +806,12 @@
       },
       {
         "key": "1",
-        "description": "Each opcode runs on interpreter and on Dynarec, regs and memory are compared and printed when they differ.",
+        "description": "Each opcode runs on interpreter and on DynaRec, regs and memory are compared and printed when they differ.",
         "default": false
       },
       {
         "key": "0xXXXXXXXX-0xYYYYYYYY",
-        "description": "Define the range where dynarec is tested (inclusive-exclusive).",
+        "description": "Define the range where DynaRec is tested (inclusive-exclusive).",
         "default": false
       }
     ]
@@ -926,8 +908,8 @@
   },
   {
     "name": "BOX64_DYNAREC_WEAKBARRIER",
-    "description": "Tweak the memory barriers to reduce the performance impact by strong memory emualtion.",
-    "category": "Performance",
+    "description": "Tweak the memory barriers to reduce the performance impact by strong memory emulation.",
+    "category": "Fragile or Legacy",
     "wine": true,
     "options": [
       {
@@ -942,7 +924,7 @@
       },
       {
         "key": "2",
-        "description": "All in 1, plus disabled the last write barriers.",
+        "description": "All in 1, plus disable the last write barriers.",
         "default": false
       }
     ]
@@ -972,13 +954,13 @@
   },
   {
     "name": "BOX64_DYNAREC_INTERP_SIGNAL",
-    "description": "Allow the use of Dynarec in Signal Handlers.",
+    "description": "Allow the use of DynaRec in Signal Handlers.",
     "category": "Compatibility",
     "wine": false,
     "options": [
       {
         "key": "0",
-        "description": "Allow the use of Dynarec in signal handlers.",
+        "description": "Allow the use of DynaRec in signal handlers.",
         "default": true
       },
       {
@@ -990,8 +972,8 @@
   },
   {
     "name": "BOX64_DYNACACHE",
-    "description": "Enable/disable the Dynamic Recompiler Cache (a.k.a DynaCache). This option defaults to 2 (to read cache if present but not generate any). DynaCache write file to home folder by default, and can grow without limit.",
-    "category": "Performance",
+    "description": "Enable/disable the Dynamic Recompiler Cache (a.k.a DynaCache). This option defaults to 2 (to read cache if present but not generate any). DynaCache writes files to the home folder by default, and keeps its folder below BOX64_DYNACACHE_LIMIT when generating new cache files.",
+    "category": "Fragile or Legacy",
     "wine": false,
     "options": [
       {
@@ -1014,7 +996,7 @@
   {
     "name": "BOX64_DYNACACHE_FOLDER",
     "description": "Set the folder for DynaCache files. Default is $XDG_CACHE_HOME/box64 or $HOME/.cache/box64 if $XDG_CACHE_HOME is not set.",
-    "category": "Performance",
+    "category": "Fragile or Legacy",
     "wine": false,
     "options": [
       {
@@ -1025,14 +1007,37 @@
     ]
   },
   {
+    "name": "BOX64_DYNACACHE_LIMIT",
+    "description": "Maximum size, in MiB, for the DynaCache folder. When the limit is exceeded, invalid DynaCache files are removed first, then the oldest valid files are removed if needed. Default size is 2048MiB.",
+    "category": "Fragile or Legacy",
+    "wine": false,
+    "options": [
+      {
+        "key": "0",
+        "description": "Do not limit the DynaCache folder size.",
+        "default": false
+      },
+      {
+        "key": "XXXX",
+        "description": "Keep the DynaCache folder below XXXX MiB by removing invalid cache files first, then the oldest valid cache files.",
+        "default": false
+      },
+      {
+        "key": "2048",
+        "description": "A size of 2048 MiB is the default value.",
+        "default": true
+      }
+    ]
+  },
+  {
     "name": "BOX64_DYNACACHE_MIN",
     "description": "Minimum size, in KB, for a DynaCache to be written to disk. Default size is 350KB",
-    "category": "Performance",
+    "category": "Fragile or Legacy",
     "wine": false,
     "options": [
       {
         "key": "XXXX",
-        "description": "Set a minimum size of XXXX KB of Dynarec code to write the dynacache to disk. Will not be saved to disk else.",
+        "description": "Set a minimum size of XXXX KB of DynaRec code to write the dynacache to disk. Will not be saved to disk else.",
         "default": false
       },
       {
@@ -1207,7 +1212,7 @@
       },
       {
         "key": "1",
-        "description": "Launch gdb when a SIGSEGV, SIGILL or SIGBUS signal is trapped, attached to the offending process and go in an endless loop, waiting. Inside gdb, you need to find the correct thread yourself (the one with `my_box64signalhandler` in is stack), then probably need to `finish` 1 or 2 functions (inside `usleep(..)`) and then you'll be in `my_box64signalhandler`, just before the printf of the Segfault message. Then `set waiting=0` to exit the infinite loop.",
+        "description": "Launch gdb when a SIGSEGV, SIGILL or SIGBUS signal is trapped, attached to the offending process and go in an endless loop, waiting. Inside gdb, you need to find the correct thread yourself (the one with `my_box64signalhandler` in its stack), then probably need to `finish` 1 or 2 functions (inside `usleep(..)`) and then you'll be in `my_box64signalhandler`, just before the printf of the Segfault message. Then `set waiting=0` to exit the infinite loop.",
         "default": false
       },
       {
@@ -1427,54 +1432,54 @@
   },
   {
     "name": "BOX64_NODYNAREC",
-    "description": "Forbid dynablock creation in the address range specified, helpful for debugging behaviour difference between Dynarec and Interpreter.",
-    "category": "Performance",
+    "description": "Forbid DynaBlock creation in the address range specified, helpful for debugging behaviour difference between DynaRec and Interpreter.",
+    "category": "Debugging",
     "wine": true,
     "options": [
       {
         "key": "0xXXXXXXXX-0xYYYYYYYY",
-        "description": "Define the range where dynablock creation is forbidden (inclusive-exclusive).",
+        "description": "Define the range where DynaBlock creation is forbidden (inclusive-exclusive).",
         "default": false
       }
     ]
   },
   {
     "name": "BOX64_NODYNAREC_DELAY",
-    "description": "Remove NoDynarec range after a delay.",
+    "description": "Remove NoDynaRec range after a delay.",
     "category": "Debugging",
     "wine": true,
     "options": [
       {
         "key": "0",
-        "description": "Do not remove NoDynarec range.",
+        "description": "Do not remove NoDynaRec range.",
         "default": true
       },
       {
         "key": "1",
-        "description": "Remove the NoDynarec range once 2 threads have been created.",
+        "description": "Remove the NoDynaRec range once 2 threads have been created.",
         "default": false
       }
     ]
   },
   {
     "name": "BOX64_DYNAREC_NOARCH",
-    "description": "Remove Architecture metatdata from Dynarec blocks (used on signal).",
+    "description": "Remove Architecture metadata from DynaRec blocks (used on signal).",
     "category": "Performance",
     "wine": true,
     "options": [
       {
         "key": "0",
-        "description": "Generate all architecture metadata for each blocks, including x87/mmx/SSE/AVX regs tracking. Wil use some more memory.",
+        "description": "Generate all architecture metadata for each blocks, including x87/mmx/SSE/AVX regs tracking. Will use some more memory.",
         "default": true
       },
       {
         "key": "1",
-        "description": "Generate only essential metadata for each blocks (flags, alignments), saving some memory, but some encrypted software might fails.",
+        "description": "Generate only essential metadata for each blocks (flags, alignments), saving some memory, but some encrypted software might fail.",
         "default": false
       },
       {
         "key": "2",
-        "description": "Do not generate metadata for blocks. Saving a bit more memory but might fails on signal handling.",
+        "description": "Do not generate metadata for blocks. Saving a bit more memory but might fail on signal handling.",
         "default": false
       }
     ]
@@ -1613,7 +1618,7 @@
     "options": [
       {
         "key": "0",
-        "description": "Do try to Load x64 Vulkan overlay.",
+        "description": "Try to load x64 Vulkan overlay.",
         "default": true
       },
       {
@@ -1771,7 +1776,7 @@
     "name": "BOX64_RDTSC_INV",
     "description": "Report Invariant TSC bit in CPUID for Intel CPU type.",
     "category": "Compatibility",
-    "wine": false,
+    "wine": true,
     "options": [
       {
         "key": "0",
@@ -1882,7 +1887,7 @@
   },
   {
     "name": "BOX64_SHOWSEGV",
-    "description": "Always show SIGSEGV signal detailes.",
+    "description": "Always show SIGSEGV signal details.",
     "category": "Debugging",
     "wine": false,
     "options": [
@@ -1893,7 +1898,7 @@
       },
       {
         "key": "1",
-        "description": "Always show SIGSEGV signal detailes.",
+        "description": "Always show SIGSEGV signal details.",
         "default": false
       }
     ]
@@ -1911,7 +1916,7 @@
       },
       {
         "key": "1",
-        "description": "Apply SSE Flush to 0 flag directly. Also reflect SSE exception flags in Dynarec (if available)",
+        "description": "Apply SSE Flush to 0 flag directly. Also reflect SSE exception flags in DynaRec (if available)",
         "default": false
       }
     ]
@@ -2241,7 +2246,7 @@
   },
   {
     "name": "BOX64_X87_NO80BITS",
-    "description": "Behavoiur of x87 80bits long double.",
+    "description": "Behaviour of x87 80bits long double.",
     "category": "Compatibility",
     "wine": true,
     "options": [
@@ -2253,6 +2258,24 @@
       {
         "key": "1",
         "description": "Use 64bits double for x87.",
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "BOX64_NOPERSONA32BITS",
+    "description": "Disable the automatic switch of personality for 32-bit binaries (always enabled on Box32).",
+    "category": "Compatibility",
+    "wine": false,
+    "options": [
+      {
+        "key": "0",
+        "description": "Switch personality for 32-bit binaries (if not already tried).",
+        "default": true
+      },
+      {
+        "key": "1",
+        "description": "Do not switch personality for 32-bit binaries.",
         "default": false
       }
     ]

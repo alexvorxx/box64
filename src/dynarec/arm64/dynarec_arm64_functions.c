@@ -98,22 +98,23 @@ int fpu_get_reg_x87(dynarec_arm_t* dyn, int ninst, int t, int n)
 void fpu_free_reg(dynarec_arm_t* dyn, int reg)
 {
     // TODO: check upper limit?
+    int t = dyn->n.neoncache[reg].t;
+    int n = dyn->n.neoncache[reg].n;
     dyn->n.fpuused[reg] = 0;
-    if(dyn->n.neoncache[reg].t==NEON_CACHE_YMMR || dyn->n.neoncache[reg].t==NEON_CACHE_YMMW) {
-        dyn->n.ymm_removed |= 1<<dyn->n.neoncache[reg].n;
-        if(dyn->n.neoncache[reg].t==NEON_CACHE_YMMW)
-            dyn->n.ymm_write |= 1<<dyn->n.neoncache[reg].n;
+    if(t==NEON_CACHE_XMMR || t==NEON_CACHE_XMMW) {
+        dyn->n.xmm_removed |= 1<<n;
+        if(t==NEON_CACHE_XMMW)
+            dyn->n.xmm_write |= 1<<n;
+    } else if(t==NEON_CACHE_YMMR || t==NEON_CACHE_YMMW) {
+        dyn->n.ymm_removed |= 1<<n;
+        if(t==NEON_CACHE_YMMW)
+            dyn->n.ymm_write |= 1<<n;
         if(reg>SCRATCH0)
-            dyn->n.ymm_regs |= (8LL+reg-SCRATCH0)<<(dyn->n.neoncache[reg].n*4);
+            dyn->n.ymm_regs |= (8LL+reg-SCRATCH0)<<(n*4);
         else
-            dyn->n.ymm_regs |= ((uint64_t)(reg-EMM0))<<(dyn->n.neoncache[reg].n*4);
+            dyn->n.ymm_regs |= ((uint64_t)(reg-EMM0))<<(n*4);
     }
-    if(dyn->n.neoncache[reg].t==NEON_CACHE_XMMR || dyn->n.neoncache[reg].t==NEON_CACHE_XMMW) {
-        dyn->n.xmm_removed |= 1<<dyn->n.neoncache[reg].n;
-        if(dyn->n.neoncache[reg].t==NEON_CACHE_XMMW)
-            dyn->n.xmm_write |= 1<<dyn->n.neoncache[reg].n;
-    }
-    if(dyn->n.neoncache[reg].t!=NEON_CACHE_ST_F && dyn->n.neoncache[reg].t!=NEON_CACHE_ST_D && dyn->n.neoncache[reg].t!=NEON_CACHE_ST_I64)
+    if(t!=NEON_CACHE_ST_F && t!=NEON_CACHE_ST_D && t!=NEON_CACHE_ST_I64)
         dyn->n.neoncache[reg].v = 0;
     if(dyn->n.fpu_scratch && reg==SCRATCH0+dyn->n.fpu_scratch-1)
         --dyn->n.fpu_scratch;
@@ -448,13 +449,12 @@ int fpuCacheNeedsTransform(dynarec_arm_t* dyn, int ninst) {
     if((dyn->insts[i2].x64.barrier&BARRIER_FLOAT))
         // if the barrier as already been apply, no transform needed
         return ((dyn->insts[ninst].x64.barrier&BARRIER_FLOAT))?0:(isCacheEmpty(dyn, ninst)?0:1);
-    int ret = 0;
     if(!i2) { // just purge
         if(dyn->insts[ninst].n.stack_next)
             return 1;
         if(dyn->insts[ninst].ymm0_out)
             return 1;
-        for(int i=0; i<32 && !ret; ++i)
+        for(int i=0; i<32; ++i)
             if(dyn->insts[ninst].n.neoncache[i].v) {       // there is something at ninst for i
                 int t = dyn->insts[ninst].n.neoncache[i].t;
                 int n = dyn->insts[ninst].n.neoncache[i].n;
@@ -463,15 +463,15 @@ int fpuCacheNeedsTransform(dynarec_arm_t* dyn, int ninst) {
                 || t==NEON_CACHE_ST_D
                 || t==NEON_CACHE_ST_I64)
                 && n<dyn->insts[ninst].n.stack_pop))
-                    ret = 1;
+                    return 1;
             }
-        return ret;
+        return 0;
     }
     // Check if ninst can be compatible to i2
     if(dyn->insts[ninst].n.stack_next != dyn->insts[i2].n.stack-dyn->insts[i2].n.stack_push) {
         return 1;
     }
-    if(dyn->insts[ninst].ymm0_out && (dyn->insts[ninst].ymm0_out&~dyn->insts[i2].ymm0_in))
+    if(dyn->insts[ninst].ymm0_out && (dyn->insts[ninst].ymm0_out&~dyn->insts[i2].ymm0_in&~dyn->insts[i2].n.ymm_unneeded))
         return 1;
     neoncache_t cache_i2 = dyn->insts[i2].n;
     neoncacheUnwind(&cache_i2);
@@ -484,22 +484,22 @@ int fpuCacheNeedsTransform(dynarec_arm_t* dyn, int ninst) {
                 if(((t==NEON_CACHE_XMMR) || (t==NEON_CACHE_XMMW)) && (cache_i2.xmm_unneeded&(1<<n))) { /* nothing*/}
                 else if(((t==NEON_CACHE_YMMR) || (t==NEON_CACHE_YMMW)) && (cache_i2.ymm_unneeded&(1<<n))) { /* nothing*/}
                 else 
-                ret = 1;
+                    return 1;
             } else if(dyn->insts[ninst].n.neoncache[i].v!=cache_i2.neoncache[i].v) {  // there is something different
                 if(n!=cache_i2.neoncache[i].n) {   // not the same x64 reg
-                    ret = 1;
+                    return 1;
                 }
                 else if((t == NEON_CACHE_XMMR) && cache_i2.neoncache[i].t == NEON_CACHE_XMMW)
                     {/* nothing */ }
                 else if((t == NEON_CACHE_YMMR) && cache_i2.neoncache[i].t == NEON_CACHE_YMMW)
                     {/* nothing */ }
                 else
-                    ret = 1;
+                    return 1;
             }
         } else if(cache_i2.neoncache[i].v)
-            ret = 1;
+            return 1;
     }
-    return ret;
+    return 0;
 }
 
 void neoncacheUnwind(neoncache_t* cache)
@@ -942,20 +942,21 @@ static void mmx_reset(neoncache_t* n)
         n->mmxcache[i] = -1;
 }
 
-static void sse_reset(neoncache_t* n)
+static void sse_reset(neoncache_t* n, int use_ymm)
 {
     for (int i=0; i<16; ++i)
         n->ssecache[i].v = -1;
-    for (int i=0; i<32; ++i)
-        if(n->neoncache[i].t==NEON_CACHE_YMMR || n->neoncache[i].t==NEON_CACHE_YMMW)
-            n->neoncache[i].v = 0;
+    if(use_ymm)
+        for (int i=0; i<32; ++i)
+            if(n->neoncache[i].t==NEON_CACHE_YMMR || n->neoncache[i].t==NEON_CACHE_YMMW)
+                n->neoncache[i].v = 0;
 }
 
 void fpu_reset(dynarec_native_t* dyn)
 {
     x87_reset(&dyn->n);
     mmx_reset(&dyn->n);
-    sse_reset(&dyn->n);
+    sse_reset(&dyn->n, dyn->use_ymm);
     fpu_reset_reg(dyn);
     dyn->ymm_zero = 0;
 }
@@ -964,7 +965,7 @@ void fpu_reset_ninst(dynarec_native_t* dyn, int ninst)
 {
     x87_reset(&dyn->insts[ninst].n);
     mmx_reset(&dyn->insts[ninst].n);
-    sse_reset(&dyn->insts[ninst].n);
+    sse_reset(&dyn->insts[ninst].n, dyn->use_ymm);
     fpu_reset_reg_neoncache(&dyn->insts[ninst].n);
 
 }

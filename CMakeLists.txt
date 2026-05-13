@@ -393,9 +393,19 @@ if(BOX32)
     )
 endif()
 
-# git_head.h is a generated file
+set(DYNACACHE_HASH_HEADER "${BOX64_ROOT}/src/dynacache_hashes.h")
+add_custom_target(generate_dynacache_hashes
+    COMMAND "${PYTHON_EXECUTABLE}" "${BOX64_ROOT}/tools/gen_dynacache_hashes.py"
+        --root "${BOX64_ROOT}"
+        --output "${DYNACACHE_HASH_HEADER}"
+    BYPRODUCTS "${DYNACACHE_HASH_HEADER}"
+    VERBATIM
+)
+
+# generated files
 set_source_files_properties(
     "${BOX64_ROOT}/src/git_head.h"
+    "${BOX64_ROOT}/src/dynacache_hashes.h"
     PROPERTIES GENERATED TRUE
     HEADER_FILE_ONLY TRUE)
 
@@ -1134,6 +1144,7 @@ if(LARCH64_DYNAREC)
         "${BOX64_ROOT}/src/dynarec/la64/la64_printer.c"
         "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_jmpnext.c"
         "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_consts.c"
+        "${BOX64_ROOT}/src/dynarec/la64/updateflags_la64.c"
     )
     set(DYNAREC_ASM
         ${DYNAREC_ASM}
@@ -1178,6 +1189,7 @@ if(LARCH64_DYNAREC)
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_dd.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_de.c"
     "${BOX64_ROOT}/src/dynarec/la64/dynarec_la64_df.c"
+    "${BOX64_ROOT}/src/dynarec/la64/updateflags_la64_pass.c"
     )
 endif()
 
@@ -1297,6 +1309,7 @@ add_library(interpreter OBJECT ${INTERPRETER})
 
 add_library(mainobj OBJECT ${OS_LINUX_SRC} ${ELFLOADER_SRC} ${WRAPPEDS} ${WRAPPEDS32})
 add_dependencies(mainobj generate_git_head_target)
+add_dependencies(mainobj generate_dynacache_hashes)
 
 add_executable(${BOX64})
 target_link_libraries(${BOX64} mainobj)
@@ -1363,16 +1376,30 @@ if(_x86_64 OR _aarch64 OR _ppc64le)
 endif()
 
 if(NOT _x86 AND NOT _x86_64)
+  file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+  file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/share/box64)
+  configure_file(${CMAKE_SOURCE_DIR}/tests/box64-bash ${CMAKE_BINARY_DIR}/bin/box64-bash COPYONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/system/box64-python ${CMAKE_BINARY_DIR}/bin/box64-python COPYONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/system/sitecustomize.py ${CMAKE_BINARY_DIR}/share/box64/sitecustomize.py COPYONLY)
+  file(CHMOD ${CMAKE_BINARY_DIR}/bin/box64-python
+      FILE_PERMISSIONS
+      OWNER_READ OWNER_WRITE OWNER_EXECUTE
+      GROUP_READ GROUP_EXECUTE
+      WORLD_READ WORLD_EXECUTE)
   if(NOT TERMUX)
    install(TARGETS ${BOX64} RUNTIME DESTINATION bin)
-   if(NOT NO_LIB_INSTALL)
-    install(PROGRAMS ${CMAKE_SOURCE_DIR}/tests/box64-bash DESTINATION bin)
-   endif()
+    if(NOT NO_LIB_INSTALL)
+     install(PROGRAMS ${CMAKE_SOURCE_DIR}/tests/box64-bash DESTINATION bin)
+     install(PROGRAMS ${CMAKE_SOURCE_DIR}/system/box64-python DESTINATION bin)
+     install(FILES ${CMAKE_SOURCE_DIR}/system/sitecustomize.py DESTINATION share/box64)
+    endif()
   else()
    install(TARGETS ${BOX64} RUNTIME DESTINATION ${TERMUX_PATH}/usr/bin)
-   if(NOT NO_LIB_INSTALL)
-    install(PROGRAMS ${CMAKE_SOURCE_DIR}/tests/box64-bash DESTINATION ${TERMUX_PATH}/usr/bin)
-   endif()
+    if(NOT NO_LIB_INSTALL)
+     install(PROGRAMS ${CMAKE_SOURCE_DIR}/tests/box64-bash DESTINATION ${TERMUX_PATH}/usr/bin)
+     install(PROGRAMS ${CMAKE_SOURCE_DIR}/system/box64-python DESTINATION ${TERMUX_PATH}/usr/bin)
+     install(FILES ${CMAKE_SOURCE_DIR}/system/sitecustomize.py DESTINATION ${TERMUX_PATH}/usr/share/box64)
+    endif()
   endif()
   if (GDBJIT)
     install(TARGETS box64gdbjitreader RUNTIME DESTINATION lib)
@@ -1885,6 +1912,11 @@ add_test(lock ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
 endif()
 
 if(NOT ANDROID)
+add_test(NAME xsave_xrstor COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
+    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/misc/xsave_xrstor -D TEST_OUTPUT=tmpfile-xsave_xrstor.txt
+    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/misc/xsave_xrstor.txt
+    -P ${CMAKE_SOURCE_DIR}/runTest.cmake)
+
 file(GLOB extension_tests "${CMAKE_SOURCE_DIR}/tests/extensions/*.c")
 foreach(file ${extension_tests})
     get_filename_component(testname "${file}" NAME_WE)

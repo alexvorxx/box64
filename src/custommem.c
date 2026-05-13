@@ -1495,8 +1495,13 @@ int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t 
                 db_ref = (bl->jmpnext-sizeof(void*)+3*sizeof(void*));
                 *db_ref = native_next;
             }
-            // adjust x64_addr with delta_map
+            // adjust guest source addresses with delta_map
             bl->x64_addr += delta_map;
+            bl->x64_readaddr += delta_map;
+            for (int j = 0; j < bl->sep_size; ++j) {
+                // SEP native entries also carry a hidden dynablock reference.
+                *(dynablock_t**)(bl->block + bl->sep[j].nat_offs - sizeof(void*)) = bl;
+            }
             *(uintptr_t*)(bl->jmpnext+2*sizeof(void*)) = RelocGetNext();
             if(bl->relocs && bl->relocsize)
                 ApplyRelocs(bl, delta, delta_map, mapping_start);
@@ -1509,8 +1514,7 @@ int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t 
             } else {
                 for(int i=0; i<bl->sep_size; ++i) {
                     uint32_t x64_offs = bl->sep[i].x64_offs;
-                    uint32_t nat_offs = bl->sep[i].nat_offs;
-                    if(addJumpTableIfDefault64(bl->x64_addr+x64_offs, (bl->dirty || bl->always_test)?bl->jmpnext:(bl->block+nat_offs)))
+                    if (addJumpTableIfDefault64(bl->x64_addr + x64_offs, bl->jmpnext))
                         bl->sep[i].active = 1;
                     else
                         bl->sep[i].active = 0;

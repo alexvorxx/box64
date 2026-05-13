@@ -6119,6 +6119,8 @@ wrappedlibmvec:
 - vFv:
   - _ZGVbN2v_cos
   - _ZGVbN2v_sin
+  - _ZGVbN2vv_pow
+  - _ZGVbN4vv_powf
 wrappedlibncurses:
 - pFv:
   - initscr

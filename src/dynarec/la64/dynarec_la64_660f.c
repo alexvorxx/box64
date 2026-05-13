@@ -226,13 +226,11 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
         case 0x2B:
             INST_NAME("MOVNTPD Ex,Gx");
             nextop = F8;
-            GETG;
-            v0 = sse_get_reg(dyn, ninst, x1, gd, 0);
             if (MODREG) {
-                ed = (nextop & 7) + (rex.b << 3);
-                v1 = sse_get_reg_empty(dyn, ninst, x1, ed);
-                VOR_V(v1, v0, v0);
+                DEFAULT;
             } else {
+                GETG;
+                v0 = sse_get_reg(dyn, ninst, x1, gd, 0);
                 addr = geted(dyn, addr, ninst, nextop, &ed, x2, x3, &fixedaddress, rex, NULL, 1, 0);
                 VST(v0, ed, fixedaddress);
             }
@@ -661,9 +659,7 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     INST_NAME("MOVNTDQA Gx, Ex");
                     nextop = F8;
                     if (MODREG) {
-                        v1 = sse_get_reg(dyn, ninst, x1, (nextop & 7) + (rex.b << 3), 0);
-                        GETGX_empty(v0);
-                        VOR_V(v0, v1, v1);
+                        DEFAULT;
                     } else {
                         GETGX_empty(v0);
                         SMREAD();
@@ -826,7 +822,12 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
                     VMIN_HU(q2, q0, q1);           // all lane is min(abcdefgh)
                     VSEQ_H(q0, q2, v1);            // get mask(0xffff)
                     VFRSTPI_H(q2, q0, 1);          // find first neg(0xffff),insert index to q2
-                    XVPICKVE_W(v0, q2, 0);
+                    if (cpuext.lasx) {
+                        XVPICKVE_W(v0, q2, 0);
+                    } else {
+                        VXOR_V(v0, v0, v0);
+                        VEXTRINS_W(v0, q2, 0);
+                    }
                     break;
                 case 0xDB:
                     INST_NAME("AESIMC Gx, Ex"); // AES-NI
@@ -1590,11 +1591,16 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             nextop = F8;
             GETEX(v1, 0, 0);
             GETGX_empty(v0);
-            // TODO: !BOX64ENV(dynarec_fastround)
+            if (BOX64ENV(dynarec_fastround) <= 1) {
+                u8 = sse_setround(dyn, ninst, x6, x4);
+            }
             q0 = fpu_get_scratch(dyn);
             VFCVT_S_D(q0, v1, v1);
             VXOR_V(v0, v0, v0);
             VEXTRINS_D(v0, q0, 0);
+            if (BOX64ENV(dynarec_fastround) <= 1) {
+                x87_restoreround(dyn, ninst, u8);
+            }
             break;
         case 0x5B:
             INST_NAME("CVTPS2DQ Gx, Ex");
@@ -2942,11 +2948,10 @@ uintptr_t dynarec64_660F(dynarec_la64_t* dyn, uintptr_t addr, uintptr_t ip, int 
         case 0xE7:
             INST_NAME("MOVNTDQ Ex, Gx");
             nextop = F8;
-            GETGX(v0, 0);
             if (MODREG) {
-                v1 = sse_get_reg_empty(dyn, ninst, x1, (nextop & 7) + (rex.b << 3));
-                VOR_V(v1, v0, v0);
+                DEFAULT;
             } else {
+                GETGX(v0, 0);
                 addr = geted(dyn, addr, ninst, nextop, &ed, x2, x3, &fixedaddress, rex, NULL, 1, 0);
                 VST(v0, ed, fixedaddress);
             }

@@ -1379,3 +1379,6 @@ BOX64_EMULATED_LIBS=libSDL2-2.0.so.0
 [dontstarve_steam]
 # use emulated sdl2
 BOX64_EMULATED_LIBS=libSDL2-2.0.so.0
+
+[feishu]
+BOX64_DYNAREC_FASTROUND=0
