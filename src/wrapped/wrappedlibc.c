@@ -78,6 +78,7 @@ extern int _nl_msg_cat_cntr __attribute__((weak));
 #include "librarian/library_private.h"
 #include "emu/x64emu_private.h"
 #include "box64context.h"
+#include "syscall_user_dispatch.h"
 #include "myalign.h"
 #include "signals.h"
 #include "fileutils.h"
@@ -2042,8 +2043,8 @@ static int isProcAny(const char *path, const char* w)
     if(strncmp(path, "/proc/", 6)==0) {
         int pid;
         char p[4096] ={0};
-        if(sscanf(path, "/proc/%d/%s", &pid, &p)==2)
-            if(p && !strcmp(p, w))
+        if(sscanf(path, "/proc/%d/%s", &pid, p)==2)
+            if(strcmp(p, w) == 0)
                 return pid;
     }
     return -1;
@@ -2124,7 +2125,7 @@ EXPORT ssize_t my_readlink(x64emu_t* emu, void* path, void* buf, size_t sz)
                 if(filename[0]=='.') {
                     // relative path, need to grap cwd and cannonicalise the path
                     char cwd_name[strlen(path)+4];
-                    sprintf(cwd_name, "/proc/%d/cwd");
+                    sprintf(cwd_name, "/proc/%d/cwd", pid);
                     char cwd[MAX_PATH] = {0};
                     if(readlink(cwd_name, cwd, MAX_PATH)>0 && strlen(cwd)+strlen(path)+1<MAX_PATH) {
                         strcat(cwd, "/");
@@ -2188,10 +2189,10 @@ void CreateCPUInfoFile(int fd)
                       BOX64ENV(pclmulqdq)?" pclmulqdq":"",
                       BOX64ENV(aes)?" aes":"",
                       BOX64ENV(sse42)?" sse4_2":"", BOX64ENV(avx)?" avx":"", BOX64ENV(shaext)?" sha_ni":"",
-                      BOX64ENV(avx)?" bmi1":"", BOX64ENV(avx2)?" avx2":"", BOX64ENV(avx)?" bmi2":"",
-                      (BOX64ENV(avx2)&&BOX64ENV(aes))?" vaes":"", BOX64ENV(avx2)?" fma":"",
-                      BOX64ENV(avx)?" xsave":"", BOX64ENV(avx)?" f16c":"", BOX64ENV(avx2)?" randr":"",
-                      BOX64ENV(avx2)?" adx":""
+                      BOX64ENV(avx)?" bmi1":"", (BOX64ENV(avx) == 2)?" avx2":"", BOX64ENV(avx)?" bmi2":"",
+                      ((BOX64ENV(avx) == 2)&&BOX64ENV(aes))?" vaes":"", (BOX64ENV(avx) == 2)?" fma":"",
+                      BOX64ENV(avx)?" xsave":"", BOX64ENV(avx)?" f16c":"", (BOX64ENV(avx) == 2)?" randr":"",
+                      (BOX64ENV(avx) == 2)?" adx":""
                       );
         P;
         sprintf(buff, "address sizes\t: 48 bits physical, 48 bits virtual\n");
@@ -4497,7 +4498,15 @@ EXPORT int my_prctl(x64emu_t* emu, int option, unsigned long arg2, unsigned long
         }
     }
     if(option==PR_SET_SECCOMP) {
-        printf_log(LOG_INFO, "ignoring prctl(PR_SET_SECCOMP, ...)\n");
+        printf_log(LOG_DEBUG, "Ignoring prctl(PR_SET_SECCOMP, ...)\n");
+        return 0;
+    }
+    if (option == PR_SET_SYSCALL_USER_DISPATCH) {
+        long ret = my_syscall_user_dispatch_prctl(emu, arg2, arg3, arg4, (void*)arg5);
+        if(ret < 0) {
+            errno = -ret;
+            return -1;
+        }
         return 0;
     }
     return prctl(option, arg2, arg3, arg4, arg5);

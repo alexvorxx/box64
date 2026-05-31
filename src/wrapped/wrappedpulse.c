@@ -1107,6 +1107,28 @@ static void* find_quit_Fct(void* fct)
     printf_log(LOG_NONE, "Warning, no more slot for pulse audio quit callback\n");
     return NULL;
 }
+// pa_context_string_cb
+#define GO(A)                                                               \
+static uintptr_t my_pa_context_string_cb_fct_##A = 0;                       \
+static void my_pa_context_string_cb_##A(void* a, int b, void* c, void* d)   \
+{                                                                           \
+    RunFunctionFmt(my_pa_context_string_cb_fct_##A, "pipp", a, b, c, d);    \
+}
+SUPER()
+#undef GO
+static void* find_pa_context_string_cb_Fct(void* fct)
+{
+    if(!fct) return fct;
+    if(GetNativeFnc((uintptr_t)fct))  return GetNativeFnc((uintptr_t)fct);
+    #define GO(A) if(my_pa_context_string_cb_fct_##A == (uintptr_t)fct) return my_pa_context_string_cb_##A;
+    SUPER()
+    #undef GO
+    #define GO(A) if(my_pa_context_string_cb_fct_##A == 0) {my_pa_context_string_cb_fct_##A = (uintptr_t)fct; return my_pa_context_string_cb_##A; }
+    SUPER()
+    #undef GO
+    printf_log(LOG_NONE, "Warning, no more slot for pulse audio pa_context_string_cb callback\n");
+    return NULL;
+}
 
 #undef SUPER
 
@@ -1653,6 +1675,11 @@ EXPORT void my_pa_mainloop_api_once(x64emu_t* emu, void* mainloop, void* cb, voi
 void my_autobridge_mainloop_api(x64emu_t* emu, void* api)
 {
     UpdateautobridgeMainloopAPI(emu, my_lib->w.bridge, api);
+}
+
+EXPORT void* my_pa_context_send_message_to_object(x64emu_t* emu, void* c, void* name, void* msg, void* param, void* f, void* data)
+{
+    return my->pa_context_send_message_to_object(c, name, msg, param, find_pa_context_string_cb_Fct(f), data);
 }
 
 #define PRE_INIT        \

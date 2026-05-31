@@ -37,7 +37,7 @@
     }
   },
   "BOX64_AVX": {
-    "description": "向 CPUID 和 cpuinfo 文件暴露 AVX 扩展。在 Arm64 上默认值为 2，因为 DynaRec 已完全实现，其他架构默认为 0。",
+    "description": "向 CPUID 和 cpuinfo 文件暴露 AVX 扩展。在 Arm64 和龙架构上默认值为 2，因为 DynaRec 已完全实现，其他架构默认为 0。",
     "options": {
       "0": "不暴露 AVX 能力。",
       "1": "向 CPUID 和 cpuinfo 文件暴露 AVX、BMI1、F16C 和 VAES 扩展。",
@@ -373,6 +373,14 @@
       "0": "不限制 DynaCache 文件夹大小。",
       "XXXX": "先删除无效缓存文件，如仍超限再删除最旧的有效缓存文件，将 DynaCache 文件夹保持在 XXXX MiB 以下。",
       "2048": "默认值为 2048 MiB。"
+    }
+  },
+  "BOX64_DYNACACHE_COMPRESS": {
+    "description": "设置是否压缩磁盘上的 DynaCache 文件。",
+    "options": {
+      "0": "不压缩 DynaCache 文件。",
+      "1": "使用 Zlib 最快压缩级别压缩 DynaCache 文件。",
+      "2": "使用 Zlib 默认压缩级别压缩 DynaCache 文件。"
     }
   },
   "BOX64_DYNACACHE_MIN": {

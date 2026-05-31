@@ -254,7 +254,7 @@ Specify the architecture in rcfiles to which the current entry applies. This opt
 
 ### BOX64_AVX
 
-Expose AVX extension to CPUID and cpuinfo file. Default value is 2 on Arm64 because it's fully implemented in DynaRec, 0 otherwise. Available in WowBox64.
+Expose AVX extension to CPUID and cpuinfo file. Default value is 2 on Arm64 and LoongArch64 because it's fully implemented in DynaRec, 0 otherwise. Available in WowBox64.
 
  * 0: Do not expose AVX capabilities.
  * 1: Expose AVX, BMI1, F16C and VAES extensions to CPUID and cpuinfo file.
@@ -800,8 +800,8 @@ Tweak the memory barriers to reduce the performance impact by strong memory emul
 Enable/disable the Dynamic Recompiler Cache (a.k.a DynaCache). This option defaults to 2 (to read cache if present but not generate any). DynaCache writes files to the home folder by default, and keeps its folder below BOX64_DYNACACHE_LIMIT when generating new cache files.
 
  * 0: Disable DynaCache.
- * 1: Enable DynaCache.
- * 2: Use DynaCache files if present, but do not generate new one. [Default]
+ * 1: Enable DynaCache. [Default]
+ * 2: Use DynaCache files if present, but do not generate new one.
 
 ### BOX64_DYNACACHE_FOLDER
 
@@ -816,6 +816,14 @@ Maximum size, in MiB, for the DynaCache folder. When the limit is exceeded, inva
  * 0: Do not limit the DynaCache folder size.
  * XXXX: Keep the DynaCache folder below XXXX MiB by removing invalid cache files first, then the oldest valid cache files.
  * 2048: A size of 2048 MiB is the default value. [Default]
+
+### BOX64_DYNACACHE_COMPRESS
+
+Compress or not DynaCache files on disk
+
+ * 0: Do not compress dynacache files
+ * 1: Compress dynacache files using Zlib with fastest compression. [Default]
+ * 2: Compress dynacache files using ZLib with default compression.
 
 ### BOX64_DYNACACHE_MIN
 

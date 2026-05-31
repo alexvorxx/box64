@@ -72,6 +72,7 @@
 #include "converter32.h"
 #include "cleanup.h"
 #include "box32_inputevent.h"
+#include "syscall_user_dispatch.h"
 
 // need to undef all read / read64 stuffs!
 #undef pread
@@ -2055,7 +2056,7 @@ EXPORT int32_t my32_execve(x64emu_t* emu, const char* path, ptr_t argv[], ptr_t 
 EXPORT int32_t my32_execvp(x64emu_t* emu, const char* path, ptr_t argv[])
 {
     // need to use BOX32_PATH / PATH here...
-    char* fullpath = ResolveFile(path, &my_context->box64_path);
+    char* fullpath = ResolveFileSoft(path, &my_context->box64_path);
     // use fullpath now
     int self = isProcSelf(fullpath, "exe");
     int x86 = FileIsX86ELF(fullpath);
@@ -2104,7 +2105,7 @@ EXPORT int32_t my32_execvp(x64emu_t* emu, const char* path, ptr_t argv[])
 EXPORT int32_t my32_execvpe(x64emu_t* emu, const char* path, ptr_t argv[], ptr_t envp[])
 {
     // need to use BOX32_PATH / PATH here...
-    char* fullpath = ResolveFile(path, &my_context->box64_path);
+    char* fullpath = ResolveFileSoft(path, &my_context->box64_path);
     // use fullpath now
     int self = isProcSelf(fullpath, "exe");
     int x86 = FileIsX86ELF(fullpath);
@@ -2293,7 +2294,7 @@ EXPORT int32_t my32_posix_spawnp(x64emu_t* emu, pid_t* pid, const char* path,
         convert_file_action_to_64(actions, actions_s);
     }
     // need to use BOX32_PATH / PATH here...
-    char* fullpath = ResolveFile(path, &my_context->box64_path);
+    char* fullpath = ResolveFileSoft(path, &my_context->box64_path);
     // use fullpath...
     int self = isProcSelf(fullpath, "exe");
     int x86 = FileIsX86ELF(fullpath);
@@ -3611,7 +3612,15 @@ EXPORT int my32___prctl_time64(x64emu_t* emu, int option, unsigned long arg2, un
         }
     }
     if(option==PR_SET_SECCOMP) {
-        printf_log(LOG_INFO, "ignoring prctl(PR_SET_SECCOMP, ...)\n");
+        printf_log(LOG_DEBUG, "Ignoring prctl(PR_SET_SECCOMP, ...)\n");
+        return 0;
+    }
+    if (option == PR_SET_SYSCALL_USER_DISPATCH) {
+        long ret = my_syscall_user_dispatch_prctl(emu, arg2, arg3, arg4, (void*)arg5);
+        if(ret < 0) {
+            errno = -ret;
+            return -1;
+        }
         return 0;
     }
     return prctl(option, arg2, arg3, arg4, arg5);
@@ -3632,6 +3641,14 @@ EXPORT int my32_prctl(x64emu_t* emu, int option, unsigned long arg2, unsigned lo
     }
     if(option==PR_SET_SECCOMP) {
         printf_log(LOG_INFO, "ignoring prctl(PR_SET_SECCOMP, ...)\n");
+        return 0;
+    }
+    if (option == PR_SET_SYSCALL_USER_DISPATCH) {
+        long ret = my_syscall_user_dispatch_prctl(emu, arg2, arg3, arg4, (void*)arg5);
+        if(ret < 0) {
+            errno = -ret;
+            return -1;
+        }
         return 0;
     }
     return prctl(option, arg2, arg3, arg4, arg5);

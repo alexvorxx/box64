@@ -101,7 +101,7 @@
   },
   {
     "name": "BOX64_AVX",
-    "description": "Expose AVX extension to CPUID and cpuinfo file. Default value is 2 on Arm64 because it's fully implemented in DynaRec, 0 otherwise.",
+    "description": "Expose AVX extension to CPUID and cpuinfo file. Default value is 2 on Arm64 and LoongArch64 because it's fully implemented in DynaRec, 0 otherwise.",
     "category": "Compatibility",
     "wine": true,
     "options": [
@@ -984,12 +984,12 @@
       {
         "key": "1",
         "description": "Enable DynaCache.",
-        "default": false
+        "default": true
       },
       {
         "key": "2",
         "description": "Use DynaCache files if present, but do not generate new one.",
-        "default": true
+        "default": false
       }
     ]
   },
@@ -1026,6 +1026,29 @@
         "key": "2048",
         "description": "A size of 2048 MiB is the default value.",
         "default": true
+      }
+    ]
+  },
+  {
+    "name": "BOX64_DYNACACHE_COMPRESS",
+    "description": "Compress or not DynaCache files on disk",
+    "category": "Fragile or Legacy",
+    "wine": false,
+    "options": [
+      {
+        "key": "0",
+        "description": "Do not compress dynacache files",
+        "default": false
+      },
+      {
+        "key": "1",
+        "description": "Compress dynacache files using Zlib with fastest compression.",
+        "default": true
+      },
+      {
+        "key": "2",
+        "description": "Compress dynacache files using ZLib with default compression.",
+        "default": false
       }
     ]
   },

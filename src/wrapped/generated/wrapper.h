@@ -3306,6 +3306,7 @@ void pFEpLiiil(x64emu_t *emu, uintptr_t fnc);
 void pFEppLipp(x64emu_t *emu, uintptr_t fnc);
 void pFEppppip(x64emu_t *emu, uintptr_t fnc);
 void pFEpppppi(x64emu_t *emu, uintptr_t fnc);
+void pFEpppppp(x64emu_t *emu, uintptr_t fnc);
 void pFifffppp(x64emu_t *emu, uintptr_t fnc);
 void pFWpppppp(x64emu_t *emu, uintptr_t fnc);
 void pFuuuiiip(x64emu_t *emu, uintptr_t fnc);

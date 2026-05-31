@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.19)
 
 cmake_policy(SET CMP0065 NEW)
 
@@ -158,6 +158,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
+include(CheckLinkerFlag)
+enable_language(C)
+check_linker_flag(C "-fuse-ld=gold" HAS_FUSE_LD_GOLD)
+
 if(RPI3ARM64)
     add_definitions(-DRPI)
     add_definitions(-DRPI3ARM64)
@@ -241,7 +245,11 @@ elseif(SDORYON1)
     set(CFLAGS -pipe -march=armv8.6-a+crypto+sm4+sha3+fp16 -mtune=cortex-a57)
 elseif(ADLINK)
     add_definitions(-DADLINK)
-    set(CFLAGS -pipe -mcpu=neoverse-n1 -fuse-ld=gold -fuse-linker-plugin)
+    set(CFLAGS -pipe -mcpu=neoverse-n1)
+    if(HAS_FUSE_LD_GOLD)
+        list(APPEND CFLAGS "-fuse-ld=gold")
+        list(APPEND CFLAGS "-fuse-linker-plugin")
+    endif()
 elseif(M1)
     add_definitions(-DM1)
     set(CFLAGS -pipe -march=armv8.5-a+simd+crypto)
@@ -458,6 +466,7 @@ set(ELFLOADER_SRC
     "${BOX64_ROOT}/src/libtools/myalign.c"
     "${BOX64_ROOT}/src/libtools/signals.c"
     "${BOX64_ROOT}/src/libtools/sigtools.c"
+    "${BOX64_ROOT}/src/libtools/syscall_user_dispatch.c"
     "${BOX64_ROOT}/src/libtools/decopcode.c"
     "${BOX64_ROOT}/src/libtools/threads.c"
     "${BOX64_ROOT}/src/tools/bitutils.c"
@@ -471,6 +480,7 @@ set(ELFLOADER_SRC
     "${BOX64_ROOT}/src/tools/pathcoll.c"
     "${BOX64_ROOT}/src/tools/rbtree.c"
     "${BOX64_ROOT}/src/tools/env.c"
+    "${BOX64_ROOT}/src/tools/dynacache.c"
     "${BOX64_ROOT}/src/tools/wine_tools.c"
     "${BOX64_ROOT}/src/tools/pe_tools.c"
     "${BOX64_ROOT}/src/wrapped/generated/wrapper.c"
@@ -1011,6 +1021,7 @@ if(DYNAREC)
         "${BOX64_ROOT}/src/dynarec/dynarec_native.c"
         "${BOX64_ROOT}/src/dynarec/dynarec_native_functions.c"
         "${BOX64_ROOT}/src/dynarec/dynacache_reloc.c"
+        "${BOX64_ROOT}/src/dynarec/dynacache_compress.c"
         "${BOX64_ROOT}/src/emu/x64test.c"
     )
 endif()

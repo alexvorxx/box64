@@ -46,6 +46,7 @@
 #include "library.h"
 #include "core.h"
 #include "env.h"
+#include "dynacache.h"
 #include "cleanup.h"
 #include "freq.h"
 #include "hostext.h"
@@ -225,7 +226,6 @@ static void displayMiscInfo(void)
 #if defined(LA64)
     if (box64env.avx && !cpuext.lasx) {
         box64env.avx = 0;
-        box64env.avx2 = 0;
     }
 #endif
 #endif
@@ -424,10 +424,6 @@ static void addLibPaths(box64context_t* context)
     GO("libpng12.so.0");
     GO("libpng16.so.16");
     GO("libcurl.so.4");
-    if(getenv("BOX64_PRESSURE_VESSEL_FILES")) {  // use emulated gnutls in this case, it's safer (nettle is a gnutls dependancy)
-        GO("libgnutls.so.30");
-        GO("libnettle.so.8");
-    }
     GO("libtbbmalloc.so.2");
     GO("libtbbmalloc_proxy.so.2");
     GO("libicuuc.so.64");
@@ -940,24 +936,6 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
             }
         }
         box64_wine = 1;
-        // check if it's proton, with it's custom gstreamer build, to disable gtk3 loading
-        char tmp[strlen(prog)+100];
-        strcpy(tmp, prog);
-        char* pp = strrchr(tmp, '/');
-        if(pp) {
-            *pp = '\0'; // remove the wine binary call
-            strcat(tmp, "/../lib64/gstreamer-1.0");
-            // check if it exist
-            if(FileExist(tmp, 0)) {
-                box64_custom_gstreamer = box_strdup(tmp);
-            } else {
-                *pp = '\0';
-                strcat(tmp, "/../lib/x86_64-linux-gnu/gstreamer-1.0");
-                if(FileExist(tmp, 0)) {
-                   box64_custom_gstreamer = box_strdup(tmp);
-                }
-            }
-        }
         // Try to get the name of the exe being run, to ApplyEnvFileEntry laters
         if(argv[nextarg+1] && argv[nextarg+1][0]!='-' && strlen(argv[nextarg+1])>4 /*&& !strcasecmp(argv[nextarg+1]+strlen(argv[nextarg+1])-4, ".exe")*/) {
             const char* pp = strrchr(argv[nextarg+1], '/');
@@ -1001,6 +979,30 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
     my_context = NewBox64Context(argc - nextarg);
 
     addLibPaths(my_context);
+    if(box64_wine) {
+        // check if it's proton, with it's custom gstreamer build, to disable gtk3 loading
+        char* tmp_ = ResolveFile(prog_, &my_context->box64_path);
+        if(tmp_) {
+            char tmp[strlen(tmp_)+100];
+            strcpy(tmp, tmp_);
+            box_free(tmp_);
+            char* pp = strrchr(tmp, '/');
+            if(pp) {
+                *pp = '\0'; // remove the wine binary call
+                strcat(tmp, "/../lib64/gstreamer-1.0");
+                // check if it exist
+                if(FileExist(tmp, 0)) {
+                    box64_custom_gstreamer = box_strdup(tmp);
+                } else {
+                    *pp = '\0';
+                    strcat(tmp, "/../lib/x86_64-linux-gnu/gstreamer-1.0");
+                    if(FileExist(tmp, 0)) {
+                    box64_custom_gstreamer = box_strdup(tmp);
+                    }
+                }
+            }
+        }
+    }
 
     // Append ld_list if it exist
     if(ld_libs_args!=-1)
@@ -1022,6 +1024,8 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
         unsetenv("BOX64_ARG0");
         if(!my_context->bashpath)
             my_context->bashpath = ResolveFile("box64-bash", &my_context->box64_path);
+        if(!my_context->pythonpath)
+            my_context->pythonpath = ResolveFile("box64-python", &my_context->box64_path);
         pressure_vessel(argc, argv, nextarg+1, prog);
     }
     #endif

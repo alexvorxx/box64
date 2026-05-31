@@ -151,12 +151,13 @@ extern char* ftrace_name;
     BOOLEAN(BOX64_X87_NO80BITS, x87_no80bits, 0, 1)                           \
     BOOLEAN(BOX64_NOPERSONA32BITS, nopersona32bits, 0, 0)                     \
     BOOLEAN(BOX64_NOVULKANOVERLAY, novulkanoverlay, 0, 0)                     \
-    INTEGER(BOX64_DYNACACHE, dynacache, 2, 0, 2, 0)                           \
+    INTEGER(BOX64_DYNACACHE, dynacache, 1, 0, 2, 0)                           \
     STRING(BOX64_DYNACACHE_FOLDER, dynacache_folder, 0)                       \
+    INTEGER(BOX64_DYNACACHE_COMPRESS, dynacache_compress, 1, 0, 2, 0)         \
     INTEGER(BOX64_DYNACACHE_LIMIT, dynacache_limit, 2048, 0, 1048576, 0)      \
     INTEGER(BOX64_DYNACACHE_MIN, dynacache_min, 350, 0, 10240, 0)
 
-#if defined(ARM64)
+#if defined(ARM64) || defined (LA64)
 #define ENVSUPER2() \
     INTEGER(BOX64_AVX, avx, 2, 0, 2, 1)
 #else
@@ -206,7 +207,6 @@ typedef struct box64env_s {
     /******** Custom ones ********/
     int maxcpu;
     int dynarec_test;
-    int avx2;
     int rolling_log;
     int dynarec_perf_map_fd;
     int dynarec_gdbjit;
@@ -224,15 +224,6 @@ typedef struct box64env_s {
 } box64env_t;
 
 typedef struct mmaplist_s mmaplist_t;
-#ifdef DYNAREC
-typedef struct blocklist_s blocklist_t;
-
-typedef struct DynaCacheBlock_s {
-    blocklist_t*    block;
-    size_t          size;
-    size_t          free_size;
-} DynaCacheBlock_t;
-#endif
 
 void InitializeEnvFiles();
 int ApplyEnvFileEntry(const char* name);
@@ -250,8 +241,6 @@ size_t SizeFileMapped(uintptr_t addr);
 mmaplist_t* GetMmaplistByAddr(uintptr_t addr);
 int IsAddrNeedReloc(uintptr_t addr);
 void SerializeAllMapping();
-void DynaCacheList(const char* name);
-void DynaCacheClean();
 int IsAddrMappingLoadAndClean(uintptr_t addr);
 
 #endif // __ENV_H

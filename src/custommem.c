@@ -16,6 +16,9 @@
 #include "callback.h"
 #include "x64trace.h"
 #include "custommem.h"
+#ifndef _WIN32
+#include "signals.h"
+#endif
 #include "khash.h"
 #include "threads.h"
 #include "rbtree.h"
@@ -26,6 +29,7 @@
 #include "dynarec/dynablock_private.h"
 #include "dynarec/native_lock.h"
 #include "dynarec/dynarec_next.h"
+#include "dynacache_compress.h"
 #include "freq.h"
 
 // init inside dynablocks.c
@@ -561,24 +565,57 @@ static uintptr_t    defered_prot_p = 0;
 static size_t       defered_prot_sz = 0;
 static uint32_t     defered_prot_prot = 0;
 static mem_flag_t   defered_prot_flags = MEM_ALLOCATED;
-static sigset_t     critical_prot = {0};
-static void setProtection_generic(uintptr_t addr, size_t sz, uint32_t prot, mem_flag_t flags);
-#define LOCK_PROT()         sigset_t old_sig = {0}; pthread_sigmask(SIG_BLOCK, &critical_prot, &old_sig); mutex_lock(&mutex_prot)
-#define LOCK_PROT_READ()    sigset_t old_sig = {0}; pthread_sigmask(SIG_BLOCK, &critical_prot, &old_sig); mutex_lock(&mutex_prot)
-#define LOCK_PROT_FAST()    mutex_lock(&mutex_prot)
-#define UNLOCK_PROT()       if(defered_prot_p) {                                \
-                                uintptr_t p = defered_prot_p; size_t sz = defered_prot_sz; uint32_t prot = defered_prot_prot; mem_flag_t f = defered_prot_flags;\
-                                defered_prot_p = 0;                             \
-                                pthread_sigmask(SIG_SETMASK, &old_sig, NULL);   \
-                                mutex_unlock(&mutex_prot);                      \
-                                setProtection_generic(p, sz, prot, f);          \
-                            } else {                                            \
-                                pthread_sigmask(SIG_SETMASK, &old_sig, NULL);   \
-                                mutex_unlock(&mutex_prot);                      \
-                            }
-#define UNLOCK_PROT_READ()  mutex_unlock(&mutex_prot); pthread_sigmask(SIG_SETMASK, &old_sig, NULL)
-#define UNLOCK_PROT_FAST()  mutex_unlock(&mutex_prot)
 
+#ifdef _WIN32
+void enter_critical_section(void) {}
+void leave_critical_section(void) {}
+#endif
+
+static void setProtection_generic(uintptr_t addr, size_t sz, uint32_t prot, mem_flag_t flags);
+#define LOCK_PROT()               \
+    do {                          \
+        enter_critical_section(); \
+        mutex_lock(&mutex_prot);  \
+    } while (0)
+
+#define LOCK_PROT_READ()          \
+    do {                          \
+        enter_critical_section(); \
+        mutex_lock(&mutex_prot);  \
+    } while (0)
+
+#define LOCK_PROT_FAST()         \
+    do {                         \
+        mutex_lock(&mutex_prot); \
+    } while (0)
+
+#define UNLOCK_PROT()                              \
+    do {                                           \
+        if (defered_prot_p) {                      \
+            uintptr_t p = defered_prot_p;          \
+            size_t sz = defered_prot_sz;           \
+            uint32_t prot = defered_prot_prot;     \
+            mem_flag_t f = defered_prot_flags;     \
+            defered_prot_p = 0;                    \
+            mutex_unlock(&mutex_prot);             \
+            leave_critical_section();              \
+            setProtection_generic(p, sz, prot, f); \
+        } else {                                   \
+            mutex_unlock(&mutex_prot);             \
+            leave_critical_section();              \
+        }                                          \
+    } while (0)
+
+#define UNLOCK_PROT_READ()         \
+    do {                           \
+        mutex_unlock(&mutex_prot); \
+        leave_critical_section();  \
+    } while (0)
+
+#define UNLOCK_PROT_FAST()         \
+    do {                           \
+        mutex_unlock(&mutex_prot); \
+    } while (0)
 
 #ifdef TRACE_MEMSTAT
 static uint64_t customMalloc_allocated = 0;
@@ -1433,25 +1470,13 @@ size_t MmaplistTotalAlloc(mmaplist_t* list)
 
 int ApplyRelocs(dynablock_t* block, intptr_t delta_block, intptr_t delat_map, uintptr_t mapping_start);
 uintptr_t RelocGetNext();
-int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t size, intptr_t delta_map, uintptr_t mapping_start)
+int MmaplistAddBlock_internal(mmaplist_t* list, void* map, void* orig, size_t size, intptr_t delta_map, uintptr_t mapping_start)
 {
-    if(!list) return -1;
     if(list->cap==list->size) {
         list->cap += 4;
         list->chunks = box_realloc(list->chunks, list->cap*sizeof(blocklist_t**));
     }
     int i = list->size++;
-    void* map = MAP_FAILED;
-    #ifdef BOX32
-    if(box64_is32bits)
-        map = box32_dynarec_mmap(size, fd, offset);
-    #endif
-    if(map==MAP_FAILED)
-        map = InternalMmap(NULL, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE, fd, offset);
-    if(map==MAP_FAILED) {
-        printf_log(LOG_INFO, "Failed to load block %d of a maplist\n", i);
-        return -3;
-    }
     #ifdef MADV_HUGEPAGE
     madvise(map, size, MADV_HUGEPAGE);
     #endif
@@ -1476,7 +1501,6 @@ int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t 
             #define GO(A) if(bl->A) bl->A = ((void*)bl->A)+delta
             GO(block);
             GO(actual_block);
-            GO(previous);
             GO(instsize);
             GO(arch);
             GO(callrets);
@@ -1494,6 +1518,11 @@ int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t 
                 *db_ref = (*db_ref)+delta;
                 db_ref = (bl->jmpnext-sizeof(void*)+3*sizeof(void*));
                 *db_ref = native_next;
+            }
+            if(bl->gone || !bl->done) {
+                dynarec_log(LOG_DEBUG, "Skipping stale DynCache block %p for %p (done=%d, gone=%d)\n", bl, bl->x64_addr, bl->done, bl->gone);
+                p = NEXT_BLOCK((blockmark_t*)p);
+                continue;
             }
             // adjust guest source addresses with delta_map
             bl->x64_addr += delta_map;
@@ -1538,13 +1567,53 @@ int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t 
     return 0;
 }
 
-void MmaplistFillBlocks(mmaplist_t* list, DynaCacheBlock_t* blocks)
+int MmaplistAddBlock(mmaplist_t* list, int fd, off_t offset, void* orig, size_t size, intptr_t delta_map, uintptr_t mapping_start)
+{
+    if(!list) return -1;
+    void* map = MAP_FAILED;
+    #ifdef BOX32
+    if(box64_is32bits)
+        map = box32_dynarec_mmap(size, fd, offset);
+    #endif
+    if(map==MAP_FAILED)
+        map = InternalMmap(NULL, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE, fd, offset);
+    if(map==MAP_FAILED) {
+        printf_log(LOG_INFO, "Failed to Mmap a block of a maplist\n");
+        return -3;
+    }
+    return MmaplistAddBlock_internal(list, map, orig, size, delta_map, mapping_start);
+}
+#ifndef WIN32
+int MmaplistAddCompressedBlock(mmaplist_t* list, int type, void* src, size_t src_size, void* orig, size_t size, intptr_t delta_map, uintptr_t mapping_start)
+{
+    if(!list) return -1;
+    void* map = MAP_FAILED;
+    #ifdef BOX32
+    if(box64_is32bits)
+        map = box32_dynarec_mmap(size, -1, 0);
+    #endif
+    if(map==MAP_FAILED)
+        map = InternalMmap(NULL, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    if(map==MAP_FAILED) {
+        printf_log(LOG_INFO, "Failed to Alloc a block of a maplist\n");
+        return -3;
+    }
+    if(dc_uncompress(src, src_size, type, map, size)) {
+        printf_log(LOG_INFO, "Failed to Uncompress a block of a maplist\n");
+        return -3;
+    }
+    return MmaplistAddBlock_internal(list, map, orig, size, delta_map, mapping_start);
+}
+#endif
+void MmaplistFillBlocks(mmaplist_t* list, CompressedDynaCacheBlock_t* blocks)
 {
     if(!list) return;
     for(int i=0; i<list->size; ++i) {
-        blocks[i].block = list->chunks[i];
-        blocks[i].size = list->chunks[i]->size+sizeof(blocklist_t);
-        blocks[i].free_size = list->chunks[i]->maxfree;
+        blocks[i].block.block = list->chunks[i];
+        blocks[i].block.size = list->chunks[i]->size+sizeof(blocklist_t);
+        blocks[i].block.free_size = list->chunks[i]->maxfree;
+        blocks[i].compsize = 0;
+        blocks[i].type = COMP_NONE;
     }
 }
 
@@ -1554,6 +1623,7 @@ void DelMmaplist(mmaplist_t* list)
     for(int i=0; i<list->size; ++i)
         if(list->chunks[i]->size) {
             cleanDBFromAddressRange((uintptr_t)list->chunks[i]->block, list->chunks[i]->size, 1);
+            DeferFreeDynablockClearRange(list->chunks[i]->block, list->chunks[i]->size);
             rb_unset(rbt_dynmem, (uintptr_t)list->chunks[i]->block, (uintptr_t)list->chunks[i]->block+list->chunks[i]->size);
             // the blocklist_t "chunk" structure is port of the memory map, so grab info before freing the memory
             // also need to include back the blocklist_t that is excluded from the blocklist tracking
@@ -2588,7 +2658,11 @@ void updateProtection(uintptr_t addr, size_t size, uint32_t prot)
         rb_get_end(memprot, cur, &oprot, &bend);
         if(bend>end) bend = end;
         uint32_t dyn=(oprot&PROT_DYN);
-        uint32_t never = dyn&PROT_NEVERPROT;
+        if (dyn & PROT_NOPROT) {
+            cur = bend;
+            continue;
+        }
+        uint32_t never = dyn & PROT_NEVERCLEAN;
         if(!(never)) {
             if(dyn && (prot&PROT_WRITE)) {   // need to remove the write protection from this block
                 dyn = PROT_DYNAREC;
@@ -3062,7 +3136,6 @@ void init_custommem_helper(box64context_t* ctx)
         for(int i=0; i<n_blocks; ++i)
             rb_set(blockstree, (uintptr_t)p_blocks[i].block, (uintptr_t)p_blocks[i].block+p_blocks[i].size, i);
     memprot = rbtree_init("memprot");
-    sigfillset(&critical_prot);
 #ifdef DYNAREC
     if(BOX64ENV(dynarec)) {
         #ifdef JMPTABL_SHIFT4

@@ -3269,6 +3269,7 @@
 #() pFEppLipp
 #() pFEppppip
 #() pFEpppppi
+#() pFEpppppp
 #() pFifffppp
 #() pFWpppppp
 #() pFuuuiiip
@@ -6893,6 +6894,8 @@ wrappedpulse:
   - pa_context_set_source_volume_by_name
 - iFppLpIu:
   - pa_stream_write
+- pFpppppp:
+  - pa_context_send_message_to_object
 - pFpiuCppp:
   - pa_ext_device_restore_save_formats
 wrappedpulsemainloopglib:
