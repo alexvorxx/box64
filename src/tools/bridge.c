@@ -100,6 +100,12 @@ void FreeBridge(bridge_t** bridge)
     *bridge = NULL;
 }
 
+static khint128_t getKey(wrapper_t w, void* fnc, void* fnc2)
+{
+    // addresses are 48bits max, and the wrapper, being part of box64, is expected to be 32bits, so the key is constitute as fnc2(48)fnc(48)wrap(32)
+    return ((((uintptr_t)fnc)&0xffffffffffffULL)<<32) | (khint128_t)((uintptr_t)fnc2&0xffffffffffffULL)<<(64+16) | ((uintptr_t)w&0xffffffffULL);
+}
+
 //static const char* default_bridge = "bridge???";
 uintptr_t AddBridge2(bridge_t* bridge, wrapper_t w, void* fnc, void* fnc2, int N, const char* name)
 {
@@ -117,7 +123,7 @@ uintptr_t AddBridge2(bridge_t* bridge, wrapper_t w, void* fnc, void* fnc2, int N
     sz = b->sz;
     b->sz++;
     // add bridge to map, for fast recovery
-    khint128_t key = (uintptr_t)fnc | (khint128_t)((uintptr_t)fnc2)<<64;
+    khint128_t key = getKey(w, fnc, fnc2);
     khint_t k = kh_put(bridgemap, bridge->bridgemap, key, &ret);
     kh_value(bridge->bridgemap, k) = (uintptr_t)&b->b[sz].CC;
     mutex_unlock(&my_context->mutex_bridge);
@@ -139,19 +145,19 @@ uintptr_t AddBridge(bridge_t* bridge, wrapper_t w, void* fnc, int N, const char*
     return AddBridge2(bridge, w, fnc, NULL, N, name);
 }
 
-uintptr_t CheckBridged(bridge_t* bridge, void* fnc)
+uintptr_t CheckBridged(bridge_t* bridge, wrapper_t w, void* fnc)
 {
     // check if function alread have a bridge (the function wrapper will not be tested)
-    khint_t k = kh_get(bridgemap, bridge->bridgemap, (uintptr_t)fnc);
+    khint_t k = kh_get(bridgemap, bridge->bridgemap, getKey(w, fnc, NULL));
     if(k==kh_end(bridge->bridgemap))
         return 0;
     return kh_value(bridge->bridgemap, k);
 }
 
-uintptr_t CheckBridged2(bridge_t* bridge, void* fnc, void* fnc2)
+uintptr_t CheckBridged2(bridge_t* bridge, wrapper_t w, void* fnc, void* fnc2)
 {
     // check if function alread have a bridge (the function wrapper will not be tested)
-    khint128_t key = (uintptr_t)fnc | (khint128_t)((uintptr_t)fnc2)<<64;
+    khint128_t key = getKey(w, fnc, fnc2);
     khint_t k = kh_get(bridgemap, bridge->bridgemap, key);
     if(k==kh_end(bridge->bridgemap))
         return 0;
@@ -162,7 +168,7 @@ uintptr_t AddCheckBridge(bridge_t* bridge, wrapper_t w, void* fnc, int N, const 
 {
     if(!fnc && w)
         return 0;
-    uintptr_t ret = CheckBridged(bridge, fnc);
+    uintptr_t ret = CheckBridged(bridge, w, fnc);
     if(!ret)
         ret = AddBridge(bridge, w, fnc, N, name);
     return ret;
@@ -172,7 +178,7 @@ uintptr_t AddCheckBridge2(bridge_t* bridge, wrapper_t w, void* fnc, void* fnc2, 
 {
     if(!fnc && w)
         return 0;
-    uintptr_t ret = CheckBridged2(bridge, fnc, fnc2);
+    uintptr_t ret = CheckBridged2(bridge, w, fnc, fnc2);
     if(!ret)
         ret = AddBridge2(bridge, w, fnc, fnc2, N, name);
     return ret;
@@ -182,7 +188,7 @@ uintptr_t AddAutomaticBridge(bridge_t* bridge, wrapper_t w, void* fnc, int N, co
 {
     if(!fnc)
         return 0;
-    uintptr_t ret = CheckBridged(bridge, fnc);
+    uintptr_t ret = CheckBridged(bridge, w, fnc);
     if(!ret)
         ret = AddBridge(bridge, w, fnc, N, name);
     if(!hasAlternate(fnc)) {
@@ -196,7 +202,7 @@ uintptr_t AddAutomaticBridgeAlt(bridge_t* bridge, wrapper_t w, void* fnc, void* 
 {
     if(!fnc)
         return 0;
-    uintptr_t ret = CheckBridged(bridge, alt);
+    uintptr_t ret = CheckBridged(bridge, w, alt);
     if(!ret)
         ret = AddBridge(bridge, w, alt, N, name);
     if(!hasAlternate(fnc)) {

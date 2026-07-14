@@ -49,6 +49,7 @@ option(BOX32_BINFMT "Also setup binfmt integration for box32" ${BOX32_BINFMT})
 option(LARCH64_ABI_1 "Set to ON if building for Loongarch64 ABI 1.0 system" ${LARCH64_ABI_1})
 option(GDBJIT "Set to ON to enable GDB JIT support" ${GDBJIT})
 option(WOW64 "Set to ON if you want a WOW64 PE build in addition")
+option(BOX64_KDE_PROFILE_PLUGIN "Build the Dolphin/KIO Box64 profile properties plugin when KF5 or KF6 is available" OFF)
 
 if(TERMUX)
     set(TERMUX_PATH "/data/data/com.termux/files")
@@ -131,18 +132,19 @@ option(STATICBUILD "Set to ON to have a static build (Warning, not working)" ${S
 option(NO_LIB_INSTALL "Set ON to not install a few x86_64 libs that are used by many program" ${NO_LIB_INSTALL})
 option(NO_CONF_INSTALL "Set ON to not install config files" ${NO_CONF_INSTALL})
 
+set(BOX64_PYTHON_MIN_VERSION 3.7)
 if(${CMAKE_VERSION} VERSION_LESS "3.12.2")
-    find_package(PythonInterp 3)
+    find_package(PythonInterp ${BOX64_PYTHON_MIN_VERSION})
     if(NOT PYTHONINTERP_FOUND)
         message( FATAL_ERROR "You need a Python interpreter, CMake will exit." )
     endif()
-    if(${PYTHON_VERSION_MAJOR} LESS 3)
-        message( FATAL_ERROR "You need a Python 3 interpreter, CMake will exit." )
+    if(${PYTHON_VERSION_STRING} VERSION_LESS ${BOX64_PYTHON_MIN_VERSION})
+        message( FATAL_ERROR "You need a Python ${BOX64_PYTHON_MIN_VERSION} or newer interpreter, CMake will exit." )
     endif()
 else()
-    find_package(Python3)
+    find_package(Python3 ${BOX64_PYTHON_MIN_VERSION})
     if(NOT Python3_Interpreter_FOUND)
-        message( FATAL_ERROR "You need a Python interpreter, CMake will exit." )
+        message( FATAL_ERROR "You need a Python ${BOX64_PYTHON_MIN_VERSION} or newer interpreter, CMake will exit." )
     endif()
     set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE} CACHE INTERNAL "The Python3 executable" FORCE)
 endif()
@@ -475,6 +477,7 @@ set(ELFLOADER_SRC
     "${BOX64_ROOT}/src/tools/alternate.c"
     "${BOX64_ROOT}/src/tools/callback.c"
     "${BOX64_ROOT}/src/tools/cleanup.c"
+    "${BOX64_ROOT}/src/tools/cpumask.c"
     "${BOX64_ROOT}/src/tools/gdbjit.c"
     "${BOX64_ROOT}/src/tools/fileutils.c"
     "${BOX64_ROOT}/src/tools/pathcoll.c"
@@ -859,6 +862,7 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlibtiff5.c"
     "${BOX64_ROOT}/src/wrapped/wrappedbrotlidec.c"
     "${BOX64_ROOT}/src/wrapped/wrappedzstd.c"
+    "${BOX64_ROOT}/src/wrapped/wrappedlz4.c"
     "${BOX64_ROOT}/src/wrapped/wrappedproxy.c"
     "${BOX64_ROOT}/src/wrapped/wrappedssh4.c"
     "${BOX64_ROOT}/src/wrapped/wrappedsmbclient.c"
@@ -1398,7 +1402,95 @@ if(NOT _x86 AND NOT _x86_64)
       GROUP_READ GROUP_EXECUTE
       WORLD_READ WORLD_EXECUTE)
   if(NOT TERMUX)
+   set(BOX64_CONFIGURATOR_OUTPUT ${CMAKE_BINARY_DIR}/bin/box64-configurator)
+   set(BOX64_CONFIGURATOR_SOURCES
+       ${CMAKE_SOURCE_DIR}/configurator/build_standalone.py
+       ${CMAKE_SOURCE_DIR}/configurator/box64rc.py
+       ${CMAKE_SOURCE_DIR}/configurator/configurator.py
+       ${CMAKE_SOURCE_DIR}/configurator/configurator.ui
+       ${CMAKE_SOURCE_DIR}/configurator/model.py
+       ${CMAKE_SOURCE_DIR}/configurator/usage.py
+       ${CMAKE_SOURCE_DIR}/configurator/text_en.json
+       ${CMAKE_SOURCE_DIR}/configurator/text_zh.json
+       ${CMAKE_SOURCE_DIR}/docs/gen/usage.json
+       ${CMAKE_SOURCE_DIR}/docs/gen/usage_cn.json)
+   add_custom_command(
+       OUTPUT ${BOX64_CONFIGURATOR_OUTPUT}
+       COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/configurator/build_standalone.py"
+               --output "${BOX64_CONFIGURATOR_OUTPUT}"
+               --configurator-dir "${CMAKE_SOURCE_DIR}/configurator"
+               --usage "${CMAKE_SOURCE_DIR}/docs/gen/usage.json"
+               --usage-cn "${CMAKE_SOURCE_DIR}/docs/gen/usage_cn.json"
+       DEPENDS ${BOX64_CONFIGURATOR_SOURCES}
+       VERBATIM)
+   add_custom_target(box64-configurator ALL DEPENDS ${BOX64_CONFIGURATOR_OUTPUT})
    install(TARGETS ${BOX64} RUNTIME DESTINATION bin)
+   install(PROGRAMS ${BOX64_CONFIGURATOR_OUTPUT} DESTINATION bin)
+   install(FILES ${CMAKE_SOURCE_DIR}/system/box64-configurator.desktop DESTINATION share/applications)
+   if(BOX64_KDE_PROFILE_PLUGIN)
+       include(CheckLanguage)
+       check_language(CXX)
+       if(CMAKE_CXX_COMPILER)
+           enable_language(CXX)
+           find_package(ECM QUIET NO_MODULE)
+           if(ECM_FOUND)
+               list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH} ${ECM_KDE_MODULE_DIR})
+               set(_BOX64_KDE_PROFILE_PLUGIN_KF_MAJOR "")
+
+               set(QT_DEFAULT_MAJOR_VERSION 6)
+               find_package(Qt6 QUIET COMPONENTS Core Widgets)
+               find_package(KF6CoreAddons QUIET)
+               find_package(KF6KIO QUIET)
+               if(Qt6_FOUND AND Qt6Widgets_FOUND AND KF6CoreAddons_FOUND AND KF6KIO_FOUND)
+                   include(KDEInstallDirs6)
+                   set(_BOX64_KDE_PROFILE_PLUGIN_KF_MAJOR 6)
+                   set(_BOX64_KDE_PROFILE_PLUGIN_QT_WIDGETS_TARGET Qt6::Widgets)
+                   set(_BOX64_KDE_PROFILE_PLUGIN_KIO_WIDGETS_TARGET KF6::KIOWidgets)
+                   set(_BOX64_KDE_PROFILE_PLUGIN_INSTALL_NAMESPACE "kf6/propertiesdialog")
+               else()
+                   set(QT_DEFAULT_MAJOR_VERSION 5)
+                   find_package(Qt5 QUIET COMPONENTS Core Widgets)
+                   find_package(KF5CoreAddons QUIET)
+                   find_package(KF5KIO QUIET)
+                   if(Qt5_FOUND AND Qt5Widgets_FOUND AND KF5CoreAddons_FOUND AND KF5KIO_FOUND)
+                       include(KDEInstallDirs5)
+                       set(_BOX64_KDE_PROFILE_PLUGIN_KF_MAJOR 5)
+                       set(_BOX64_KDE_PROFILE_PLUGIN_QT_WIDGETS_TARGET Qt5::Widgets)
+                       set(_BOX64_KDE_PROFILE_PLUGIN_KIO_WIDGETS_TARGET KF5::KIOWidgets)
+                       set(_BOX64_KDE_PROFILE_PLUGIN_INSTALL_NAMESPACE "kf5/propertiesdialog")
+                   endif()
+               endif()
+
+               if(_BOX64_KDE_PROFILE_PLUGIN_KF_MAJOR)
+                   if(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
+                       set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+                   endif()
+                   set(_BOX64_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+                   set(BUILD_SHARED_LIBS ON)
+                   kcoreaddons_add_plugin(box64_profile_propertiesplugin
+                       SOURCES ${CMAKE_SOURCE_DIR}/system/kde/box64_profile_propertiesplugin.cpp
+                       INSTALL_NAMESPACE "${_BOX64_KDE_PROFILE_PLUGIN_INSTALL_NAMESPACE}")
+                   set(BUILD_SHARED_LIBS ${_BOX64_BUILD_SHARED_LIBS})
+                   target_link_libraries(box64_profile_propertiesplugin PRIVATE
+                       ${_BOX64_KDE_PROFILE_PLUGIN_KIO_WIDGETS_TARGET}
+                       ${_BOX64_KDE_PROFILE_PLUGIN_QT_WIDGETS_TARGET})
+                   set_target_properties(box64_profile_propertiesplugin PROPERTIES
+                       AUTOMOC ON
+                       PREFIX ""
+                       CXX_STANDARD 17
+                       CXX_STANDARD_REQUIRED ON
+                       CXX_EXTENSIONS OFF)
+                   message(STATUS "Building Box64 profile properties dialog plugin for KF${_BOX64_KDE_PROFILE_PLUGIN_KF_MAJOR}")
+               else()
+                   message(STATUS "Dolphin/KIO Box64 profile plugin disabled: missing Qt5/KF5 or Qt6/KF6 KIO development packages")
+               endif()
+           else()
+               message(STATUS "Dolphin/KIO Box64 profile plugin disabled: ECM not found")
+           endif()
+       else()
+           message(STATUS "Dolphin/KIO Box64 profile plugin disabled: C++ compiler not found")
+       endif()
+   endif()
     if(NOT NO_LIB_INSTALL)
      install(PROGRAMS ${CMAKE_SOURCE_DIR}/tests/box64-bash DESTINATION bin)
      install(PROGRAMS ${CMAKE_SOURCE_DIR}/system/box64-python DESTINATION bin)
@@ -1434,7 +1526,7 @@ if(NOT _x86 AND NOT _x86_64)
 	  endif()
 
   endif()
-  set(INSTALL_PATH "/usr/lib/box64-x86_64-linux-gnu/")
+  set(INSTALL_PATH "/usr/lib/box64-x86_64-linux-gnu")
   if(NOT NO_LIB_INSTALL)
 	if(NOT TERMUX AND NOT ANDROID)
         install(FILES ${CMAKE_SOURCE_DIR}/x64lib/libstdc++.so.5 DESTINATION ${INSTALL_PATH})
@@ -1583,502 +1675,4 @@ set(CPACK_DEBIAN_FILE_NAME "${BOX64}-${BOX64_MAJOR}.${BOX64_MINOR}.${BOX64_REVIS
 endif()
 INCLUDE(CPack)
 
-if(NOT ANDROID)
-add_test(bootSyscall ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test01 -D TEST_OUTPUT=tmpfile01.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref01.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(bootSyscallC ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test02 -D TEST_OUTPUT=tmpfile02.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref02.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(printf ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test03 -D TEST_OUTPUT=tmpfile03.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref03.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(args ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test04 -D TEST_ARGS2=yeah -D TEST_OUTPUT=tmpfile04.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref04.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(maths1 ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test05 -D TEST_ARGS2=7 -D TEST_OUTPUT=tmpfile05.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref05.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(threadsStart ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test06 -D TEST_OUTPUT=tmpfile06.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref06.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(trig ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test07 -D TEST_OUTPUT=tmpfile07.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref07.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(pi ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test08 -D TEST_OUTPUT=tmpfile08.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref08.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(fork ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test09 -D TEST_OUTPUT=tmpfile09.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref09.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(cppThreads_nocosim ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test10 -D TEST_OUTPUT=tmpfile10.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref10.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-set_tests_properties(cppThreads_nocosim PROPERTIES ENVIRONMENT "BOX64_LD_LIBRARY_PATH=${CMAKE_SOURCE_DIR}/x64lib")
-
-add_test(tlsData ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test11 -D TEST_OUTPUT=tmpfile11.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref11.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(fpu ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test12 -D TEST_OUTPUT=tmpfile12.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref12.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(contexts ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test13 -D TEST_OUTPUT=tmpfile13.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref13.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-#add_test(conditionalThreads ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-#    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test14 -D TEST_OUTPUT=tmpfile14.txt
-#    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref14.txt
-#    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(linkingIndirectNoversion ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test15 -D TEST_OUTPUT=tmpfile15.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref15.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(sse_asm ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test16 -D TEST_OUTPUT=tmpfile16.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref16.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-set_tests_properties(sse_asm PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTROUND=0")
-
-add_test(sse_intrinsics ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test17 -D TEST_OUTPUT=tmpfile17.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref17.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-set_tests_properties(sse_intrinsics PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTNAN=0;BOX64_DYNAREC_FASTROUND=0")
-
-add_test(aes ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test18 -D TEST_OUTPUT=tmpfile18.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref18.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(backtrace ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test19 -D TEST_OUTPUT=tmpfile19.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref19.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(irelative_reloc ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test20 -D TEST_OUTPUT=tmpfile20.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref20.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(longjumpInSignals_nocosim ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test21 -D TEST_OUTPUT=tmpfile21.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref21.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(x87 ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test22 -D TEST_OUTPUT=tmpfile22.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref22.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-set_tests_properties(x87 PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTROUND=0")
-
-add_test(pshufb ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test23 -D TEST_OUTPUT=tmpfile23.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref23.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(bswap ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test24 -D TEST_OUTPUT=tmpfile24.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref24.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(x87cache ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test25 -D TEST_OUTPUT=tmpfile25.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref25.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(feround ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test26 -D TEST_OUTPUT=tmpfile26.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref26.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-set_tests_properties(feround PROPERTIES ENVIRONMENT "BOX64_SYNC_ROUNDING=1")
-
-add_test(sse4_2 ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test27 -D TEST_OUTPUT=tmpfile27.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref27.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(shaext ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test28 -D TEST_OUTPUT=tmpfile28.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref28.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(lock ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test29 -D TEST_OUTPUT=tmpfile29.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref29.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(avx_intrinsics ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test30 -D TEST_OUTPUT=tmpfile30.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref30.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-set_tests_properties(avx_intrinsics PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTNAN=0;BOX64_DYNAREC_FASTROUND=0;BOX64_AVX=2")
-
-add_test(fpu_rounding ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test31 -D TEST_OUTPUT=tmpfile31.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref31.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-set_tests_properties(fpu_rounding PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTROUND=0")
-
-add_test(x87pc ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test32 -D TEST_OUTPUT=tmpfile32.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref32.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-set_tests_properties(x87pc PROPERTIES ENVIRONMENT "BOX64_DYNAREC_X87DOUBLE=2")
-
-add_test(Boundary ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test33 -D TEST_OUTPUT=tmpfile33.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref33.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-#if(NOT CI)
-#    add_test(AppImage ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-#        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test01-x64.AppImage -D TEST_OUTPUT=tmpfileAppImage.txt
-#        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref01.txt
-#        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-#endif()
-
-else()
-
-add_test(bootSyscall ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test01_android -D TEST_OUTPUT=tmpfile01.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref01.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(bootSyscallC ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test02_android -D TEST_OUTPUT=tmpfile02.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref02.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(printf ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test03_android -D TEST_OUTPUT=tmpfile03.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref03.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(args ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test04_android -D TEST_ARGS2=yeah -D TEST_OUTPUT=tmpfile04.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref04.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(maths1 ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test05_android -D TEST_ARGS2=7 -D TEST_OUTPUT=tmpfile05.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref05.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(threadsStart ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test06_android -D TEST_OUTPUT=tmpfile06.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref06.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(trig ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test07_android -D TEST_OUTPUT=tmpfile07.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref07.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(pi ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test08_android -D TEST_OUTPUT=tmpfile08.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref08.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(fork ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test09_android -D TEST_OUTPUT=tmpfile09.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref09.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(fpu ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test12_android -D TEST_OUTPUT=tmpfile12.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref12_android.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(linkingIndirectNoversion ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test15_android -D TEST_OUTPUT=tmpfile15.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref15.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-# Box64 for Android now have problems with test16, then disable it for now
-
-#add_test(sse_asm ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-#    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test16_android -D TEST_OUTPUT=tmpfile16.txt
-#    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref16.txt
-#    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-# Box64 for Android now have problems with test17, then disable it for now
-
-#set_tests_properties(sse_asm PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTROUND=0")
-
-#add_test(sse_intrinsics ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-#    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test17_android -D TEST_OUTPUT=tmpfile17.txt
-#    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref17_android.txt
-#    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-#set_tests_properties(sse_intrinsics PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTNAN=0;BOX64_DYNAREC_FASTROUND=0")
-
-add_test(aes ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test18_android -D TEST_OUTPUT=tmpfile18.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref18.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-# Android don't have backtrace symbols
-
-add_test(irelative_reloc ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test20_android -D TEST_OUTPUT=tmpfile20.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref20.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-# add_test(longjumpInSignals_nocosim ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-#     -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test21_android -D TEST_OUTPUT=tmpfile21.txt
-#     -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref21.txt
-#     -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(x87 ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test22_android -D TEST_OUTPUT=tmpfile22.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref22_android.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-set_tests_properties(x87 PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTROUND=0")
-
-add_test(pshufb ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test23_android -D TEST_OUTPUT=tmpfile23.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref23.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(bswap ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test24_android -D TEST_OUTPUT=tmpfile24.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref24.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(x87cache ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test25_android -D TEST_OUTPUT=tmpfile25.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref25.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(feround ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test26_android -D TEST_OUTPUT=tmpfile26.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref26.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-set_tests_properties(feround PROPERTIES ENVIRONMENT "BOX64_SYNC_ROUNDING=1")
-
-# TODO: need to regen test with latest test27.c sources
-
-#add_test(sse4_2 ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-#    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test27_android -D TEST_OUTPUT=tmpfile27.txt
-#    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref27.txt
-#    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(shaext ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test28_android -D TEST_OUTPUT=tmpfile28.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref28.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-add_test(lock ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test29_android -D TEST_OUTPUT=tmpfile29.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref29.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-#add_test(avx_intrinsics ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-#    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/test30_android -D TEST_OUTPUT=tmpfile30.txt
-#    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/ref30.txt
-#    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-#
-#set_tests_properties(avx_intrinsics PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTNAN=0;BOX64_DYNAREC_FASTROUND=0 BOX64_AVX=2")
-
-#add_test(AppImage ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-#    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/hcl-X64.AppImage -D TEST_ARGS2=--help -D TEST_OUTPUT=tmpfileAppImage.txt
-#    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/refAppImage.txt
-#    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-endif()
-
-if(NOT ANDROID)
-add_test(NAME xsave_xrstor COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/misc/xsave_xrstor -D TEST_OUTPUT=tmpfile-xsave_xrstor.txt
-    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/misc/xsave_xrstor.txt
-    -P ${CMAKE_SOURCE_DIR}/runTest.cmake)
-
-file(GLOB extension_tests "${CMAKE_SOURCE_DIR}/tests/extensions/*.c")
-foreach(file ${extension_tests})
-    get_filename_component(testname "${file}" NAME_WE)
-    add_test(NAME "${testname}" COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/extensions/${testname} -D TEST_OUTPUT=tmpfile-${testname}.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/extensions/${testname}.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake)
-endforeach()
-else()
-
-file(GLOB extension_tests "${CMAKE_SOURCE_DIR}/tests/extensions/*.c")
-foreach(file ${extension_tests})
-    get_filename_component(testname "${file}" NAME_WE)
-    add_test(NAME "${testname}" COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests/extensions/${testname}_android -D TEST_OUTPUT=tmpfile-${testname}.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests/extensions/${testname}.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake)
-endforeach()
-endif()
-
-if(BOX32)
-    add_test(NAME bootSyscall_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test01 -D TEST_OUTPUT=tmpfile32_01.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref01.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME bootSyscallC_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test02 -D TEST_OUTPUT=tmpfile32_02.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref02.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME printf_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test03 -D TEST_OUTPUT=tmpfile32_03.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref03.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME args_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test04 -D TEST_ARGS2=yeah -D TEST_OUTPUT=tmpfile32_04.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref04.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME maths1_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test05 -D TEST_ARGS2=7 -D TEST_OUTPUT=tmpfile32_05.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref05.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME threadsStart_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test06 -D TEST_OUTPUT=tmpfile32_06.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref06.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME trig_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test07 -D TEST_OUTPUT=tmpfile32_07.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref07.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME pi_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test08 -D TEST_OUTPUT=tmpfile32_08.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref08.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME fork_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test09 -D TEST_OUTPUT=tmpfile32_09.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref09.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME cppThreads_32bits_nocosim COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test10 -D TEST_OUTPUT=tmpfile32_10.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref10.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-    set_tests_properties(cppThreads_32bits_nocosim PROPERTIES ENVIRONMENT "BOX64_LD_LIBRARY_PATH=${CMAKE_SOURCE_DIR}/x86lib")
-
-    add_test(NAME tlsData_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test11 -D TEST_OUTPUT=tmpfile32_11.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref11.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME fpu_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test12 -D TEST_OUTPUT=tmpfile32_12.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref12.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME contexts_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test13 -D TEST_OUTPUT=tmpfile32_13.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref13.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    if(NOT LD80BITS)
-        add_test(NAME conditionalThreads_32bits_nocosim COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-            -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test14 -D TEST_OUTPUT=tmpfile32_14.txt
-            -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref14.txt
-            -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-    endif()
-
-    add_test(NAME linkingIndirectNoversion_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test15 -D TEST_OUTPUT=tmpfile32_15.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref15.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME linkingIndirectVersion_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test16 -D TEST_OUTPUT=tmpfile32_16.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref16.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME sse_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test17 -D TEST_OUTPUT=tmpfile32_17.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref17.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    set_tests_properties(sse_32bits PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTNAN=0;BOX64_DYNAREC_FASTROUND=0")
-
-    add_test(NAME longjumpInSignals_32bits_nocosim COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test18 -D TEST_OUTPUT=tmpfile32_18.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref18.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME x87_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test19 -D TEST_OUTPUT=tmpfile32_19.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref19.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    set_tests_properties(x87_32bits PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTROUND=0")
-
-    add_test(NAME idiv_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test20 -D TEST_OUTPUT=tmpfile32_20.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref20.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    add_test(NAME multiple_dlopen_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-        -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test21 -D TEST_OUTPUT=tmpfile32_21.txt
-        -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref21.txt
-        -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    file(GLOB extension_tests "${CMAKE_SOURCE_DIR}/tests32/extensions/*.c")
-    foreach(file ${extension_tests})
-        get_filename_component(testname "${file}" NAME_WE)
-        add_test(NAME "${testname}_32bits" COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-            -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/extensions/${testname} -D TEST_OUTPUT=tmpfile32_-${testname}.txt
-            -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/extensions/${testname}.txt
-            -P ${CMAKE_SOURCE_DIR}/runTest.cmake)
-    endforeach()
-
-    #add_test(NAME sse_optimized_32bits COMMAND ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-    #    -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test17_o2 -D TEST_OUTPUT=tmpfile32_17_o2.txt
-    #    -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref17_o2.txt
-    #    -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-
-    #set_tests_properties(sse_optimized_32bits PROPERTIES ENVIRONMENT "BOX64_DYNAREC_FASTNAN=0;BOX64_DYNAREC_FASTROUND=0")
-
-    add_test(bswap_32bits ${CMAKE_COMMAND} -D TEST_PROGRAM=${CMAKE_BINARY_DIR}/${BOX64}
-            -D TEST_ARGS=${CMAKE_SOURCE_DIR}/tests32/test23 -D TEST_OUTPUT=tmpfile32_23.txt
-            -D TEST_REFERENCE=${CMAKE_SOURCE_DIR}/tests32/ref23.txt
-            -P ${CMAKE_SOURCE_DIR}/runTest.cmake )
-endif()
+add_subdirectory(tests)

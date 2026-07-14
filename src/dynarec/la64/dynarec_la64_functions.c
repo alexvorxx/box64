@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <alloca.h>
 #include <math.h>
 #include <signal.h>
 #include <sys/types.h>
@@ -35,7 +36,12 @@
 // Get a FPU scratch reg
 int fpu_get_scratch(dynarec_la64_t* dyn)
 {
-    return SCRATCH0 + dyn->lsx.fpu_scratch++; // return an Sx
+    int ret = SCRATCH0 + dyn->lsx.fpu_scratch++; // return an Sx
+    if (ret >= SCRATCH_LIMIT) {
+        dyn->abort = 1;
+        ret = SCRATCH_LIMIT - 1;
+    }
+    return ret;
 }
 // Reset scratch regs counter
 void fpu_reset_scratch(dynarec_la64_t* dyn)
@@ -605,6 +611,10 @@ static const char* df_status[] = { "unknown", "set", "none_pending", "none" };
 void printf_x64_instruction(dynarec_native_t* dyn, zydis_dec_t* dec, instruction_x64_t* inst, const char* name);
 void inst_name_pass3(dynarec_native_t* dyn, int ninst, const char* name, rex_t rex)
 {
+    if (dyn->need_dump == 3) {
+        printf_x64_instruction(dyn, rex.is32bits ? my_context->dec32 : my_context->dec, &dyn->insts[ninst].x64, name);
+        if (!BOX64ENV(dynarec_gdbjit) && !BOX64ENV(dynarec_perf_map)) return;
+    }
     if (!dyn->need_dump && !BOX64ENV(dynarec_gdbjit) && !BOX64ENV(dynarec_perf_map)) return;
 
     static char buf[4096];
@@ -652,8 +662,10 @@ void inst_name_pass3(dynarec_native_t* dyn, int ninst, const char* name, rex_t r
         length += sprintf(buf + length, " X87:%d/%d(+%d/-%d)%d", dyn->lsx.stack, dyn->insts[ninst].lsx.stack_next, dyn->insts[ninst].lsx.stack_push, dyn->insts[ninst].lsx.stack_pop, dyn->insts[ninst].lsx.x87stack);
     if (dyn->insts[ninst].lsx.combined1 || dyn->insts[ninst].lsx.combined2)
         length += sprintf(buf + length, " %s:%d/%d", dyn->insts[ninst].lsx.swapped ? "SWP" : "CMB", dyn->insts[ninst].lsx.combined1, dyn->insts[ninst].lsx.combined2);
+    if(dyn->insts[ninst].x64.self_loop)
+        length += sprintf(buf + length, " self-loop");
 
-    if (dyn->need_dump) {
+    if (dyn->need_dump && dyn->need_dump != 3) {
         printf_x64_instruction(dyn, rex.is32bits ? my_context->dec32 : my_context->dec, &dyn->insts[ninst].x64, name);
         dynarec_log(LOG_NONE, "%s%p: %d emitted opcodes, inst=%d, %s%s\n",
             (dyn->need_dump > 1) ? "\e[32m" : "",
@@ -829,6 +841,7 @@ void updateNativeFlags(dynarec_la64_t* dyn)
                         }
                         dyn->insts[i].x64.use_flags = 0;
                         dyn->insts[j].nat_next_inst = i;
+                        dyn->insts[i].up32_read |= dyn->insts[j].up32_write32;
                         found = 1;
                         break;
                     } else if (j && dyn->insts[j].pred_sz == 1 && dyn->insts[j].pred[0] == j - 1
@@ -883,7 +896,7 @@ void tryEarlyFpuBarrier(dynarec_la64_t* dyn, int last_fpu_used, int ninst)
                 }
                 // we will stop there, not trying to guess too much thing
                 if ((usefull && (i + 1) != ninst)) {
-                    if (BOX64ENV(dynarec_dump) || BOX64ENV(dynarec_log) > 1) dynarec_log(LOG_NONE, "Putting early Float Barrier in %d for %d\n", i + 1, ninst);
+                    if ((BOX64ENV(dynarec_dump) && BOX64ENV(dynarec_dump) != 3) || BOX64ENV(dynarec_log) > 1) dynarec_log(LOG_NONE, "Putting early Float Barrier in %d for %d\n", i + 1, ninst);
                     dyn->insts[i + 1].x64.barrier |= BARRIER_FLOAT;
                 }
                 return;
@@ -893,7 +906,7 @@ void tryEarlyFpuBarrier(dynarec_la64_t* dyn, int last_fpu_used, int ninst)
         for (int pred = 0; pred < dyn->insts[i].pred_sz; ++pred) {
             if (dyn->insts[i].pred[pred] <= last_fpu_used) {
                 if (usefull && ((i + 1) != ninst)) {
-                    if (BOX64ENV(dynarec_dump) || BOX64ENV(dynarec_log) > 1) dynarec_log(LOG_NONE, "Putting early Float Barrier in %d for %d\n", i + 1, ninst);
+                    if ((BOX64ENV(dynarec_dump) && BOX64ENV(dynarec_dump) != 3) || BOX64ENV(dynarec_log) > 1) dynarec_log(LOG_NONE, "Putting early Float Barrier in %d for %d\n", i + 1, ninst);
                     dyn->insts[i + 1].x64.barrier |= BARRIER_FLOAT;
                 }
                 return;
@@ -903,7 +916,7 @@ void tryEarlyFpuBarrier(dynarec_la64_t* dyn, int last_fpu_used, int ninst)
             usefull = 1;
     }
     if (usefull) {
-        if (BOX64ENV(dynarec_dump) || BOX64ENV(dynarec_log) > 1) dynarec_log(LOG_NONE, "Putting early Float Barrier in %d for %d\n", last_fpu_used, ninst);
+        if ((BOX64ENV(dynarec_dump) && BOX64ENV(dynarec_dump) != 3) || BOX64ENV(dynarec_log) > 1) dynarec_log(LOG_NONE, "Putting early Float Barrier in %d for %d\n", last_fpu_used, ninst);
         dyn->insts[last_fpu_used + 1].x64.barrier |= BARRIER_FLOAT;
     }
 }
@@ -922,4 +935,61 @@ void propagateFpuBarrier(dynarec_la64_t* dyn)
             last_fpu_used = -1; // reset the last_fpu_used...
         }
     }
+}
+
+void updateUp32(dynarec_la64_t* dyn)
+{
+    int n = dyn->size;
+    if (n <= 0)
+        return;
+
+    uint16_t* in = (uint16_t*)alloca((size_t)n * sizeof(uint16_t));
+    uint16_t* out = (uint16_t*)alloca((size_t)n * sizeof(uint16_t));
+    uint8_t* on_list = (uint8_t*)alloca((size_t)n * sizeof(uint8_t));
+    int* work = (int*)alloca((size_t)n * sizeof(int));
+    memset(in, 0, (size_t)n * sizeof(uint16_t));
+    memset(out, 0, (size_t)n * sizeof(uint16_t));
+    memset(on_list, 0, (size_t)n * sizeof(uint8_t));
+    memset(work, 0, (size_t)n * sizeof(int));
+    int sp = 0;
+    for (int i = n - 1; i >= 0; --i) {
+        if (dyn->insts[i].x64.alive) {
+            work[sp++] = i;
+            on_list[i] = 1;
+        }
+    }
+    while (sp > 0) {
+        int i = work[--sp];
+        on_list[i] = 0;
+        const instruction_la64_t* inst = &dyn->insts[i];
+        if (!inst->x64.alive)
+            continue;
+        uint16_t o = 0;
+        if (inst->x64.has_next && i + 1 < n && dyn->insts[i + 1].x64.alive)
+            o |= in[i + 1];
+        if (inst->x64.jmp) {
+            if (inst->x64.jmp_insts >= 0 && inst->x64.jmp_insts < n)
+                o |= in[inst->x64.jmp_insts];
+            else
+                o |= 0xFFFF;
+        }
+        int has_internal_jump = inst->x64.jmp && inst->x64.jmp_insts >= 0 && inst->x64.jmp_insts < n;
+        if ((inst->x64.has_next && i == n - 1) || (!inst->x64.has_next && !has_internal_jump))
+            o |= 0xFFFF;
+        out[i] = o;
+        uint16_t ii = inst->up32_read | (out[i] & (uint16_t)~inst->up32_write64);
+        if (ii != in[i]) {
+            in[i] = ii;
+            for (int p = 0; p < inst->pred_sz; ++p) {
+                int j = inst->pred[p];
+                if (!on_list[j]) {
+                    work[sp++] = j;
+                    on_list[j] = 1;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < n; ++i)
+        dyn->insts[i].up32_skip = dyn->insts[i].up32_write32 & (uint16_t)~out[i];
 }

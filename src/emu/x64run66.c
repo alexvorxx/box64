@@ -425,6 +425,10 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
     case 0xA4:                      /* (REP) MOVSB */
         tmp8s = ACCESS_FLAG(F_DF)?-1:+1;
         tmp64u = (rex.rep)?R_RCX:1L;
+        if(tmp64u && rex.is67 && !rex.is32bits) {
+            R_RSI = R_ESI;
+            R_RDI = R_EDI;
+        }
         while(tmp64u) {
             #ifndef TEST_INTERPRETER
             *(uint8_t*)R_RDI = *(uint8_t*)R_RSI;
@@ -440,6 +444,10 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
         tmp8s = ACCESS_FLAG(F_DF)?-1:+1;
         tmp64u = (rex.rep)?R_RCX:1L;
         tmp8s *= 2;
+        if(tmp64u && rex.is67 && !rex.is32bits) {
+            R_RSI = R_ESI;
+            R_RDI = R_EDI;
+        }
         while(tmp64u) {
             --tmp64u;
             *(uint16_t*)R_RDI = *(uint16_t*)R_RSI;
@@ -455,6 +463,10 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
         switch(rex.rep) {
             case 1:
                 if(R_RCX) {
+                    if(rex.is67 && !rex.is32bits) {
+                        R_RSI = R_ESI;
+                        R_RDI = R_EDI;
+                    }
                     while(R_RCX) {
                         --R_RCX;
                         tmp16u  = *(uint16_t*)R_RDI;
@@ -469,6 +481,10 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                 break;
             case 2:
                 if(R_RCX) {
+                    if(rex.is67 && !rex.is32bits) {
+                        R_RSI = R_ESI;
+                        R_RDI = R_EDI;
+                    }
                     while(R_RCX) {
                         --R_RCX;
                         tmp16u  = *(uint16_t*)R_RDI;
@@ -482,6 +498,10 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                 }
                 break;
             default:
+                if(rex.is67 && !rex.is32bits) {
+                    R_RSI = R_ESI;
+                    R_RDI = R_EDI;
+                }
                 tmp16u  = *(uint16_t*)R_RDI;
                 tmp16u2 = *(uint16_t*)R_RSI;
                 R_RDI += tmp8s;
@@ -497,6 +517,8 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
     case 0xAB:                      /* (REP) STOSW */
         tmp8s = ACCESS_FLAG(F_DF)?-2:+2;
         tmp64u = (rex.rep)?R_RCX:1L;
+        if(tmp64u && rex.is67 && !rex.is32bits)
+            R_RDI = R_EDI;
         while(tmp64u) {
             #ifndef TEST_INTERPRETER
             *(uint16_t*)R_RDI = R_AX;
@@ -510,6 +532,8 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
     case 0xAD:                      /* (REP) LODSW */
         tmp8s = ACCESS_FLAG(F_DF)?-2:+2;
         tmp64u = (rex.rep)?R_RCX:1L;
+        if(tmp64u && rex.is67 && !rex.is32bits)
+            R_RSI = R_ESI;
         while(tmp64u) {
             R_AX = *(uint16_t*)R_RSI;
             R_RSI += tmp8s;
@@ -524,6 +548,8 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
         switch(rex.rep) {
             case 1:
                 if(R_RCX) {
+                    if(rex.is67 && !rex.is32bits)
+                        R_RDI = R_EDI;
                     while(R_RCX) {
                         --R_RCX;
                         tmp16u = *(uint16_t*)R_RDI;
@@ -536,6 +562,8 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                 break;
             case 2:
                 if(R_RCX) {
+                    if(rex.is67 && !rex.is32bits)
+                        R_RDI = R_EDI;
                     while(R_RCX) {
                         --R_RCX;
                         tmp16u = *(uint16_t*)R_RDI;
@@ -547,6 +575,9 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
                 }
                 break;
             default:
+                if(rex.is67 && !rex.is32bits) {
+                    R_RDI = R_EDI;
+                }
                 cmp16(emu, R_AX, *(uint16_t*)R_RDI);
                 R_RDI += tmp8s;
         }
@@ -567,9 +598,13 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
         nextop = F8;
         GETEW(1);
         tmp8u = F8 /*& 0x1f*/;
+        if (!BOX64ENV(cputype) && MODREG && ((nextop>>3)&7) <= 1 && ((tmp8u&0x1f)>1)) {
+            CHECK_FLAGS(emu);
+            tmp8u2=ACCESS_FLAG(F_OF);
+        }
         switch((nextop>>3)&7) {
-            case 0: tmp8u2=ACCESS_FLAG(F_OF); EW->word[0] = rol16(emu, EW->word[0], tmp8u); break;
-            case 1: tmp8u2=ACCESS_FLAG(F_OF); EW->word[0] = ror16(emu, EW->word[0], tmp8u); break;
+            case 0: EW->word[0] = rol16(emu, EW->word[0], tmp8u); break;
+            case 1: EW->word[0] = ror16(emu, EW->word[0], tmp8u); break;
             case 2: EW->word[0] = rcl16(emu, EW->word[0], tmp8u); break;
             case 3: EW->word[0] = rcr16(emu, EW->word[0], tmp8u); break;
             case 4:
@@ -577,7 +612,7 @@ uintptr_t Run66(x64emu_t *emu, rex_t rex, uintptr_t addr, int *step)
             case 5: EW->word[0] = shr16(emu, EW->word[0], tmp8u); break;
             case 7: EW->word[0] = sar16(emu, EW->word[0], tmp8u); break;
         }
-        if (!BOX64ENV(cputype) && ((nextop>>3)&7) <= 1 && ((tmp8u&0x1f)>1)) CONDITIONAL_SET_FLAG(tmp8u2, F_OF);
+        if (!BOX64ENV(cputype) && MODREG && ((nextop>>3)&7) <= 1 && ((tmp8u&0x1f)>1)) CONDITIONAL_SET_FLAG(tmp8u2, F_OF);
         break;
 
     case 0xC7:                              /* MOV Ew,Iw */

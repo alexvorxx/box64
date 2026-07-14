@@ -957,7 +957,7 @@
 #else
 #define X87_PUSH_OR_FAIL(var, dyn, ninst, scratch, t)   \
     if ((dyn->n.x87stack==8) || (dyn->n.pushed==8)) {   \
-        if(dyn->need_dump) dynarec_log(LOG_NONE, " Warning, suspicious x87 Push, stack=%d/%d on inst %d\n", dyn->n.x87stack, dyn->n.pushed, ninst); \
+        if(dyn->need_dump && dyn->need_dump != 3) dynarec_log(LOG_NONE, " Warning, suspicious x87 Push, stack=%d/%d on inst %d\n", dyn->n.x87stack, dyn->n.pushed, ninst); \
         dyn->abort = 1;                                 \
         return addr;                                    \
     }                                                   \
@@ -965,7 +965,7 @@
 
 #define X87_PUSH_EMPTY_OR_FAIL(dyn, ninst, scratch)     \
     if ((dyn->n.x87stack==8) || (dyn->n.pushed==8)) {   \
-        if(dyn->need_dump) dynarec_log(LOG_NONE, " Warning, suspicious x87 Push, stack=%d/%d on inst %d\n", dyn->n.x87stack, dyn->n.pushed, ninst); \
+        if(dyn->need_dump && dyn->need_dump != 3) dynarec_log(LOG_NONE, " Warning, suspicious x87 Push, stack=%d/%d on inst %d\n", dyn->n.x87stack, dyn->n.pushed, ninst); \
         dyn->abort = 1;                                 \
         return addr;                                    \
     }                                                   \
@@ -973,7 +973,7 @@
 
 #define X87_POP_OR_FAIL(dyn, ninst, scratch)            \
     if ((dyn->n.x87stack==-8) || (dyn->n.poped==8)) {   \
-        if(dyn->need_dump) dynarec_log(LOG_NONE, " Warning, suspicious x87 Pop, stack=%d/%d on inst %d\n", dyn->n.x87stack, dyn->n.poped, ninst); \
+        if(dyn->need_dump && dyn->need_dump != 3) dynarec_log(LOG_NONE, " Warning, suspicious x87 Pop, stack=%d/%d on inst %d\n", dyn->n.x87stack, dyn->n.poped, ninst); \
         dyn->abort = 1;                                 \
         return addr;                                    \
     }                                                   \
@@ -1005,7 +1005,7 @@
         TABLE64C(x6, const_updateflags_arm64);              \
         BLR(x6);                                            \
         dyn->f = status_none;                               \
-    }
+    } else if((A)==X_ALL) flushNative(dyn, ninst);
 #endif
 
 #define GRABFLAGS(A) \
@@ -1342,6 +1342,7 @@
 
 #define CacheTransform       STEPNAME(CacheTransform)
 #define additionnal_checks   STEPNAME(additionnal_checks)
+#define flushNative         STEPNAME(flushNative)
 
 #define arm64_move32        STEPNAME(arm64_move32)
 #define arm64_move64        STEPNAME(arm64_move64)
@@ -1445,10 +1446,10 @@ void emit_sar16(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3, int s4);
 void emit_sar16c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
 void emit_rol32c(dynarec_arm_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
 void emit_ror32c(dynarec_arm_t* dyn, int ninst, rex_t rex, int s1, uint32_t c, int s3, int s4);
-void emit_rol8c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
-void emit_ror8c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
-void emit_rol16c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
-void emit_ror16c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
+void emit_rol8c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int modreg);
+void emit_ror8c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int modreg);
+void emit_rol16c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int modreg);
+void emit_ror16c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4, int modreg);
 void emit_rcl8c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
 void emit_rcr8c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
 void emit_rcl16c(dynarec_arm_t* dyn, int ninst, int s1, uint32_t c, int s3, int s4);
@@ -1509,6 +1510,7 @@ void avx_purge_ymm(dynarec_arm_t* dyn, int ninst, uint16_t mask, int s1);
 
 void CacheTransform(dynarec_arm_t* dyn, int ninst, int cacheupd);
 void additionnal_checks(dynarec_arm_t* dyn, int ninst);
+void flushNative(dynarec_arm_t* dyn, int ninst);
 
 void arm64_move32(dynarec_arm_t* dyn, int ninst, int reg, uint32_t val);
 void arm64_move64(dynarec_arm_t* dyn, int ninst, int reg, uint64_t val);

@@ -71,15 +71,15 @@ Enable building bigger DynaRec code blocks for better performance. Available in 
  * 0: Do not try to build block as big as possible, suitable for programs using lots of threads and JIT, like Unity.
  * 1: Build DynaRec block as big as possible.
  * 2: Build DynaRec block bigger, do not stop when block overlaps, but only for blocks in elf memory. [Default]
- * 3: Build DynaRec block bigger, do not stop when block overlaps, for all type of memory, useful for wine programs.
+ * 3: Build DynaRec block bigger, do not stop when block overlaps, for all type of memory, useful for Wine programs.
 
 ### BOX64_DYNAREC_CALLRET
 
 Optimize CALL/RET opcodes. Available in WowBox64.
 
- * 0: Do not optimize CALL/RET, use jump table. [Default]
+ * 0: Do not optimize CALL/RET, use jump table.
  * 1: Try to optimize CALL/RET, skipping the jump table when possible.
- * 2: Try to optimize CALL/RET, skipping the jump table when possible, adding code to handle return to dirty/modified block. Does not work on WowBox64.
+ * 2: Try to optimize CALL/RET, skipping the jump table when possible, adding code to handle return to dirty/modified block. Does not work on WowBox64. [Default]
 
 ### BOX64_DYNAREC_SEP
 
@@ -128,11 +128,13 @@ Enable or disable fast rounding. Available in WowBox64.
 
 ### BOX64_DYNAREC_FORWARD
 
-Define max allowed forward value when building block. Available in WowBox64.
+Define max allowed forward value when building block. Only 0, 128, 256, 512 and 1024 are valid; other values fall back to 128. Available in WowBox64.
 
  * 0: No forward value. When current block ends, do not try to go further even if there are previous forward jumps.
  * 128: Allow up to 128 bytes of gap between end of the block and the next forward jump. [Default]
- * XXXX: Allow up to XXXX bytes of gap between end of the block and the next forward jump.
+ * 256: Allow up to 256 bytes of gap between end of the block and the next forward jump.
+ * 512: Allow up to 512 bytes of gap between end of the block and the next forward jump.
+ * 1024: Allow up to 1024 bytes of gap between end of the block and the next forward jump.
 
 ### BOX64_DYNAREC_NATIVEFLAGS
 
@@ -175,12 +177,49 @@ Use volatile metadata parsed from PE files, only valid for 64bit Windows games.
  * 0: Do not use volatile metadata.
  * 1: Use volatile metadata, which will guide Box64 for better strong memory emulation. [Default]
 
-### BOX64_DYNAREC_WAIT
+### BOX64_DYNACACHE
 
-Wait or not for the building of a DynaRec code block to be ready. Available in WowBox64.
+Enable/disable the Dynamic Recompiler Cache (a.k.a DynaCache). This option defaults to 1 (enable). DynaCache writes files to the home folder by default, and keeps its folder below BOX64_DYNACACHE_LIMIT when generating new cache files.
 
- * 0: Do not wait and use interpreter instead, might speedup a bit on massive multithread or JIT programs.
- * 1: Wait for a DynaRec code block to be ready. [Default]
+ * 0: Disable DynaCache.
+ * 1: Enable DynaCache. [Default]
+ * 2: Use DynaCache files if present, but do not generate new one.
+
+### BOX64_DYNACACHE_FOLDER
+
+Set the folder for DynaCache files. Default is $XDG_CACHE_HOME/box64 or $HOME/.cache/box64 if $XDG_CACHE_HOME is not set.
+
+ * XXXX: Use folder XXXX for DynaCache files.
+
+### BOX64_DYNACACHE_LIMIT
+
+Maximum size, in MiB, for the DynaCache folder. When the limit is exceeded, invalid DynaCache files are removed first, then the oldest valid files are removed if needed. Default size is 2048MiB.
+
+ * 0: Do not limit the DynaCache folder size.
+ * XXXX: Keep the DynaCache folder below XXXX MiB by removing invalid cache files first, then the oldest valid cache files.
+ * 2048: A size of 2048 MiB is the default value. [Default]
+
+### BOX64_DYNACACHE_COMPRESS
+
+Compress or not DynaCache files on disk
+
+ * 0: Do not compress dynacache files
+ * 1: Compress dynacache files using Zlib with fastest compression. [Default]
+ * 2: Compress dynacache files using ZLib with default compression.
+
+### BOX64_DYNACACHE_MIN
+
+Minimum size, in KB, for a DynaCache to be written to disk. Default size is 30KB
+
+ * XXXX: Set a minimum size of XXXX KB of DynaRec code to write the dynacache to disk. Will not be saved to disk else.
+ * 30: A size of 30 KB is the default value. [Default]
+
+### BOX64_SKIPCPU
+
+Skip N first CPU cores (Is apply before MAXCPU) Available in WowBox64.
+
+ * 0: Do not skip any CPU cores. [Default]
+ * XXXX: Skip XXXX first CPU cores (usefull for big.LITTLE configurations).
 
 ### BOX64_MMAP32
 
@@ -543,6 +582,7 @@ Enable DynaRec dump. Available in WowBox64.
  * 0: Do not dump DynaRec blocks. [Default]
  * 1: Dump DynaRec blocks.
  * 2: Dump DynaRec blocks with some colors.
+ * 3: Dump only x86 and translated native instructions.
 
 ### BOX64_DYNAREC_DUMP_RANGE
 
@@ -732,6 +772,7 @@ Same as BOX64_TRACE but starts the trace immediately.
  * 1: Enable trace output. Trace starts before the initialization of dependencies.
  * symbolname: Enable trace output for `symbolname` only. Trace starts before the initialization of dependencies.
  * 0xXXXXXXX-0xYYYYYYY: Enable trace output for the range of address (inclusive-exclusive). Trace starts before the initialization of dependencies.
+ * 0xXXXXXXX:0xYYYYYYY:0xZZZZZZZ: Enable trace output only for the specified address list. Trace starts before the initialization of dependencies.
 
 ### BOX64_TRACE_START
 
@@ -756,6 +797,7 @@ Only available on box64 build with trace. Adds trace of all instructions execute
  * 1: Enable trace output.
  * symbolname: Enable trace output for `symbolname` only.
  * 0xXXXXXXX-0xYYYYYYY: Enable trace output for the range of address (inclusive-exclusive).
+ * 0xXXXXXXX:0xYYYYYYY:0xZZZZZZZ: Enable trace output only for the specified address list.
 
 ## Environment
 
@@ -787,6 +829,13 @@ Tick age threshold for DynaBlock purging (requires BOX64_DYNAREC_PURGE=1).
  * 4096: Default age threshold. [Default]
  * XXXX: Custom age threshold (range: 10-65536).
 
+### BOX64_DYNAREC_WAIT
+
+Wait or not for the building of a DynaRec code block to be ready. Available in WowBox64.
+
+ * 0: Do not wait and use interpreter instead, might speedup a bit on massive multithread or JIT programs.
+ * 1: Wait for a DynaRec code block to be ready. [Default]
+
 ### BOX64_DYNAREC_WEAKBARRIER
 
 Tweak the memory barriers to reduce the performance impact by strong memory emulation. Available in WowBox64.
@@ -794,43 +843,6 @@ Tweak the memory barriers to reduce the performance impact by strong memory emul
  * 0: Use regular safe barrier.
  * 1: Use weak barriers to have more performance boost. [Default]
  * 2: All in 1, plus disable the last write barriers.
-
-### BOX64_DYNACACHE
-
-Enable/disable the Dynamic Recompiler Cache (a.k.a DynaCache). This option defaults to 2 (to read cache if present but not generate any). DynaCache writes files to the home folder by default, and keeps its folder below BOX64_DYNACACHE_LIMIT when generating new cache files.
-
- * 0: Disable DynaCache.
- * 1: Enable DynaCache. [Default]
- * 2: Use DynaCache files if present, but do not generate new one.
-
-### BOX64_DYNACACHE_FOLDER
-
-Set the folder for DynaCache files. Default is $XDG_CACHE_HOME/box64 or $HOME/.cache/box64 if $XDG_CACHE_HOME is not set.
-
- * XXXX: Use folder XXXX for DynaCache files.
-
-### BOX64_DYNACACHE_LIMIT
-
-Maximum size, in MiB, for the DynaCache folder. When the limit is exceeded, invalid DynaCache files are removed first, then the oldest valid files are removed if needed. Default size is 2048MiB.
-
- * 0: Do not limit the DynaCache folder size.
- * XXXX: Keep the DynaCache folder below XXXX MiB by removing invalid cache files first, then the oldest valid cache files.
- * 2048: A size of 2048 MiB is the default value. [Default]
-
-### BOX64_DYNACACHE_COMPRESS
-
-Compress or not DynaCache files on disk
-
- * 0: Do not compress dynacache files
- * 1: Compress dynacache files using Zlib with fastest compression. [Default]
- * 2: Compress dynacache files using ZLib with default compression.
-
-### BOX64_DYNACACHE_MIN
-
-Minimum size, in KB, for a DynaCache to be written to disk. Default size is 350KB
-
- * XXXX: Set a minimum size of XXXX KB of DynaRec code to write the dynacache to disk. Will not be saved to disk else.
- * 350: A size of 350 KB is the default value. [Default]
 
 ## Libraries
 

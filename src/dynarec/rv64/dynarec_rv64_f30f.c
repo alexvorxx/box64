@@ -236,54 +236,73 @@ uintptr_t dynarec64_F30F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             nextop = F8;
             GETGXSS(v0);
             GETEXSS(d0, 0);
+            q0 = fpu_get_scratch(dyn);
             if (!BOX64ENV(dynarec_fastnan)) {
+                FMVS(q0, d0);
                 FEQS(x3, d0, d0);
                 FEQS(x4, v0, v0);
                 AND(x5, x3, x4);
                 BEQZ(x5, 4 + 4 * 4);
             }
-            FADDS(d0, d0, v0);
+            FADDS(q0, d0, v0);
             if (!BOX64ENV(dynarec_fastnan)) {
-                FEQS(x5, d0, d0);
+                FEQS(x5, q0, q0);
                 BNEZ(x5, 4 + 4);
-                FNEGS(d0, d0);
+                FNEGS(q0, q0);
                 BNEZ(x4, 4 + 4);
-                FMVS(d0, v0);
+                FMVS(q0, v0);
             }
-            FMVS(v0, d0);
+            FMVS(v0, q0);
             break;
         case 0x59:
             INST_NAME("MULSS Gx, Ex");
             nextop = F8;
             GETGXSS(v0);
             GETEXSS(d0, 0);
+            q0 = fpu_get_scratch(dyn);
             if (!BOX64ENV(dynarec_fastnan)) {
+                FMVS(q0, d0);
                 FEQS(x3, d0, d0);
                 FEQS(x4, v0, v0);
                 AND(x5, x3, x4);
                 BEQZ(x5, 4 + 4 * 4);
             }
-            FMULS(d0, d0, v0);
+            FMULS(q0, d0, v0);
             if (!BOX64ENV(dynarec_fastnan)) {
-                FEQS(x5, d0, d0);
+                FEQS(x5, q0, q0);
                 BNEZ(x5, 4 + 4);
-                FNEGS(d0, d0);
+                FNEGS(q0, q0);
                 BNEZ(x4, 4 + 4);
-                FMVS(d0, v0);
+                FMVS(q0, v0);
             }
-            FMVS(v0, d0);
+            FMVS(v0, q0);
             break;
         case 0x5A:
             INST_NAME("CVTSS2SD Gx, Ex");
             nextop = F8;
             gd = ((nextop & 0x38) >> 3) + (rex.r << 3);
             GETEXSS(v1, 0);
+            if (!BOX64ENV(dynarec_fastnan)) {
+                FEQS(x3, v1, v1);
+                FMVXW(x4, v1);
+            }
             if (MODREG && gd == (nextop & 7) + (rex.b << 3)) {
                 v0 = sse_get_reg_size_changed(dyn, ninst, x2, gd, 0);
-                FCVTDS(v0, v0);
             } else {
                 GETGXSD_empty(v0);
-                FCVTDS(v0, v1);
+            }
+            FCVTDS(v0, v1);
+            if (!BOX64ENV(dynarec_fastnan)) {
+                BNEZ_MARK(x3);
+                SRLIW(x5, x4, 31);
+                SLLI(x5, x5, 63);
+                SLLI(x4, x4, 41);
+                SRLI(x4, x4, 12);
+                OR(x4, x4, x5);
+                MOV64x(x5, 0x7ff8000000000000ULL);
+                OR(x4, x4, x5);
+                FMVDX(v0, x4);
+                MARK;
             }
             break;
         case 0x5B:
@@ -312,21 +331,23 @@ uintptr_t dynarec64_F30F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             nextop = F8;
             GETGXSS(v0);
             GETEXSS(d0, 0);
+            q0 = fpu_get_scratch(dyn);
             if (!BOX64ENV(dynarec_fastnan)) {
+                FMVS(q0, d0);
                 FEQS(x3, d0, d0);
                 FEQS(x4, v0, v0);
                 AND(x5, x3, x4);
                 BEQZ(x5, 4 + 4 * 4);
             }
-            FSUBS(d0, v0, d0);
+            FSUBS(q0, v0, d0);
             if (!BOX64ENV(dynarec_fastnan)) {
-                FEQS(x5, d0, d0);
+                FEQS(x5, q0, q0);
                 BNEZ(x5, 4 + 4);
-                FNEGS(d0, d0);
+                FNEGS(q0, q0);
                 BNEZ(x4, 4 + 4);
-                FMVS(d0, v0);
+                FMVS(q0, v0);
             }
-            FMVS(v0, d0);
+            FMVS(v0, q0);
             break;
         case 0x5D:
             INST_NAME("MINSS Gx, Ex");
@@ -348,21 +369,23 @@ uintptr_t dynarec64_F30F(dynarec_rv64_t* dyn, uintptr_t addr, uintptr_t ip, int 
             nextop = F8;
             GETGXSS(v0);
             GETEXSS(d0, 0);
+            q0 = fpu_get_scratch(dyn);
             if (!BOX64ENV(dynarec_fastnan)) {
+                FMVS(q0, d0);
                 FEQS(x3, d0, d0);
                 FEQS(x4, v0, v0);
                 AND(x5, x3, x4);
                 BEQZ(x5, 4 + 4 * 4);
             }
-            FDIVS(d0, v0, d0);
+            FDIVS(q0, v0, d0);
             if (!BOX64ENV(dynarec_fastnan)) {
-                FEQS(x5, d0, d0);
+                FEQS(x5, q0, q0);
                 BNEZ(x5, 4 + 4);
-                FNEGS(d0, d0);
+                FNEGS(q0, q0);
                 BNEZ(x4, 4 + 4);
-                FMVS(d0, v0);
+                FMVS(q0, v0);
             }
-            FMVS(v0, d0);
+            FMVS(v0, q0);
             break;
         case 0x5F:
             INST_NAME("MAXSS Gx, Ex");

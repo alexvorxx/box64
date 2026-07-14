@@ -215,8 +215,8 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
         else if(ninst && (dyn->insts[ninst].pred_sz>1 || (dyn->insts[ninst].pred_sz==1 && dyn->insts[ninst].pred[0]!=ninst-1)))
             dyn->last_ip = 0;   // reset IP if some jump are coming here
         #endif
-        NEW_INST;
         MESSAGE(LOG_DUMP, "New Instruction %s:%p, native:%p\n", is32bits?"x86":"x64",(void*)addr, (void*)dyn->block);
+        NEW_INST;
         #ifdef ARCH_NOP
         if(dyn->insts[ninst].x64.alive && dyn->insts[ninst].x64.self_loop)
             CALLRET_LOOP();
@@ -237,7 +237,7 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             DMB_ISHST();
         #endif
         if (BOX64DRENV(dynarec_dump) && (!BOX64ENV(dynarec_dump_range_end) || (ip >= BOX64ENV(dynarec_dump_range_start) && ip < BOX64ENV(dynarec_dump_range_end)))) {
-            dyn->need_dump = BOX64DRENV(dynarec_dump);
+            dyn->need_dump = BOX64DRENV(dynarec_dump) == 3 && STEP != 3 ? 0 : BOX64DRENV(dynarec_dump);
         }
         if(BOX64ENV(dynarec_test) && (!BOX64ENV(dynarec_test_end) || (ip>=BOX64ENV(dynarec_test_start) && ip<BOX64ENV(dynarec_test_end)))) {
             int need_dump = dyn->need_dump;
@@ -245,6 +245,9 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
             MESSAGE(LOG_DUMP, "TEST STEP ----\n");
             extcache_native_t save;
             fpu_save_and_unwind(dyn, ninst, &save);
+            #ifdef LA64
+            UP32_READALL();
+            #endif
             fpu_reflectcache(dyn, ninst, x1, x2, x3);
             GO_TRACE(x64test_step, 1, x5);
             fpu_unreflectcache(dyn, ninst, x1, x2, x3);
@@ -254,11 +257,13 @@ uintptr_t native_pass(dynarec_native_t* dyn, uintptr_t addr, int alternate, int 
         }
         #ifdef HAVE_TRACE
         else if(my_context->dec && BOX64ENV(dynarec_trace)) {
-        if((trace_end == 0)
-            || ((ip >= trace_start) && (ip < trace_end)))  {
+            if(IsTraceAddr(ip))  {
                 MESSAGE(LOG_DUMP, "TRACE ----\n");
                 #if defined (SPILL_NF_REGISTERS)
                 if (BOX64ENV(dynarec_nativeflags)) SPILL_NF_REGISTERS;
+                #endif
+                #ifdef LA64
+                UP32_READALL();
                 #endif
                 fpu_reflectcache(dyn, ninst, x1, x2, x3);
                 GO_TRACE(PrintTrace, 1, x5);

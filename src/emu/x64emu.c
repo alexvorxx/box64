@@ -143,6 +143,12 @@ void SetupX64Emu(x64emu_t *emu, x64emu_t *ref)
 #ifdef HAVE_TRACE
 void SetTraceEmu(uintptr_t start, uintptr_t end)
 {
+    if (trace_addrs) {
+        box_free(trace_addrs);
+        trace_addrs = NULL;
+    }
+    trace_addrs_count = 0;
+
     if(my_context->zydis) {
         if (end == 0) {
             printf_log(LOG_INFO, "Setting trace\n");
@@ -154,6 +160,22 @@ void SetTraceEmu(uintptr_t start, uintptr_t end)
     }
     trace_start = start;
     trace_end = end;
+}
+
+void SetTraceAddrs(uintptr_t* addrs, int count)
+{
+    trace_start = 0;
+    trace_end = 1;
+
+    if (trace_addrs)
+        box_free(trace_addrs);
+
+    trace_addrs = (uintptr_t*)box_malloc(count * sizeof(uintptr_t));
+    memcpy(trace_addrs, addrs, count * sizeof(uintptr_t));
+    trace_addrs_count = count;
+
+    if(my_context->zydis)
+        printf_log(LOG_INFO, "Setting trace on %d specific address(es)\n", count);
 }
 #endif
 
@@ -426,7 +448,7 @@ const char* DumpCPURegs(x64emu_t* emu, uintptr_t ip, int is32bits)
         int stack = emu->fpu_stack;
         if(stack>8) stack = 8;
         for (int i=0; i<stack; i++) {
-            sprintf(tmp, "ST%d=%f(0x%" PRIx64 ")", i, ST(i).d, ST(i).q);
+            sprintf(tmp, "ST%d=%f(0x%" PRIx64 "%s)", i, ST(i).d, ST(i).q, (ST(i).q==STld(i).uref)?PrintLD(&STld(i).ld, " / "):"");
             strcat(buff, tmp);
             int c = 20-strlen(tmp);
             if(c<1) c=1;
@@ -559,13 +581,12 @@ void StopEmu(x64emu_t* emu, const char* reason, int is32bits)
 void UnimpOpcode(x64emu_t* emu, int is32bits)
 {
     int tid = GetTID();
-    printf_log(LOG_INFO, "%04d|%p: Unimplemented %sOpcode (%02X %02X %02X %02X) %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\n",
-        tid, (void*)emu->old_ip, is32bits?"32bits ":"",
-        Peek(emu, -4), Peek(emu, -3), Peek(emu, -2), Peek(emu, -1),
-        Peek(emu, 0), Peek(emu, 1), Peek(emu, 2), Peek(emu, 3),
-        Peek(emu, 4), Peek(emu, 5), Peek(emu, 6), Peek(emu, 7),
-        Peek(emu, 8), Peek(emu, 9), Peek(emu,10), Peek(emu,11),
-        Peek(emu,12), Peek(emu,13), Peek(emu,14));
+    char prev[4 * 3];
+    char opcode[15 * 3];
+    FormatPeekBytes(emu, -4, 4, prev, sizeof(prev));
+    FormatPeekBytes(emu, 0, 15, opcode, sizeof(opcode));
+    printf_log(LOG_INFO, "%04d|%p: Unimplemented %sOpcode (%s) %s\n",
+        tid, (void*)emu->old_ip, is32bits?"32bits ":"", prev, opcode);
 }
 
 void EmuCall(x64emu_t* emu, uintptr_t addr)

@@ -90,6 +90,8 @@ const char* box64_wine_guest_name = NULL;
 
 #ifdef HAVE_TRACE
 uintptr_t trace_start = 0, trace_end = 0;
+uintptr_t* trace_addrs = NULL;
+int trace_addrs_count = 0;
 char* trace_func = NULL;
 #endif
 
@@ -232,7 +234,9 @@ static void displayMiscInfo(void)
 
     printf_log(LOG_INFO, "Running on %s with %d core%s, pagesize: %zd", box64_sysinfo.cpuname, box64_sysinfo.ncpu, box64_sysinfo.ncpu > 1 ? "s" : "", box64_pagesize);
     if (BOX64ENV(maxcpu))
-        printf_log_prefix(0, LOG_INFO, ", emulating %d core%s\n", BOX64ENV(maxcpu), BOX64ENV(maxcpu) > 1 ? "s" : "");
+        printf_log_prefix(0, LOG_INFO, ", emulating %d core%s", BOX64ENV(maxcpu), BOX64ENV(maxcpu) > 1 ? "s" : "");
+    if (BOX64ENV(skipcpu))
+        printf_log_prefix(0, LOG_INFO, " skipping %d core%s\n", BOX64ENV(skipcpu), BOX64ENV(skipcpu)>1? "s":"");
     else
         printf_log_prefix(0, LOG_INFO, "\n");
     computeRDTSC();
@@ -542,6 +546,39 @@ void LoadLDPath(box64context_t *context)
         PrependList(&context->box64_ld_lib, getenv("LD_LIBRARY_PATH"), 1);   // in case some of the path are for x86 world
 }
 
+#ifdef HAVE_TRACE
+static void setupTraceAddrList(char *p)
+{
+    int cap = 16;
+    int count = 0;
+    char *saveptr = NULL;
+
+    uintptr_t* addrs = (uintptr_t*)box_malloc(cap * sizeof(uintptr_t));
+    char* tmp = box_strdup(p);
+    char* tok = strtok_r(tmp, ":", &saveptr);
+
+    while (tok) {
+        if (count >= cap) {
+            cap *= 2;
+            addrs = (uintptr_t*)box_realloc(addrs, cap * sizeof(uintptr_t));
+        }
+
+        char* endptr;
+        uintptr_t addr = (uintptr_t)strtoul(tok, &endptr, 0);
+        if (endptr != tok)
+            addrs[count++] = addr;
+
+        tok = strtok_r(NULL, ":", &saveptr);
+    }
+
+    if (count > 0)
+        SetTraceAddrs(addrs, count);
+
+    box_free(tmp);
+    box_free(addrs);
+}
+#endif
+
 EXPORTDYN
 void setupTraceInit()
 {
@@ -561,6 +598,9 @@ void setupTraceInit()
             }
             if(s_trace_start || s_trace_end)
                 SetTraceEmu(s_trace_start, s_trace_end);
+        } else if (strchr(p,':')) {
+            // Parse BOX64_TRACE=0x1000:0x2000:0x3000 format.
+            setupTraceAddrList(p);
         } else {
             int veropt = 1;
             int ver = 0;
@@ -638,6 +678,9 @@ void setupTrace()
                     printf_log(LOG_INFO, "TRACE on %s only (%p-%p)\n", p, (void*)s_trace_start, (void*)s_trace_end);
                 }
             }
+        } else if (strchr(p,':')) {
+            // Parse BOX64_TRACE=0x1000:0x2000:0x3000 format.
+            setupTraceAddrList(p);
         } else {
             int search = 0;
             if (my_context->elfs) {
@@ -836,14 +879,14 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
             DynaCacheClean();
             exit(0);
         }
-        if(!strcmp(prog, "--dynacache-list")) {
+        if(!strcmp(prog, "-dl") || !strcmp(prog, "--dynacache-list")) {
             #ifdef DYNAREC
             DetectHostCpuFeatures();
             #endif
             DynaCacheList(argv[nextarg+1]);
             exit(0);
         }
-        if(!strcmp(prog, "--dynacache-clean")) {
+        if(!strcmp(prog, "-dc") || !strcmp(prog, "--dynacache-clean")) {
             #ifdef DYNAREC
             DetectHostCpuFeatures();
             #endif
@@ -1140,8 +1183,8 @@ int initialize(int argc, const char **argv, char** env, x64emu_t** emulator, elf
     if (applied) {
         printf_log(LOG_INFO, "Applied settings from rcfile\n");
         displayMiscInfo();
-        PrintEnvVariables(&box64env, LOG_INFO);
     }
+    PrintEnvVariables(&box64env, LOG_INFO);
     setupZydis(my_context);
 
     for(int i=1; i<my_context->argc; ++i) {

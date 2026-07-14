@@ -123,10 +123,10 @@ void my_cpuid(x64emu_t* emu)
                     | 1<<22     // MOVBE
                     | 1<<23     // POPCOUNT
                     | BOX64ENV(aes)<<25     // aesni
-                    | BOX64ENV(avx)<<26 // xsave
-                    | BOX64ENV(avx)<<27 // osxsave
-                    | BOX64ENV(avx)<<28 // AVX
-                    | BOX64ENV(avx)<<29 // F16C
+                    | (BOX64ENV(avx)?1:0)<<26 // xsave
+                    | (BOX64ENV(avx)?1:0)<<27 // osxsave
+                    | (BOX64ENV(avx)?1:0)<<28 // AVX
+                    | (BOX64ENV(avx)?1:0)<<29 // F16C
                     | (BOX64ENV(avx) == 2)<<30     // RDRAND
                     | 0<<31     // Hypervisor guest running
                     ;
@@ -205,7 +205,7 @@ void my_cpuid(x64emu_t* emu)
             if(subleaf==0) {
                 R_RAX = 0;
                 R_RBX = 1<<0 // FSGSBASE
-                        | BOX64ENV(avx)<<3  // BMI1
+                        | (BOX64ENV(avx)?1:0)<<3  // BMI1
                         | (BOX64ENV(avx) == 2)<<5  //AVX2
                         | (BOX64ENV(cputype)?0:1)<<6 // FDP_EXCPTN_ONLY
                         | 1<<7 // SMEP
@@ -473,10 +473,10 @@ void my_cpuid(x64emu_t* emu)
         case 0x80000005:
             if(BOX64ENV(cputype)) {
                 //L1 cache and TLB
-                R_RAX = 0;
-                R_RBX = 0;
-                R_RCX = 0;
-                R_RDX = 0;
+                R_RAX = 0xff40ff40; // Fully associative 2Mb/4Mb TLB with 64 entries
+                R_RBX = 0xff40ff40; // Fully associative 4kb TLB with 64 entries
+                R_RCX = 0x20080140; // Data cache: line cache size 64 bytes, 1 cache line per tag, 8-way associative with size 32kb
+                R_RDX = 0x20080140; // Instruction cache: line cache size 64 bytes, 1 cache line per tag, 8-way associative with size 32kb
             } else {
                 R_RAX = 0;
                 R_RBX = 0;
@@ -486,10 +486,10 @@ void my_cpuid(x64emu_t* emu)
             break;
         case 0x80000006:    // L2 cache line size and associativity
             if(BOX64ENV(cputype)) {
-                R_RAX = 0;
-                R_RBX = 0;
-                R_RCX = 64 | (0x6<<12) | (256<<16); // bits: 0-7 line size, 15-12: assoc (using special encoding), 31-16: size in K    //TODO: read info from /sys/devices/system/cpu/cpuX/cache/index2
-                R_RDX = 0;
+                R_RAX = 0x48006400; // 0x400 L2 2Mb TLB Ins entries, 8-15 way associative & 0x800 L2 TLD Data entries 4-5 way associative
+                R_RBX = 0x48006400; // 0x400 L2 4kb TLB Ins entries, 8-15 way associative & 0x800 L2 TLD Data entries 4-5 way associative
+                R_RCX = 64 | (1<<8) | (0x6<<12) | (256<<16); // bits: 0-7 line size, 8-11 cache line per tags, 15-12: assoc (using special encoding), 31-16: size in K    //TODO: read info from /sys/devices/system/cpu/cpuX/cache/index2
+                R_RDX = 0x00206140; // 64 bytes L3 cache line size, 1 line per tag, 8-15 way associative (is 9: use 0x8000001d on real hardware), size is 4-5Mb
             } else {
                 R_RAX = 0;
                 R_RBX = 0;

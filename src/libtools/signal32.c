@@ -597,7 +597,7 @@ int my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigin
     uint32_t mmapped = memExist((uintptr_t)info->si_addr);
     uint32_t sysmapped = (info->si_addr<(void*)box64_pagesize)?1:mmapped;
     uint32_t real_prot = 0;
-    int skip = 1;   // in case sigjump is used to restore exectuion, 1 will switch to interpreter, 3 will switch to dynarec
+    int skip = 3;   // in case sigjump is used to restore exectuion, 1 will switch to interpreter, 3 will switch to dynarec
     if(prot&PROT_READ) real_prot|=PROT_READ;
     if(prot&PROT_WRITE) real_prot|=PROT_WRITE;
     if(prot&PROT_EXEC) real_prot|=PROT_WRITE;
@@ -743,11 +743,12 @@ int my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigin
             GO(SP);
             GO(BX);
             #undef GO
-            if((skip==1) && (emu->ip.q[0]!=sigcontext->uc_mcontext.gregs[I386_EIP]))
-                skip = 3;   // if it jumps elsewhere, it can resume with dynarec...
-            emu->ip.q[0]=sigcontext->uc_mcontext.gregs[I386_EIP];
             // flags
             emu->eflags.x64=sigcontext->uc_mcontext.gregs[I386_EFL];
+            if((skip==1) && (emu->ip.q[0]!=sigcontext->uc_mcontext.gregs[I386_EIP]) && !ACCESS_FLAG(F_TF))
+                skip = 3;   // if it jumps elsewhere, it can resume with dynarec...
+            emu->ip.q[0]=sigcontext->uc_mcontext.gregs[I386_EIP];
+            if (ACCESS_FLAG(F_TF) && skip == 1) emu->flags.no_tf = 1;
             // get segments
             #define GO(S) if(emu->segs[_##S]!=sigcontext->uc_mcontext.gregs[I386_##S])  emu->segs[_##S]=sigcontext->uc_mcontext.gregs[I386_##S]
             GO(CS);
@@ -792,6 +793,7 @@ int my_sigactionhandler_oldcode_32(x64emu_t* emu, int32_t sig, int simple, sigin
     GO(EBX);
     #undef GO
     emu->eflags.x64=sigcontext->uc_mcontext.gregs[I386_EFL];
+    if(ACCESS_FLAG(F_TF)) emu->flags.no_tf = 1;
     #define GO(R)   R_##R=sigcontext->uc_mcontext.gregs[I386_##R]
     GO(CS);
     GO(DS);

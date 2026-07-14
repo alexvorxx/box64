@@ -150,8 +150,6 @@ void FreeDynablock(dynablock_t* db, int need_lock, int need_remove)
     }
 }
 
-
-
 void MarkDynablock(dynablock_t* db)
 {
     if(db) {
@@ -262,6 +260,7 @@ dynablock_t* CreateDBnoAlt(x64emu_t* emu, uintptr_t addr, int is32bits)
 
     dynarec_log(LOG_DEBUG, "Will call Fillblock64 for Alt %p\n", (void*)addr);
     dynablock_t* block = FillBlock64(addr, is32bits, MAX_INSTS, 0, 1);
+    if(block && block->block) block->done = 1;  // validate the alt block
 
     mutex_unlock(&my_context->mutex_dyndump);
 

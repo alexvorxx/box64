@@ -24,8 +24,7 @@
 #include "dynarec_la64_private.h"
 #include "dynarec_la64_functions.h"
 #include "../dynarec_helper.h"
-
-#define SCRATCH 31
+#include "dynarec_la64_helper.h"
 
 /* setup r2 to address pointed by ED, also fixaddress is an optionnal delta in the range [-absmax, +absmax], with delta&mask==0 to be added to ed for LDR/STR */
 uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, uint8_t* ed, uint8_t hint, uint8_t scratch, int64_t* fixaddress, rex_t rex, int* l, int i12, int delta)
@@ -43,6 +42,14 @@ uintptr_t geted(dynarec_la64_t* dyn, uintptr_t addr, int ninst, uint8_t nextop, 
 
     if (rex.is32bits && rex.is67)
         return geted16(dyn, addr, ninst, nextop, ed, hint, scratch, fixaddress, rex, i12);
+
+    if ((nextop & 7) == 4) {
+        uint8_t sib = PK(0);
+        if (((sib & 7) != 5) || ((nextop & 0xC0) != 0)) UP32_READ(TO_NAT((sib & 7) + (rex.b << 3)));
+        if ((((sib >> 3) & 7) + (rex.x << 3)) != 4) UP32_READ(TO_NAT(((sib >> 3) & 7) + (rex.x << 3)));
+    } else if (((nextop & 7) != 5) || ((nextop & 0xC0) != 0)) {
+        UP32_READ(TO_NAT((nextop & 7) + (rex.b << 3)));
+    }
 
     uint8_t ret = x2;
     *fixaddress = 0;
@@ -465,54 +472,82 @@ void iret_to_next(dynarec_la64_t* dyn, uintptr_t ip, int ninst, int is32bits, in
     MAYUSE(ninst);
     MAYUSE(j64);
     MESSAGE(LOG_DUMP, "IRet to next\n");
+    SMEND();
+    SET_DFNONE();
+    // POP IP
+    NOTEST(x2);
     if (is64bits) {
-        POP1(xRIP);
+        POP1(x1);
         POP1(x2);
-        POP1(xFlags);
+        POP1(x3);
     } else {
-        POP1_32(xRIP);
+        POP1_32(x1);
         POP1_32(x2);
-        POP1_32(xFlags);
+        POP1_32(x3);
     }
-
-    ST_H(x2, xEmu, offsetof(x64emu_t, segs[_CS]));
+    // segfault if CS is NULL
+    BEQZ_MARK3(x2);
     // clean EFLAGS
-    RESTORE_EFLAGS(x1);
-    MOV32w(x1, 0x3E7FD7); // also mask RF
-    AND(xFlags, xFlags, x1);
-    ORI(xFlags, xFlags, 0x2);
-    SPILL_EFLAGS();
-    CHECK_DFNONE(0);
+    MOV32w(x4, 0x3E7FD7); // also mask RF
+    AND(x3, x3, x4);
+    ORI(x3, x3, 0x2);
+    FORCE_DFNONE();
     if (is32bits) {
-        ANDI(x1, x2, 0xff);
+        ANDI(x4, x2, 0xff);
         // check if return segment is 64bits, then restore rsp too
-        MOV32w(x3, 0x23);
-        BEQ_MARKSEG(x1, x3);
+        MOV32w(x5, 0x23);
+        BEQ_MARKSEG(x4, x5);
     }
     // POP RSP
     if (is64bits) {
-        POP1(x3); // rsp
-        POP1(x2); // ss
+        POP1(x4); // rsp
+        POP1(x5); // ss
     } else {
-        POP1_32(x3); // rsp
-        POP1_32(x2); // ss
+        POP1_32(x4); // rsp
+        POP1_32(x5); // ss
     }
+    // check if SS is NULL
+    BEQZ_MARK(x5);
     // POP SS
-    ST_H(x2, xEmu, offsetof(x64emu_t, segs[_SS]));
+    ST_H(x5, xEmu, offsetof(x64emu_t, segs[_SS]));
     // set new RSP
-    MV(xRSP, x3);
+    MV(xRSP, x4);
     MARKSEG;
+    // x2 is CS, x1 is IP, x3 is eFlags
+    ST_H(x2, xEmu, offsetof(x64emu_t, segs[_CS]));
+    MV(xRIP, x1);
+    MV(xFlags, x3);
+    SPILL_EFLAGS();
     // Ret....
     rex_t dummy = { 0 };
     dummy.is32bits = is32bits;
     dummy.w = is64bits;
+    ANDI(x1, xFlags, 1 << F_TF);
+    BNEZ_MARK2(x1);
     ret_to_next(dyn, ip, ninst, dummy);
     CLEARIP();
+    MARK;
+    if (is64bits)
+        ADDI_D(xRSP, xRSP, 8 * 2);
+    else
+        ADDI_D(xRSP, xRSP, 4 * 2);
+    MARK3;
+    if (is64bits)
+        ADDI_D(xRSP, xRSP, 8 * 3);
+    else
+        ADDI_D(xRSP, xRSP, 4 * 3);
+    CALL_S(const_native_priv, -1, 0);
+    MARK2;
+    LD_WU(x4, xEmu, offsetof(x64emu_t, flags));
+    ORI(x4, x4, 1 << FLAGS_NO_TF);
+    ST_W(x4, xEmu, offsetof(x64emu_t, flags));
+    jump_to_epilog(dyn, 0, xRIP, ninst);
 }
 
 void call_c(dynarec_la64_t* dyn, int ninst, la64_consts_t fnc, int reg, int ret, int saveflags, int savereg, int arg1, int arg2, int arg3, int arg4, int arg5, int arg6)
 {
     MAYUSE(fnc);
+    UP32_READALL();
     CHECK_DFNONE(1);
     if (savereg == 0)
         savereg = x87pc;
@@ -545,6 +580,7 @@ void call_c(dynarec_la64_t* dyn, int ninst, la64_consts_t fnc, int reg, int ret,
     if (arg6) MV(A6, arg6);
     MV(A0, xEmu);
     JIRL(xRA, reg, 0);
+    LA64_RESTORE_VZERO();
     if (ret >= 0) {
         MV(ret, A0);
     }
@@ -582,6 +618,7 @@ void call_c(dynarec_la64_t* dyn, int ninst, la64_consts_t fnc, int reg, int ret,
 void call_n(dynarec_la64_t* dyn, int ninst, void* fnc, int w)
 {
     MAYUSE(fnc);
+    UP32_READALL();
     CHECK_DFNONE(1);
     fpu_pushcache(dyn, ninst, x3, 1);
     ST_D(xRSP, xEmu, offsetof(x64emu_t, regs[_SP]));
@@ -595,14 +632,12 @@ void call_n(dynarec_la64_t* dyn, int ninst, void* fnc, int w)
         }
     }
     // native call
-    if (dyn->need_reloc) {
-        // fnc is indirect, to help with relocation (but PltResolver might be an issue here)
-        TABLE64(x3, (uintptr_t)fnc);
-        LD_D(x3, x3, 0);
-    } else {
-        TABLE64_(x3, *(uintptr_t*)fnc); // using x16 as scratch regs for call address
-    }
+    TABLE64_(x3, *(uintptr_t*)fnc); // using x16 as scratch regs for call address
+    // Note that if need_reloc is active, the TABLE64 will trigger cancel block,
+    // because native function might be very different on a next run: different function address, different brick, different everything basicaly
+    // and we don't have a relocation mecanism here, it's too complex
     JIRL(xRA, x3, 0x0);
+    LA64_RESTORE_VZERO();
     // put return value in x64 regs
     if (w > 0) {
         MV(xRAX, A0);
@@ -1424,11 +1459,11 @@ void sse_purge07cache(dynarec_la64_t* dyn, int ninst, int s1)
             if (dyn->lsx.lsxcache[dyn->lsx.avxcache[i].reg].t == LSX_CACHE_YMMW) {
                 VST(dyn->lsx.avxcache[i].reg, xEmu, offsetof(x64emu_t, xmm[i]));
                 if (dyn->lsx.avxcache[i].dirty) {
-                    XVXOR_V(SCRATCH, SCRATCH, SCRATCH);
+                    VST(VZERO, xEmu, offsetof(x64emu_t, ymm[i]));
                 } else {
                     XVPERMI_Q(SCRATCH, dyn->lsx.avxcache[i].reg, XVPERMI_IMM_4_0(0, 1));
+                    VST(SCRATCH, xEmu, offsetof(x64emu_t, ymm[i]));
                 }
-                VST(SCRATCH, xEmu, offsetof(x64emu_t, ymm[i]));
                 fpu_free_reg(dyn, dyn->lsx.avxcache[i].reg);
                 dyn->lsx.avxcache[i].v = -1;
             } else if (dyn->lsx.lsxcache[dyn->lsx.ssecache[i].reg].t == LSX_CACHE_XMMW) {
@@ -1549,11 +1584,11 @@ void avx_forget_reg(dynarec_la64_t* dyn, int ninst, int a)
     if (dyn->lsx.lsxcache[dyn->lsx.avxcache[a].reg].t == LSX_CACHE_YMMW) {
         VST(dyn->lsx.avxcache[a].reg, xEmu, offsetof(x64emu_t, xmm[a]));
         if (dyn->lsx.avxcache[a].dirty) {
-            XVXOR_V(SCRATCH, SCRATCH, SCRATCH);
+            VST(VZERO, xEmu, offsetof(x64emu_t, ymm[a]));
         } else {
             XVPERMI_Q(SCRATCH, dyn->lsx.avxcache[a].reg, XVPERMI_IMM_4_0(0, 1));
+            VST(SCRATCH, xEmu, offsetof(x64emu_t, ymm[a]));
         }
-        VST(SCRATCH, xEmu, offsetof(x64emu_t, ymm[a]));
     }
     fpu_free_reg(dyn, dyn->lsx.avxcache[a].reg);
     dyn->lsx.avxcache[a].v = -1;
@@ -1568,12 +1603,12 @@ void avx_reflect_reg(dynarec_la64_t* dyn, int ninst, int a)
     if (dyn->lsx.lsxcache[dyn->lsx.avxcache[a].reg].t == LSX_CACHE_YMMW) {
         VST(dyn->lsx.avxcache[a].reg, xEmu, offsetof(x64emu_t, xmm[a]));
         if (dyn->lsx.avxcache[a].dirty) {
-            XVXOR_V(SCRATCH, SCRATCH, SCRATCH);
-            XVPERMI_Q(dyn->lsx.avxcache[a].reg, SCRATCH, 0b00000010);
+            XVPERMI_Q(dyn->lsx.avxcache[a].reg, VZERO, 0b00000010);
+            VST(VZERO, xEmu, offsetof(x64emu_t, ymm[a]));
         } else {
             XVPERMI_Q(SCRATCH, dyn->lsx.avxcache[a].reg, XVPERMI_IMM_4_0(0, 1));
+            VST(SCRATCH, xEmu, offsetof(x64emu_t, ymm[a]));
         }
-        VST(SCRATCH, xEmu, offsetof(x64emu_t, ymm[a]));
         dyn->lsx.avxcache[a].dirty = 0;
     }
 }
@@ -1589,8 +1624,7 @@ void avx_cleancache(dynarec_la64_t* dyn, int ninst)
                     MESSAGE(LOG_DUMP, "\tClean AVX Cache ------\n");
                     ++old;
                 }
-                XVXOR_V(SCRATCH, SCRATCH, SCRATCH);
-                XVPERMI_Q(dyn->lsx.avxcache[i].reg, SCRATCH, 0b00000010);
+                XVPERMI_Q(dyn->lsx.avxcache[i].reg, VZERO, 0b00000010);
                 dyn->lsx.avxcache[i].dirty = 0;
             }
         }
@@ -1613,11 +1647,11 @@ static void avx_purgecache(dynarec_la64_t* dyn, int ninst, int next, int s1)
                 }
                 VST(dyn->lsx.avxcache[i].reg, xEmu, offsetof(x64emu_t, xmm[i]));
                 if (dyn->lsx.avxcache[i].dirty) {
-                    XVXOR_V(SCRATCH, SCRATCH, SCRATCH);
+                    VST(VZERO, xEmu, offsetof(x64emu_t, ymm[i]));
                 } else {
                     XVPERMI_Q(SCRATCH, dyn->lsx.avxcache[i].reg, XVPERMI_IMM_4_0(0, 1));
+                    VST(SCRATCH, xEmu, offsetof(x64emu_t, ymm[i]));
                 }
-                VST(SCRATCH, xEmu, offsetof(x64emu_t, ymm[i]));
             } else {
                 MESSAGE(LOG_DUMP, "\tAVX Cache for YMM%d is not write, no need to store back %d\n", i, dyn->lsx.lsxcache[dyn->lsx.avxcache[i].reg].t);
             }
@@ -1697,8 +1731,7 @@ void fpu_popcache(dynarec_la64_t* dyn, int ninst, int s1, int not07)
                     VLD(SCRATCH, xEmu, offsetof(x64emu_t, ymm[i]));
                     XVPERMI_Q(dyn->lsx.avxcache[i].reg, SCRATCH, XVPERMI_IMM_4_0(0, 2));
                 } else {
-                    XVXOR_V(SCRATCH, SCRATCH, SCRATCH);
-                    XVPERMI_Q(dyn->lsx.avxcache[i].reg, SCRATCH, XVPERMI_IMM_4_0(0, 2));
+                    XVPERMI_Q(dyn->lsx.avxcache[i].reg, VZERO, XVPERMI_IMM_4_0(0, 2));
                 }
             }
         }
@@ -1761,7 +1794,7 @@ void fpu_reset_cache(dynarec_la64_t* dyn, int ninst, int reset_n)
     dyn->lsx = dyn->insts[reset_n].lsx;
 #endif
 #if STEP == 0
-    if (dyn->need_dump && dyn->lsx.x87stack) dynarec_log(LOG_NONE, "New x87stack=%d at ResetCache in inst %d with %d\n", dyn->lsx.x87stack, ninst, reset_n);
+    if (dyn->need_dump && dyn->need_dump != 3 && dyn->lsx.x87stack) dynarec_log(LOG_NONE, "New x87stack=%d at ResetCache in inst %d with %d\n", dyn->lsx.x87stack, ninst, reset_n);
 #endif
 #if defined(HAVE_TRACE) && (STEP > 2)
     if (dyn->need_dump && 0) // disable for now
@@ -2219,7 +2252,7 @@ static void flagsCacheTransform(dynarec_la64_t* dyn, int ninst, int s1)
     int jmp = dyn->insts[ninst].x64.jmp_insts;
     if (jmp < 0)
         return;
-    if (dyn->insts[jmp].f_exit == dyn->insts[jmp].f_entry) // flags will be fully known, nothing we can do more
+    if (dyn->insts[ninst].f_exit == dyn->insts[jmp].f_entry) // flags will be fully known, nothing we can do more
         return;
     MESSAGE(LOG_DUMP, "\tFlags fetch ---- ninst=%d -> %d\n", ninst, jmp);
     int go_fetch = 0;
@@ -2255,6 +2288,7 @@ static void flagsCacheTransform(dynarec_la64_t* dyn, int ninst, int s1)
         }
         TABLE64C(s1, const_updateflags_la64);
         JIRL(xRA, s1, 0);
+        LA64_RESTORE_VZERO();
         MARKF2;
     }
     MESSAGE(LOG_DUMP, "\t---- Flags fetch\n");
@@ -2309,6 +2343,7 @@ void checkCRC(dynarec_la64_t* dyn, int ninst)
     LD_D(x1, x6, offsetof(dynablock_t, x64_addr));
     LD_WU(x2, x6, offsetof(dynablock_t, x64_size));
     JIRL(xRA, x3, 0x0);
+    LA64_RESTORE_VZERO();
     // done, result in x1, load the stored hash (sign extended, as the crc will also be sign extended)
     LD_W(x2, x6, offsetof(dynablock_t, hash));
     // compare computed crc with stored one, jump to continue is equal

@@ -517,6 +517,7 @@ void iret_to_next(dynarec_arm_t* dyn, uintptr_t ip, int ninst, int is32bits, int
     rex_t dummy = {0};
     dummy.is32bits = is32bits;
     dummy.w = is64bits;
+    TBNZ_MARK2(xFlags, F_TF);
     ret_to_next(dyn, ip, ninst, dummy);
     CLEARIP();
     MARK;
@@ -530,6 +531,11 @@ void iret_to_next(dynarec_arm_t* dyn, uintptr_t ip, int ninst, int is32bits, int
     else
         ADDx_U12(xRSP, xRSP, 4*3);
     CALL_S(const_native_priv, -1);
+    MARK2;
+    LDRw_U12(x4, xEmu, offsetof(x64emu_t, flags));
+    ORRw_mask(x4, x4, 32-FLAGS_NO_TF, 0);   //mask=1<<FLAGS_NO_TF
+    STRw_U12(x4, xEmu, offsetof(x64emu_t, flags));
+    jump_to_epilog(dyn, 0, xRIP, ninst);
 }
 
 void call_c(dynarec_arm_t* dyn, int ninst, arm64_consts_t fnc, int reg, int ret, int saveflags, int savereg)
@@ -665,13 +671,10 @@ void call_n(dynarec_arm_t* dyn, int ninst, void* fnc, int w)
     MOVx_REG(x4, xR8);
     MOVx_REG(x5, xR9);
     // native call
-    if(dyn->need_reloc) {
-        // fnc is indirect, to help with relocation (but PltResolver might be an issue here)
-        TABLE64(16, (uintptr_t)fnc);
-        LDRx_U12(16, 16, 0);
-    } else {
-        TABLE64_(16, *(uintptr_t*)fnc);    // using x16 as scratch regs for call address
-    }
+    TABLE64_(16, *(uintptr_t*)fnc);    // using x16 as scratch regs for call address
+    // Note that if need_reloc is active, the TABLE64 will trigger cancel block, 
+    // because native function might be very different on a next run: different function address, different brick, different everything basicaly
+    // and we don't have a relocation mecanism here, it's too complex
     BLR(16);
     // put return value in x64 regs
     if(w>0) {
@@ -2314,7 +2317,7 @@ static void flagsCacheTransform(dynarec_arm_t* dyn, int ninst)
     int jmp = dyn->insts[ninst].x64.jmp_insts;
     if(jmp<0)
         return;
-    if(dyn->insts[jmp].f_exit==dyn->insts[jmp].f_entry)  // flags will be fully known, nothing we can do more
+    if(dyn->insts[ninst].f_exit==dyn->insts[jmp].f_entry)  // flags will be fully known, nothing we can do more
         return;
     if(dyn->insts[jmp].df_notneeded)
         return;
@@ -2458,45 +2461,59 @@ void CacheTransform(dynarec_arm_t* dyn, int ninst, int cacheupd) {
         nativeFlagsTransform(dyn, ninst, x1, x2);
 }
 
+static void flush_native_flags(dynarec_arm_t* dyn, int ninst, int s1, uint8_t flags, uint8_t ic)
+{
+    // some flags disapear, and need to be saved
+    MESSAGE(LOG_DUMP, "\tPurging native flags %hhx\n", flags);
+    uint8_t nc_before = dyn->insts[ninst].normal_carry;
+    if(flags&NF_EQ) {
+        CSETw(s1, cEQ);
+        BFIw(xFlags, s1, F_ZF, 1);
+    }
+    if(flags&NF_SF) {
+        CSETw(s1, cMI);
+        BFIw(xFlags, s1, F_SF, 1);
+    }
+    if(flags&NF_VF) {
+        CSETw(s1, cVS);
+        BFIw(xFlags, s1, F_OF, 1);
+    }
+    if(flags&NF_PF_V) {
+        CSETw(s1, cVS);
+        BFIw(xFlags, s1, F_PF, 1);
+    }
+    if(flags&NF_CF) {
+        if(ic) // might need to invert carry
+            CSETw(s1, cCS);
+        else
+            CSETw(s1, cCC);
+        BFIw(xFlags, s1, F_CF, 1);
+    }
+}
+
 void additionnal_checks(dynarec_arm_t* dyn, int ninst)
 {
     int s1 = x1;
     // check if a opcode generate partial flags that may clober existing native flags and see need to be "moved" to xFlags
-    if(dyn->insts[ninst].nat_flags_op || dyn->insts[ninst].nat_flags_op_before) {
+    if(dyn->insts[ninst].nat_flags_op || dyn->insts[ninst].nat_flags_op_before || (dyn->insts[ninst].nat_flags_in!=dyn->insts[ninst].need_nat_flags)) {
         uint8_t nat_flags = dyn->insts[ninst].need_nat_flags; // that's the native flags that will be generated
         uint8_t nat_flags_gen = dyn->insts[ninst].set_nat_flags;
         //TODO: does it need to fetch previous state with getPred?
-        uint8_t nat_flags_before = dyn->insts[ninst].before_nat_flags; //flags before the opcode, but it's only there when opcode also consume natflags
+        uint8_t nat_flags_before = dyn->insts[ninst].nat_flags_in; //flags before the opcode
         uint8_t nat_flags_flush = nat_flags_before&~nat_flags_gen;  // flags present before bu not after the operation and so that needs to be spared
-        if(nat_flags_before && nat_flags_flush) {
-            // some flags disapear, and need to be saved
-            MESSAGE(LOG_DUMP, "\tPurging native flags %hhx\n", nat_flags_flush);
-            uint8_t nc_before = dyn->insts[ninst].normal_carry;
-            if(nat_flags_flush&NF_EQ) {
-                CSETw(s1, cEQ);
-                BFIw(xFlags, s1, F_ZF, 1);
-            }
-            if(nat_flags_flush&NF_SF) {
-                CSETw(s1, cMI);
-                BFIw(xFlags, s1, F_SF, 1);
-            }
-            if(nat_flags_flush&NF_VF) {
-                CSETw(s1, cVS);
-                BFIw(xFlags, s1, F_OF, 1);
-            }
-            if(nat_flags_flush&NF_PF_V) {
-                CSETw(s1, cVS);
-                BFIw(xFlags, s1, F_PF, 1);
-            }
-            if(nat_flags_flush&NF_CF) {
-                if(nc_before) // might need to invert carry
-                    CSETw(s1, cCS);
-                else
-                    CSETw(s1, cCC);
-                BFIw(xFlags, s1, F_CF, 1);
-            }
-        }
+        if(nat_flags_before && nat_flags_flush)
+            flush_native_flags(dyn, ninst, s1, nat_flags_flush, dyn->insts[ninst].normal_carry_in);
     }
+}
+
+void flushNative(dynarec_arm_t* dyn, int ninst)
+{
+    int s1 = x1;
+    uint8_t nat_flags = dyn->insts[ninst].need_nat_flags; // that's the native flags that is needed after
+    uint8_t nat_flags_before = dyn->insts[ninst].nat_flags_in; //flags before the opcode
+    uint8_t nat_flags_flush = nat_flags_before&~nat_flags;  // flags present before bu not after the operation and so that needs to be spared
+    if(nat_flags_flush)
+        flush_native_flags(dyn, ninst, s1, nat_flags_flush, dyn->insts[ninst].normal_carry_in);
 }
 
 void fpu_reflectcache(dynarec_arm_t* dyn, int ninst, int s1, int s2, int s3)
@@ -2621,7 +2638,7 @@ void fpu_reset_cache(dynarec_arm_t* dyn, int ninst, int reset_n)
     dyn->ymm_zero = dyn->insts[reset_n].ymm0_out;
     #endif
     #if STEP == 0
-    if(dyn->need_dump && dyn->n.x87stack) dynarec_log(LOG_NONE, "New x87stack=%d at ResetCache in inst %d with %d\n", dyn->n.x87stack, ninst, reset_n);
+    if(dyn->need_dump && dyn->need_dump != 3 && dyn->n.x87stack) dynarec_log(LOG_NONE, "New x87stack=%d at ResetCache in inst %d with %d\n", dyn->n.x87stack, ninst, reset_n);
         #endif
     #if defined(HAVE_TRACE) && (STEP>2)
     if(dyn->need_dump && 0) //disable for now, need more work

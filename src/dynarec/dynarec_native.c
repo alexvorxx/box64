@@ -28,40 +28,42 @@
 
 KHASH_MAP_INIT_INT64(table64, uint32_t)
 KHASH_SET_INIT_INT64(nextset)
+KHASH_MAP_INIT_INT64(jumpaddr, int)
 
 static kh_nextset_t* khnextset = NULL;
+static kh_jumpaddr_t* khjumpaddr = NULL;
 
 void printf_x64_instruction(dynarec_native_t* dyn, zydis_dec_t* dec, instruction_x64_t* inst, const char* name) {
     uint8_t *ip = (uint8_t*)inst->addr;
     if (ip[0] == 0xcc && IsBridgeSignature(ip[1], ip[2])) {
         uintptr_t a = *(uintptr_t*)(ip+3);
         if(a==0) {
-            dynarec_log(LOG_NONE, "%s%p: Exit x64emu%s\n", (dyn->need_dump>1)?"\e[01;33m":"", (void*)ip, (dyn->need_dump>1)?"\e[m":"");
+            dynarec_log(LOG_NONE, "%s%p: Exit x64emu%s\n", (dyn->need_dump == 2)?"\e[01;33m":"", (void*)ip, (dyn->need_dump == 2)?"\e[m":"");
         } else {
-            dynarec_log(LOG_NONE, "%s%p: Native call to %p%s\n", (dyn->need_dump>1)?"\e[01;33m":"", (void*)ip, (void*)a, (dyn->need_dump>1)?"\e[m":"");
+            dynarec_log(LOG_NONE, "%s%p: Native call to %p%s\n", (dyn->need_dump == 2)?"\e[01;33m":"", (void*)ip, (void*)a, (dyn->need_dump == 2)?"\e[m":"");
         }
     } else {
         if(dec) {
-            dynarec_log(LOG_NONE, "%s%p: %s", (dyn->need_dump > 1) ? "\e[01;33m" : "", ip, DecodeX64Trace(dec, inst->addr, 1));
+            dynarec_log(LOG_NONE, "%s%p: %s", (dyn->need_dump == 2) ? "\e[01;33m" : "", ip, DecodeX64Trace(dec, inst->addr, 1));
         } else {
-            dynarec_log(LOG_NONE, "%s%p: ", (dyn->need_dump>1)?"\e[01;33m":"", ip);
+            dynarec_log(LOG_NONE, "%s%p: ", (dyn->need_dump == 2)?"\e[01;33m":"", ip);
             for(int i=0; i<inst->size; ++i) {
                 dynarec_log_prefix(0, LOG_NONE, "%02X ", ip[i]);
             }
             dynarec_log_prefix(0, LOG_NONE, " %s", name);
         }
         // print Call function name if possible
-        if(ip[0]==0xE8 || ip[0]==0xE9) { // Call / Jmp
+        if(dyn->need_dump != 3 && (ip[0]==0xE8 || ip[0]==0xE9)) { // Call / Jmp
             uintptr_t nextaddr = (uintptr_t)ip + 5 + *((int32_t*)(ip+1));
             PrintFunctionAddr(nextaddr, "=> ");
-        } else if(ip[0]==0xFF) {
+        } else if(dyn->need_dump != 3 && ip[0]==0xFF) {
             if(ip[1]==0x25) {
                 uintptr_t nextaddr = (uintptr_t)ip + 6 + *((int32_t*)(ip+2));
                 PrintFunctionAddr(nextaddr, "=> ");
             }
         }
         // end of line and colors
-        dynarec_log_prefix(0, LOG_NONE, "%s\n", (dyn->need_dump>1)?"\e[m":"");
+        dynarec_log_prefix(0, LOG_NONE, "%s\n", (dyn->need_dump == 2)?"\e[m":"");
     }
 }
 
@@ -105,6 +107,14 @@ void add_jump(dynarec_native_t *dyn, int ninst) {
         printf_log(LOG_NONE, "Warning, overallocating jmps\n");
     }
     dyn->jmps[dyn->jmp_sz++] = ninst;
+    if(dyn->insts[ninst].x64.jmp) {
+        if(!khjumpaddr)
+            khjumpaddr = kh_init(jumpaddr);
+        int ret;
+        khint_t k = kh_put(jumpaddr, khjumpaddr, dyn->insts[ninst].x64.jmp, &ret);
+        if(ret > 0)
+            kh_value(khjumpaddr, k) = ninst;
+    }
 }
 int get_first_jump(dynarec_native_t *dyn, int next) {
     if(next<0 || next>dyn->size)
@@ -112,6 +122,14 @@ int get_first_jump(dynarec_native_t *dyn, int next) {
     return get_first_jump_addr(dyn, dyn->insts[next].x64.addr);
 }
 int get_first_jump_addr(dynarec_native_t *dyn, uintptr_t next) {
+    if(khjumpaddr) {
+        khint_t k = kh_get(jumpaddr, khjumpaddr, next);
+        if(k != kh_end(khjumpaddr)) {
+            int ninst = kh_value(khjumpaddr, k);
+            if(ninst >= 0 && ninst < dyn->size && dyn->insts[ninst].x64.jmp == next)
+                return ninst;
+        }
+    }
     for(int i=0; i<dyn->jmp_sz; ++i)
         if(dyn->insts[dyn->jmps[i]].x64.jmp == next)
             return dyn->jmps[i];
@@ -445,7 +463,7 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new,
     }
     #else
     uintptr_t altjump = 0;
-    #endif 
+    #endif
     if(addr>=BOX64ENV(nodynarec_start) && addr<BOX64ENV(nodynarec_end)) {
         dynarec_log(LOG_INFO, "Create empty block in no-dynarec zone\n");
         return BOX64ENV(nodynarec_delay)?NULL:CreateEmptyBlock(old_addr, is32bits, is_new);
@@ -455,8 +473,9 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new,
         dynarec_log(LOG_DEBUG, "Not creating dynablock at %p as in a HotPage\n", (void*)addr);
         return NULL;
     }
+    uint32_t prot = getProtection_fast(addr);
 #ifndef _WIN32
-    if((getProtection_fast(addr)&req_prot)!=req_prot) {// cannot be run, get out of the Dynarec
+    if((prot&req_prot)!=req_prot) {// cannot be run, get out of the Dynarec
         dynarec_log(LOG_DEBUG, "Not creating dynablock at %p because EXEC protection is missing\n", (void*)addr);
         return NULL;
     }
@@ -470,12 +489,17 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new,
     }
     // protect the 1st page
     protectDB(addr, 1);
+    if(box64_pagesize>4096)
+        prot = getProtection_fast(addr);    // update protection as it might got a NEVERCLEAN tag because of the protectDB for large pagesize
     // init the helper
     dynarec_native_t helper = {0};
     dynarec_native_t* dyn = &helper;
     if(!khnextset)
         khnextset = kh_init(nextset);
     kh_clear(nextset, khnextset);
+    if(!khjumpaddr)
+        khjumpaddr = kh_init(jumpaddr);
+    kh_clear(jumpaddr, khjumpaddr);
 #ifdef GDBJIT
     helper.gdbjit_block = box_calloc(1, sizeof(gdbjit_block_t));
 #endif
@@ -491,7 +515,7 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new,
     helper.next_cap = MAX_INSTS;
     helper.table64 = NULL;
     helper.env = GetCurEnvByAddr(addr);
-    if(getProtection(addr)&PROT_NEVERCLEAN) {
+    if(prot&PROT_NEVERCLEAN) {
         helper.always_test = 1;
     }
     ResetTable64(&helper);
@@ -563,6 +587,8 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new,
                 }
                 if(dyn->need_dump || BOX64ENV(dynarec_log))dynarec_log(LOG_NONE, "Dynablock shorten on pass0 at ninst=%d\n", helper.size);
                 --helper.size;
+                // preserve flags at the new block exit
+                helper.insts[helper.size - 1].x64.need_after |= X_PEND;
                 helper.abort = 0;
             }
             // basic checks
@@ -666,6 +692,9 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new,
             int pos = helper.size-1;
             while (pos>=0)
                 pos = updateNeed(&helper, pos, 0);
+            #if defined(LA64)
+            updateUp32(&helper);
+            #endif
             // remove fpu stuff on non-executed code
             for(int i=1; i<helper.size-1; ++i)
                 if(!helper.insts[i].pred_sz) {
@@ -802,7 +831,7 @@ dynablock_t* FillBlock64(uintptr_t addr, int is32bits, int inst_max, int is_new,
             helper.callret_size = 0;
             helper.sep_size = 0;
             // pass 3, emit (log emit native opcode)
-            if(dyn->need_dump) {
+            if(dyn->need_dump && dyn->need_dump != 3) {
                 dynarec_log(LOG_NONE, "%s%04d|Emitting %zu bytes for %u %s bytes (native=%zu, table64=%zu, instsize=%zu, arch=%zu, callrets=%zu, entry=%p)", (dyn->need_dump>1)?"\e[01;36m":"", GetTID(), helper.native_size, helper.isize, is32bits?"x86":"x64", native_size, helper.table64size*sizeof(uint64_t), insts_rsize, arch_size, callret_size, helper.block);
                 PrintFunctionAddr(helper.start, " => ");
                 dynarec_log_prefix(0, LOG_NONE, "%s\n", (dyn->need_dump>1)?"\e[m":"");

@@ -76,6 +76,8 @@ uintptr_t getConst(arm64_consts_t which)
         case const_native_fxtract: return (uintptr_t)native_fxtract;
         case const_direct_ftan: return (uintptr_t)direct_ftan;
         case const_direct_fpatan: return (uintptr_t)direct_fpatan;
+        case const_native_fprem: return (uintptr_t)native_fprem;
+        case const_native_fprem1: return (uintptr_t)native_fprem1;
         case const_direct_fcos: return (uintptr_t)direct_fcos;
         case const_direct_fsin: return (uintptr_t)direct_fsin;
         case const_native_fsincos: return (uintptr_t)native_fsincos;

@@ -125,7 +125,7 @@ uint64_t RunFunctionHandler(x64emu_t* emu, int* exit, int dynarec, x64_ucontext_
     }
     va_end (va);
 
-    printf_log(LOG_DEBUG, "%04d|signal #%d function handler %p called, RSP=%p\n", GetTID(), R_EDI, (void*)fnc, (void*)R_RSP);
+    printf_log(LOG_DEBUG, "%04d|signal #%d function handler %p called, RSP=%p%s\n", GetTID(), R_EDI, (void*)fnc, (void*)R_RSP, dynarec?" with Dynarec":"");
 
     int oldquitonlongjmp = emu->flags.quitonlongjmp;
     emu->flags.quitonlongjmp = 2;
@@ -382,7 +382,6 @@ int my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigin
     x64_ucontext_t   *sigcontext = (x64_ucontext_t*)frame;
     // get general register
     emu2mctx(&sigcontext->uc_mcontext, emu);
-    CLEAR_FLAG(F_TF);   // now clear TF flags inside the signal handler
     // get FloatPoint status
     sigcontext->uc_mcontext.fpregs = xstate;//(struct x64_libc_fpstate*)&sigcontext->xstate;
     fpu_xsave_mask(emu, xstate, 0, 0b111);
@@ -423,7 +422,7 @@ int my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigin
     uint32_t mmapped = memExist((uintptr_t)info->si_addr);
     uint32_t sysmapped = (info->si_addr<(void*)box64_pagesize)?1:mmapped;
     uint32_t real_prot = 0;
-    int skip = 1;   // in case sigjump is used to restore exectuion, 1 will switch to interpreter, 3 will switch to dynarec
+    int skip = 3;   // in case sigjump is used to restore exectuion, 1 will switch to interpreter, 3 will switch to dynarec
     if(prot&PROT_READ) real_prot|=PROT_READ;
     if(prot&PROT_WRITE) real_prot|=PROT_WRITE;
     if(prot&PROT_EXEC) real_prot|=PROT_WRITE;
@@ -536,6 +535,8 @@ int my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigin
     GO(R9);
     GO(RBP);
     #undef GO
+    uint64_t old_eflags = emu->eflags.x64;
+    emu->eflags.x64 = 0x202; // default flags for inside the signal handler
     // set stack pointer
     R_RSP = frame;
     // set frame pointer
@@ -545,7 +546,7 @@ int my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigin
     int ret;
     int dynarec = 0;
     #ifdef DYNAREC
-    if(!(sig==X64_SIGSEGV || (Locks&is_dyndump_locked) || (Locks&is_memprot_locked)))
+    if(!(/*sig==X64_SIGSEGV ||*/ (Locks&is_dyndump_locked) || (Locks&is_memprot_locked)))
         dynarec = BOX64ENV(dynarec_interp_signal)?0:1;
     #endif
     ret = RunFunctionHandler(emu, &exits, dynarec, sigcontext, my_context->signals[info2->si_signo], 3, info2->si_signo, info2, sigcontext);
@@ -562,10 +563,13 @@ int my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigin
     GO(R9);
     GO(RBP);
     #undef GO
+    emu->eflags.x64 = old_eflags;
 
     if(memcmp(sigcontext, &sigcontext_copy, sizeof(x64_ucontext_t))) {
         #if defined(DYNAREC)
-        if(db) {
+        if(db || emu->jmpbuf)
+            mctx2emu(emu, &sigcontext->uc_mcontext);
+        if(db && !ACCESS_FLAG(F_TF)) {
             // if signal was inside a dynablock, just mirror all the new regs in the right place to simple run native_next
             mctx2emu(emu, &sigcontext->uc_mcontext);
             copyEmu2USignalCTXreg(p, emu, native_next);
@@ -574,9 +578,12 @@ int my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigin
         }
         #endif
         if(emu->jmpbuf) {
-            if((skip==1) && (emu->ip.q[0]!=sigcontext->uc_mcontext.gregs[X64_RIP]))
-                skip = 3;   // if it jumps elsewhere, it can resume with dynarec...
+            #ifndef DYNAREC
             mctx2emu(emu, &sigcontext->uc_mcontext);
+            #endif
+            if((skip==1) && (emu->ip.q[0]!=sigcontext->uc_mcontext.gregs[X64_RIP]) && !ACCESS_FLAG(F_TF))
+                skip = 3;   // if it jumps elsewhere, it can resume with dynarec...
+            if (ACCESS_FLAG(F_TF) && skip == 1) emu->flags.no_tf = 1;
             printf_log((sig==10)?LOG_DEBUG:log_minimum, "Context has been changed in Sigactionhanlder, doing siglongjmp to resume emu at %p, RSP=%p (resume with %s)\n", (void*)R_RIP, (void*)R_RSP, (skip==3)?"Dynarec":"Interp");
             if(old_code)
                 *old_code = -1;    // re-init the value to allow another segfault at the same place
@@ -621,6 +628,7 @@ int my_sigactionhandler_oldcode_64(x64emu_t* emu, int32_t sig, int simple, sigin
     GO(RIP);
     #undef GO
     emu->eflags.x64=sigcontext->uc_mcontext.gregs[X64_EFL];
+    if (ACCESS_FLAG(F_TF)) emu->flags.no_tf = 1;
     uint16_t seg;
     seg = (sigcontext->uc_mcontext.gregs[X64_CSGSFS] >> 0)&0xffff;
     #define GO(S) emu->segs[_##S]=seg;
@@ -898,31 +906,22 @@ void my_box64signalhandler(int32_t sig, siginfo_t* info, void * ucntx)
                     return;
                 } else {
                     // dynablock got dirty! need to get out of it!!!
-                    if(emu->jmpbuf) {
-                        copyUCTXreg2Emu(emu, p, x64pc);
-                        // only copy as it's a return address, so there is just the "epilog" to mimic here on "ret" type. "loop" type need everything
-                        if(type_callret) {
-                            adjustregs(emu, pc);
-                            if(db && db->arch_size)
-                                ARCH_ADJUST(db, emu, p, x64pc);
-                        }
-                        dynarec_log(LOG_INFO, "Dynablock (%p, x64addr=%p) %s, getting out at %s %p (%p)!\n", db, db->x64_addr, is_hotpage?"in HotPage":"dirty", getAddrFunctionName(R_RIP), (void*)R_RIP, type_callret?"self-loop":"ret from callret", (void*)addr);
-                        emu->test.clean = 0;
-                        // use "3" to regen a dynablock at current pc (else it will first do an interp run)
-                        dynablock_leave_runtime(db);
-                        #if defined(RV64) || defined(PPC64LE)
-                        emu->xSPSave = emu->old_savedsp;
-                        #endif
-                        cancel_deferred_signal_processing(emu);
-                        #ifdef ANDROID
-                        siglongjmp(*(JUMPBUFF*)emu->jmpbuf, 3);
-                        #else
-                        siglongjmp(emu->jmpbuf, 3);
-                        #endif
+                    copyUCTXreg2Emu(emu, p, x64pc);
+                    // only copy as it's a return address, so there is just the "epilog" to mimic here on "ret" type. "loop" type need everything
+                    if(type_callret) {
+                        adjustregs(emu, pc);
+                        if(db && db->arch_size)
+                            ARCH_ADJUST(db, emu, p, x64pc);
                     }
-                    dynarec_log(LOG_INFO, "Warning, Dirty %s (%p for db %p/%p) detected, but jmpbuffer not ready!\n", type_callret?"self-loop":"ret from callret", (void*)addr, db, (void*)db->x64_addr);
+                    dynarec_log(LOG_INFO, "Dynablock (%p, x64addr=%p) %s, getting out at %s %p (%p)!\n", db, db->x64_addr, is_hotpage?"in HotPage":"dirty", getAddrFunctionName(R_RIP), (void*)R_RIP, type_callret?"self-loop":"ret from callret", (void*)addr);
+                    emu->test.clean = 0;
+                    // use "3" to regen a dynablock at current pc (else it will first do an interp run)
+                    dynablock_leave_runtime(db);
+                    copyEmu2USignalCTXreg(p, emu, native_epilog);
+                    return;
                 }
             }
+else dynarec_log(LOG_INFO, "SIGILL at %p/%p for Dynablock (%p, x64addr=%p) with %d callrets info, but not a callret offset\n", pc, addr, db, db->x64_addr, db->callret_size);
         }
     }
     #endif
@@ -931,7 +930,7 @@ void my_box64signalhandler(int32_t sig, siginfo_t* info, void * ucntx)
     #ifdef BAD_SIGNAL
     // try to see if the si_code makes sense
     // the RK3588 tend to need a special Kernel that seems to have a weird behaviour sometimes
-    if((sig==X64_SIGSEGV) && (addr) && (info->si_code == 1) && getMmapped((uintptr_t)addr)) {
+    if((sig==X64_SIGSEGV) && (addr) && (info->si_code == 1) && getMAllocated((uintptr_t)addr)) {
         printf_log(LOG_DEBUG, "Workaround for suspicious si_code for %p / prot=0x%hhx\n", addr, prot);
         info->si_code = 2;
     }
@@ -953,49 +952,39 @@ void my_box64signalhandler(int32_t sig, siginfo_t* info, void * ucntx)
             db_searched = 1;
         }
         // access error, unprotect the block (and mark them dirty)
-        unprotectDB((uintptr_t)addr, 1, 1);    // unprotect 1 byte... But then, the whole page will be unprotected
         CheckHotPage((uintptr_t)addr, prot);
+        unprotectDB((uintptr_t)addr, 1, 1);    // unprotect 1 byte... But then, the whole page will be unprotected
         int db_need_test = (db && !BOX64ENV(dynarec_dirty))?getNeedTest((uintptr_t)db->x64_addr):0;
         if(db && ((addr>=db->x64_addr && addr<(db->x64_addr+db->x64_size)) || db_need_test)) {
             emu = getEmuSignal(emu, p, db);
             // dynablock got auto-dirty! need to get out of it!!!
-            if(emu->jmpbuf) {
-                uintptr_t x64pc = getX64Address(db, (uintptr_t)pc);
-                copyUCTXreg2Emu(emu, p, x64pc);
-                adjustregs(emu, pc);
-                if(db && db->arch_size)
-                    ARCH_ADJUST(db, emu, p, x64pc);
-                int autosmc = (addr>=db->x64_addr && addr<(db->x64_addr+db->x64_size));
-                if(autosmc && BOX64ENV(dynarec_dirty)) {
-                    // check if current block should be cut there
-                    int inst = getX64AddressInst(db, (uintptr_t)pc);
-                    // is it the last instruction
-                    uintptr_t next = getX64InstAddress(db, inst+1);
-                    if(next!=(uintptr_t)-1LL) {
-                        // there is a next, so lets mark the address and dirty the block
-                        mark_db_autosmc(db, x64pc);
-                    }
-
+            uintptr_t x64pc = getX64Address(db, (uintptr_t)pc);
+            copyUCTXreg2Emu(emu, p, x64pc);
+            adjustregs(emu, pc);
+            if(db && db->arch_size)
+                ARCH_ADJUST(db, emu, p, x64pc);
+            int autosmc = (addr>=db->x64_addr && addr<(db->x64_addr+db->x64_size));
+            if(autosmc && BOX64ENV(dynarec_dirty)) {
+                // check if current block should be cut there
+                int inst = getX64AddressInst(db, (uintptr_t)pc);
+                // is it the last instruction
+                uintptr_t next = getX64InstAddress(db, inst+1);
+                if(next!=(uintptr_t)-1LL) {
+                    // there is a next, so lets mark the address and dirty the block
+                    mark_db_autosmc(db, x64pc);
                 }
-                dynarec_log(LOG_INFO, "Dynablock (%p, x64addr=%p, need_test=%d/%d/%d) %s, getting out at %p (%p)!\n", db, db->x64_addr, db_need_test, db->dirty, db->always_test, autosmc?"Auto-SMC":"unprotected", (void*)R_RIP, (void*)addr);
-                //relockMutex(Locks);
-                unlock_signal();
-                if(Locks & is_dyndump_locked)
-                    CancelBlock64(1);
-                emu->test.clean = 0;
-                // will restore unblocked Signal flags too
-                dynablock_leave_runtime(db);
-                #if defined(RV64) || defined(PPC64LE)
-                emu->xSPSave = emu->old_savedsp;
-                #endif
-                cancel_deferred_signal_processing(emu);
-                #ifdef ANDROID
-                siglongjmp(*(JUMPBUFF*)emu->jmpbuf, 2);
-                #else
-                siglongjmp(emu->jmpbuf, 2);
-                #endif
+
             }
-            dynarec_log(LOG_INFO, "Warning, Auto-SMC (%p for db %p/%p) detected, but jmpbuffer not ready!\n", (void*)addr, db, (void*)db->x64_addr);
+            dynarec_log(LOG_INFO, "Dynablock (%p, x64addr=%p, need_test=%d/%d/%d) %s, getting out at %p (%p)!\n", db, db->x64_addr, db_need_test, db->dirty, db->always_test, autosmc?"Auto-SMC":"unprotected", (void*)R_RIP, (void*)addr);
+            //relockMutex(Locks);
+            unlock_signal();
+            if(Locks & is_dyndump_locked)
+                CancelBlock64(1);
+            emu->test.clean = 0;
+            // will restore unblocked Signal flags too
+            dynablock_leave_runtime(db);
+            copyEmu2USignalCTXreg(p, emu, native_epilog);
+            return;
         }
         // done
         if((prot&PROT_WRITE)/*|| (prot&PROT_DYNAREC)*/) {
@@ -1292,6 +1281,7 @@ dynarec_log(/*LOG_DEBUG*/LOG_INFO, "%04d|Repeated SIGSEGV with Access error on %
                 if(!(i%4)) printf_log_prefix(0, log_minimum, "\n");
                 printf_log_prefix(0, log_minimum, "%s:0x%016llx ", reg_name[i], emu->regs[i].q[0]);
             }
+            printf_log_prefix(0, log_minimum, "\n");
             for (int i=0; i<6; ++i)
                 printf_log_prefix(0, log_minimum, "%s:0x%04x ", seg_name[i], emu->segs[i]);
             printf_log_prefix(0, log_minimum, "FSBASE=%p ", emu->segs_offs[_FS]);
@@ -1385,7 +1375,8 @@ EXPORT sighandler_t my_signal(x64emu_t* emu, int signum, sighandler_t handler)
         struct sigaction oldact = {0};
         newact.sa_flags = 0x04;
         newact.sa_sigaction = MY_SIGHANDLER;
-        sigaction(signal_from_x64(signum), &newact, &oldact);
+        if(sigaction(signal_from_x64(signum), &newact, &oldact)<0)
+            return SIG_ERR;
         return oldact.sa_handler;
     } else
         return signal(signal_from_x64(signum), handler);
